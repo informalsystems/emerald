@@ -93,7 +93,7 @@ impl Spammer {
     async fn get_latest_nonce(&self, address: Address) -> Result<u64> {
         let response: String = self
             .client
-            .rpc_request("eth_getTransactionCount", json!([address]))
+            .rpc_request("eth_getTransactionCount", json!([address, "latest"]))
             .await?;
         // Convert hex string to integer.
         let hex_str = response.as_str().strip_prefix("0x").unwrap();

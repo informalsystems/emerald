@@ -134,8 +134,8 @@ impl Node for App {
             ctx,
             self.clone(),
             config.clone(),
-            codec.clone(), // WAL codec
-            codec,         // Network codec
+            codec, // WAL codec
+            codec, // Network codec
             self.start_height,
             initial_validator_set,
         )

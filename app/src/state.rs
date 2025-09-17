@@ -1,8 +1,6 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
-use std::collections::HashSet;
-
 use bytes::Bytes;
 use color_eyre::eyre;
 use rand::rngs::StdRng;
@@ -50,7 +48,6 @@ pub struct State {
     pub current_height: Height,
     pub current_round: Round,
     pub current_proposer: Option<Address>,
-    pub peers: HashSet<PeerId>,
 
     pub latest_block: Option<ExecutionBlock>,
 
@@ -107,7 +104,6 @@ impl State {
             stream_nonce: 0,
             streams_map: PartStreamsMap::new(),
             rng: StdRng::seed_from_u64(seed_from_address(&address)),
-            peers: HashSet::new(),
 
             latest_block: None,
 
@@ -353,8 +349,9 @@ impl State {
         &mut self,
         value: LocallyProposedValue<TestContext>,
         data: Bytes,
+        pol_round: Round,
     ) -> impl Iterator<Item = StreamMessage<ProposalPart>> {
-        let parts = self.make_proposal_parts(value, data);
+        let parts = self.make_proposal_parts(value, data, pol_round);
 
         let stream_id = self.stream_id();
 
@@ -375,6 +372,7 @@ impl State {
         &self,
         value: LocallyProposedValue<TestContext>,
         data: Bytes,
+        pol_round: Round,
     ) -> Vec<ProposalPart> {
         let mut hasher = sha3::Keccak256::new();
         let mut parts = Vec::new();
@@ -384,6 +382,7 @@ impl State {
             parts.push(ProposalPart::Init(ProposalInit::new(
                 value.height,
                 value.round,
+                pol_round,
                 self.address,
             )));
 
@@ -463,6 +462,11 @@ impl State {
 ///
 /// This is done by multiplying all the factors in the parts.
 fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<TestContext>, Bytes) {
+    // Get the init part to extract pol_round
+    let init = parts.parts.iter()
+        .find_map(|part| part.as_init())
+        .expect("ProposalParts should have an init part");
+
     // Calculate total size and allocate buffer
     let total_size: usize = parts
         .parts
@@ -483,7 +487,7 @@ fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<TestContext
     let proposed_value = ProposedValue {
         height: parts.height,
         round: parts.round,
-        valid_round: Round::Nil,
+        valid_round: init.pol_round,
         proposer: parts.proposer,
         value: Value::new(data.clone()),
         validity: Validity::Valid,

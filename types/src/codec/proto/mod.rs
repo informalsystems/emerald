@@ -3,16 +3,17 @@ use prost::Message;
 
 use malachitebft_app::streaming::{StreamContent, StreamId, StreamMessage};
 use malachitebft_codec::Codec;
-use malachitebft_core_consensus::{ProposedValue, SignedConsensusMsg};
+use malachitebft_core_consensus::{LivenessMsg, ProposedValue, SignedConsensusMsg};
 use malachitebft_core_types::{
-    AggregatedSignature, CommitCertificate, CommitSignature, Round, SignedExtension,
-    SignedProposal, SignedVote, Validity, VoteSet,
+    CommitCertificate, CommitSignature, NilOrVal, PolkaCertificate, PolkaSignature, Round,
+    RoundCertificate, RoundCertificateType, RoundSignature, SignedExtension,
+    SignedProposal, SignedVote, Validity,
 };
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 use malachitebft_signing_ed25519::Signature;
 use malachitebft_sync::{self as sync, PeerId};
 
-use crate::proto;
+use crate::{decode_votetype, encode_votetype, proto};
 use crate::{Address, Height, Proposal, ProposalPart, TestContext, Value, ValueId, Vote};
 
 #[derive(Copy, Clone, Debug)]
@@ -203,7 +204,7 @@ impl Codec<sync::Status<TestContext>> for ProtobufCodec {
 
         Ok(sync::Status {
             peer_id: PeerId::from_bytes(proto_peer_id.id.as_ref()).unwrap(),
-            height: Height::new(proto.height),
+            tip_height: Height::new(proto.height),
             history_min_height: Height::new(proto.earliest_height),
         })
     }
@@ -213,7 +214,7 @@ impl Codec<sync::Status<TestContext>> for ProtobufCodec {
             peer_id: Some(proto::PeerId {
                 id: Bytes::from(msg.peer_id.to_bytes()),
             }),
-            height: msg.height.as_u64(),
+            height: msg.tip_height.as_u64(),
             earliest_height: msg.history_min_height.as_u64(),
         };
 
@@ -231,12 +232,13 @@ impl Codec<sync::Request<TestContext>> for ProtobufCodec {
             .ok_or_else(|| ProtoError::missing_field::<proto::SyncRequest>("request"))?;
 
         match request {
-            proto::sync_request::Request::ValueRequest(req) => Ok(sync::Request::ValueRequest(
-                sync::ValueRequest::new(Height::new(req.height)),
-            )),
-            proto::sync_request::Request::VoteSetRequest(req) => Ok(sync::Request::VoteSetRequest(
-                sync::VoteSetRequest::new(Height::new(req.height), Round::new(req.round)),
-            )),
+            proto::sync_request::Request::ValueRequest(req) => {
+                let start_height = Height::new(req.height);
+                let end_height = req.end_height.map(Height::new).unwrap_or(start_height);
+                Ok(sync::Request::ValueRequest(
+                    sync::ValueRequest::new(start_height..=end_height),
+                ))
+            }
         }
     }
 
@@ -245,15 +247,8 @@ impl Codec<sync::Request<TestContext>> for ProtobufCodec {
             sync::Request::ValueRequest(req) => proto::SyncRequest {
                 request: Some(proto::sync_request::Request::ValueRequest(
                     proto::ValueRequest {
-                        height: req.height.as_u64(),
-                    },
-                )),
-            },
-            sync::Request::VoteSetRequest(req) => proto::SyncRequest {
-                request: Some(proto::sync_request::Request::VoteSetRequest(
-                    proto::VoteSetRequest {
-                        height: req.height.as_u64(),
-                        round: req.round.as_u32().unwrap(),
+                        height: req.range.start().as_u64(),
+                        end_height: Some(req.range.end().as_u64()),
                     },
                 )),
             },
@@ -285,21 +280,12 @@ pub fn decode_sync_response(
     let response = match response {
         proto::sync_response::Response::ValueResponse(value_response) => {
             sync::Response::ValueResponse(sync::ValueResponse::new(
-                Height::new(value_response.height),
-                value_response.value.map(decode_synced_value).transpose()?,
-            ))
-        }
-        proto::sync_response::Response::VoteSetResponse(vote_set_response) => {
-            let height = Height::new(vote_set_response.height);
-            let round = Round::new(vote_set_response.round);
-            let vote_set = vote_set_response
-                .vote_set
-                .ok_or_else(|| ProtoError::missing_field::<proto::VoteSet>("vote_set"))?;
-
-            sync::Response::VoteSetResponse(sync::VoteSetResponse::new(
-                height,
-                round,
-                decode_vote_set(vote_set)?,
+                Height::new(value_response.start_height),
+                value_response
+                    .values
+                    .into_iter()
+                    .map(decode_synced_value)
+                    .collect::<Result<Vec<_>, ProtoError>>()?,
             ))
         }
     };
@@ -313,24 +299,12 @@ pub fn encode_sync_response(
         sync::Response::ValueResponse(value_response) => proto::SyncResponse {
             response: Some(proto::sync_response::Response::ValueResponse(
                 proto::ValueResponse {
-                    height: value_response.height.as_u64(),
-                    value: value_response
-                        .value
-                        .as_ref()
+                    start_height: value_response.start_height.as_u64(),
+                    values: value_response
+                        .values
+                        .iter()
                         .map(encode_synced_value)
-                        .transpose()?,
-                },
-            )),
-        },
-        sync::Response::VoteSetResponse(vote_set_response) => proto::SyncResponse {
-            response: Some(proto::sync_response::Response::VoteSetResponse(
-                proto::VoteSetResponse {
-                    height: vote_set_response.height.as_u64(),
-                    round: vote_set_response
-                        .round
-                        .as_u32()
-                        .expect("round should not be nil"),
-                    vote_set: Some(encode_vote_set(&vote_set_response.vote_set)?),
+                        .collect::<Result<Vec<_>, ProtoError>>()?,
                 },
             )),
         },
@@ -369,18 +343,27 @@ pub fn decode_certificate(
         .ok_or_else(|| ProtoError::missing_field::<proto::CommitCertificate>("value_id"))
         .and_then(ValueId::from_proto)?;
 
-    let aggregated_signature = certificate
-        .aggregated_signature
-        .ok_or_else(|| {
-            ProtoError::missing_field::<proto::CommitCertificate>("aggregated_signature")
+    let commit_signatures = certificate
+        .signatures
+        .into_iter()
+        .map(|sig| -> Result<CommitSignature<TestContext>, ProtoError> {
+            let address = sig.validator_address.ok_or_else(|| {
+                ProtoError::missing_field::<proto::CommitSignature>("validator_address")
+            })?;
+            let signature = sig.signature.ok_or_else(|| {
+                ProtoError::missing_field::<proto::CommitSignature>("signature")
+            })?;
+            let signature = decode_signature(signature)?;
+            let address = Address::from_proto(address)?;
+            Ok(CommitSignature::new(address, signature))
         })
-        .and_then(decode_aggregated_signature)?;
+        .collect::<Result<Vec<_>, _>>()?;
 
     let certificate = CommitCertificate {
         height: Height::new(certificate.height),
         round: Round::new(certificate.round),
         value_id,
-        aggregated_signature,
+        commit_signatures,
     };
 
     Ok(certificate)
@@ -393,53 +376,19 @@ pub fn encode_certificate(
         height: certificate.height.as_u64(),
         round: certificate.round.as_u32().expect("round should not be nil"),
         value_id: Some(certificate.value_id.to_proto()?),
-        aggregated_signature: Some(encode_aggregate_signature(
-            &certificate.aggregated_signature,
-        )?),
-    })
-}
-
-pub fn decode_aggregated_signature(
-    signature: proto::AggregatedSignature,
-) -> Result<AggregatedSignature<TestContext>, ProtoError> {
-    let signatures = signature
-        .signatures
-        .into_iter()
-        .map(|s| {
-            let signature = s
-                .signature
-                .ok_or_else(|| ProtoError::missing_field::<proto::CommitSignature>("signature"))
-                .and_then(decode_signature)?;
-
-            let address = s
-                .validator_address
-                .ok_or_else(|| {
-                    ProtoError::missing_field::<proto::CommitSignature>("validator_address")
+        signatures: certificate
+            .commit_signatures
+            .iter()
+            .map(|sig| -> Result<proto::CommitSignature, ProtoError> {
+                let address = sig.address.to_proto()?;
+                let signature = encode_signature(&sig.signature);
+                Ok(proto::CommitSignature {
+                    validator_address: Some(address),
+                    signature: Some(signature),
                 })
-                .and_then(Address::from_proto)?;
-
-            Ok(CommitSignature { address, signature })
-        })
-        .collect::<Result<Vec<_>, ProtoError>>()?;
-
-    Ok(AggregatedSignature { signatures })
-}
-
-pub fn encode_aggregate_signature(
-    aggregated_signature: &AggregatedSignature<TestContext>,
-) -> Result<proto::AggregatedSignature, ProtoError> {
-    let signatures = aggregated_signature
-        .signatures
-        .iter()
-        .map(|s| {
-            Ok(proto::CommitSignature {
-                validator_address: Some(s.address.to_proto()?),
-                signature: Some(encode_signature(&s.signature)),
             })
-        })
-        .collect::<Result<_, ProtoError>>()?;
-
-    Ok(proto::AggregatedSignature { signatures })
+            .collect::<Result<Vec<_>, _>>()?,
+    })
 }
 
 pub fn decode_extension(ext: proto::Extension) -> Result<SignedExtension<TestContext>, ProtoError> {
@@ -461,12 +410,100 @@ pub fn encode_extension(
     })
 }
 
-pub fn encode_vote_set(vote_set: &VoteSet<TestContext>) -> Result<proto::VoteSet, ProtoError> {
-    Ok(proto::VoteSet {
-        signed_votes: vote_set
-            .votes
-            .iter()
-            .map(encode_vote)
+pub fn encode_signature(signature: &Signature) -> proto::Signature {
+    proto::Signature {
+        bytes: Bytes::copy_from_slice(signature.to_bytes().as_ref()),
+    }
+}
+
+pub fn decode_signature(signature: proto::Signature) -> Result<Signature, ProtoError> {
+    let bytes = <[u8; 64]>::try_from(signature.bytes.as_ref())
+        .map_err(|_| ProtoError::Other("Invalid signature length".to_string()))?;
+    Ok(Signature::from_bytes(bytes))
+}
+
+pub fn decode_vote(msg: proto::SignedMessage) -> Result<SignedVote<TestContext>, ProtoError> {
+    let signature = msg
+        .signature
+        .ok_or_else(|| ProtoError::missing_field::<proto::SignedMessage>("signature"))?;
+
+    let vote = match msg.message {
+        Some(proto::signed_message::Message::Vote(v)) => Ok(v),
+        _ => Err(ProtoError::Other(
+            "Invalid message type: not a vote".to_string(),
+        )),
+    }?;
+
+    let signature = decode_signature(signature)?;
+    let vote = Vote::from_proto(vote)?;
+    Ok(SignedVote::new(vote, signature))
+}
+
+pub fn decode_polka_certificate(
+    certificate: proto::PolkaCertificate,
+) -> Result<PolkaCertificate<TestContext>, ProtoError> {
+    let value_id = certificate
+        .value_id
+        .ok_or_else(|| ProtoError::missing_field::<proto::PolkaCertificate>("value_id"))
+        .and_then(ValueId::from_proto)?;
+
+    Ok(PolkaCertificate {
+        height: Height::new(certificate.height),
+        round: Round::new(certificate.round),
+        value_id,
+        polka_signatures: certificate
+            .signatures
+            .into_iter()
+            .map(|sig| -> Result<PolkaSignature<TestContext>, ProtoError> {
+                let address = sig.validator_address.ok_or_else(|| {
+                    ProtoError::missing_field::<proto::PolkaCertificate>("validator_address")
+                })?;
+                let signature = sig.signature.ok_or_else(|| {
+                    ProtoError::missing_field::<proto::PolkaCertificate>("signature")
+                })?;
+
+                let signature = decode_signature(signature)?;
+                let address = Address::from_proto(address)?;
+                Ok(PolkaSignature::new(address, signature))
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    })
+}
+
+pub fn decode_round_certificate(
+    certificate: proto::RoundCertificate,
+) -> Result<RoundCertificate<TestContext>, ProtoError> {
+    Ok(RoundCertificate {
+        height: Height::new(certificate.height),
+        round: Round::new(certificate.round),
+        cert_type: match proto::RoundCertificateType::try_from(certificate.cert_type)
+            .map_err(|_| ProtoError::Other("Unknown RoundCertificateType".into()))?
+        {
+            proto::RoundCertificateType::RoundCertPrecommit => RoundCertificateType::Precommit,
+            proto::RoundCertificateType::RoundCertSkip => RoundCertificateType::Skip,
+        },
+        round_signatures: certificate
+            .signatures
+            .into_iter()
+            .map(|sig| -> Result<RoundSignature<TestContext>, ProtoError> {
+                let vote_type = decode_votetype(sig.vote_type());
+                let address = sig.validator_address.ok_or_else(|| {
+                    ProtoError::missing_field::<proto::RoundCertificate>("validator_address")
+                })?;
+
+                let signature = sig.signature.ok_or_else(|| {
+                    ProtoError::missing_field::<proto::RoundCertificate>("signature")
+                })?;
+
+                let value_id = match sig.value_id {
+                    None => NilOrVal::Nil,
+                    Some(value_id) => NilOrVal::Val(ValueId::from_proto(value_id)?),
+                };
+
+                let signature = decode_signature(signature)?;
+                let address = Address::from_proto(address)?;
+                Ok(RoundSignature::new(vote_type, value_id, address, signature))
+            })
             .collect::<Result<Vec<_>, _>>()?,
     })
 }
@@ -480,36 +517,112 @@ pub fn encode_vote(vote: &SignedVote<TestContext>) -> Result<proto::SignedMessag
     })
 }
 
-pub fn decode_vote_set(vote_set: proto::VoteSet) -> Result<VoteSet<TestContext>, ProtoError> {
-    Ok(VoteSet {
-        votes: vote_set
-            .signed_votes
-            .into_iter()
-            .filter_map(decode_vote)
-            .collect(),
+pub fn encode_polka_certificate(
+    polka_certificate: &PolkaCertificate<TestContext>,
+) -> Result<proto::PolkaCertificate, ProtoError> {
+    Ok(proto::PolkaCertificate {
+        height: polka_certificate.height.as_u64(),
+        round: polka_certificate
+            .round
+            .as_u32()
+            .expect("round should not be nil"),
+        value_id: Some(polka_certificate.value_id.to_proto()?),
+        signatures: polka_certificate
+            .polka_signatures
+            .iter()
+            .map(|sig| -> Result<proto::PolkaSignature, ProtoError> {
+                let address = sig.address.to_proto()?;
+                let signature = encode_signature(&sig.signature);
+                Ok(proto::PolkaSignature {
+                    validator_address: Some(address),
+                    signature: Some(signature),
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?,
     })
 }
 
-pub fn decode_vote(msg: proto::SignedMessage) -> Option<SignedVote<TestContext>> {
-    let signature = msg.signature?;
-    let vote = match msg.message {
-        Some(proto::signed_message::Message::Vote(v)) => Some(v),
-        _ => None,
-    }?;
-
-    let signature = decode_signature(signature).ok()?;
-    let vote = Vote::from_proto(vote).ok()?;
-    Some(SignedVote::new(vote, signature))
+pub fn encode_round_certificate(
+    certificate: &RoundCertificate<TestContext>,
+) -> Result<proto::RoundCertificate, ProtoError> {
+    Ok(proto::RoundCertificate {
+        height: certificate.height.as_u64(),
+        round: certificate.round.as_u32().expect("round should not be nil"),
+        cert_type: match certificate.cert_type {
+            RoundCertificateType::Precommit => {
+                proto::RoundCertificateType::RoundCertPrecommit.into()
+            }
+            RoundCertificateType::Skip => proto::RoundCertificateType::RoundCertSkip.into(),
+        },
+        signatures: certificate
+            .round_signatures
+            .iter()
+            .map(|sig| -> Result<proto::RoundSignature, ProtoError> {
+                let value_id = match sig.value_id {
+                    NilOrVal::Nil => None,
+                    NilOrVal::Val(value_id) => Some(value_id.to_proto()?),
+                };
+                Ok(proto::RoundSignature {
+                    vote_type: encode_votetype(sig.vote_type).into(),
+                    validator_address: Some(sig.address.to_proto()?),
+                    signature: Some(encode_signature(&sig.signature)),
+                    value_id,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    })
 }
 
-pub fn encode_signature(signature: &Signature) -> proto::Signature {
-    proto::Signature {
-        bytes: Bytes::copy_from_slice(signature.to_bytes().as_ref()),
+impl Codec<LivenessMsg<TestContext>> for ProtobufCodec {
+    type Error = ProtoError;
+
+    fn decode(&self, bytes: Bytes) -> Result<LivenessMsg<TestContext>, Self::Error> {
+        let msg = proto::LivenessMessage::decode(bytes.as_ref())?;
+        match msg.message {
+            Some(proto::liveness_message::Message::Vote(vote)) => {
+                Ok(LivenessMsg::Vote(decode_vote(vote)?))
+            }
+            Some(proto::liveness_message::Message::PolkaCertificate(cert)) => Ok(
+                LivenessMsg::PolkaCertificate(decode_polka_certificate(cert)?),
+            ),
+            Some(proto::liveness_message::Message::RoundCertificate(cert)) => Ok(
+                LivenessMsg::SkipRoundCertificate(decode_round_certificate(cert)?),
+            ),
+            None => Err(ProtoError::missing_field::<proto::LivenessMessage>(
+                "message",
+            )),
+        }
     }
-}
 
-pub fn decode_signature(signature: proto::Signature) -> Result<Signature, ProtoError> {
-    let bytes = <[u8; 64]>::try_from(signature.bytes.as_ref())
-        .map_err(|_| ProtoError::Other("Invalid signature length".to_string()))?;
-    Ok(Signature::from_bytes(bytes))
+    fn encode(&self, msg: &LivenessMsg<TestContext>) -> Result<Bytes, Self::Error> {
+        match msg {
+            LivenessMsg::Vote(vote) => {
+                let message = encode_vote(vote)?;
+                Ok(Bytes::from(
+                    proto::LivenessMessage {
+                        message: Some(proto::liveness_message::Message::Vote(message)),
+                    }
+                    .encode_to_vec(),
+                ))
+            }
+            LivenessMsg::PolkaCertificate(cert) => {
+                let message = encode_polka_certificate(cert)?;
+                Ok(Bytes::from(
+                    proto::LivenessMessage {
+                        message: Some(proto::liveness_message::Message::PolkaCertificate(message)),
+                    }
+                    .encode_to_vec(),
+                ))
+            }
+            LivenessMsg::SkipRoundCertificate(cert) => {
+                let message = encode_round_certificate(cert)?;
+                Ok(Bytes::from(
+                    proto::LivenessMessage {
+                        message: Some(proto::liveness_message::Message::RoundCertificate(message)),
+                    }
+                    .encode_to_vec(),
+                ))
+            }
+        }
+    }
 }

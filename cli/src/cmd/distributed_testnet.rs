@@ -8,8 +8,9 @@ use color_eyre::eyre::{eyre, Result};
 use itertools::Itertools;
 use tracing::info;
 
-use malachitebft_app::Node;
-use malachitebft_config::*;
+use malachitebft_app::node::{Node, CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile};
+use crate::config::*;
+use bytesize::ByteSize;
 
 use crate::args::Args;
 use crate::cmd::testnet::RuntimeFlavour;
@@ -88,7 +89,7 @@ impl DistributedTestnetCmd {
     /// Execute the testnet command
     pub fn run<N>(&self, node: &N, home_dir: &Path, logging: LoggingConfig) -> Result<()>
     where
-        N: Node,
+        N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
     {
         let runtime = match self.runtime {
             RuntimeFlavour::SingleThreaded => RuntimeConfig::SingleThreaded,
@@ -140,7 +141,7 @@ fn distributed_testnet<N>(
     deterministic: bool,
 ) -> Result<()>
 where
-    N: Node,
+    N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
 {
     let private_keys = crate::new::generate_private_keys(node, nodes, deterministic);
     let public_keys = private_keys
@@ -263,13 +264,15 @@ fn generate_distributed_config(
                     selector,
                     num_outbound_peers,
                     num_inbound_peers,
+                    max_connections_per_peer: 5,
                     ephemeral_connection_timeout: Duration::from_millis(
                         ephemeral_connection_timeout_ms,
                     ),
                 },
-                transport,
                 ..Default::default()
             },
+            value_payload: ValuePayload::default(),
+            queue_capacity: 0,
         },
         mempool: MempoolConfig {
             p2p: P2pConfig {
@@ -282,18 +285,25 @@ fn generate_distributed_config(
                     selector,
                     num_outbound_peers: 0,
                     num_inbound_peers: 0,
+                    max_connections_per_peer: 5,
                     ephemeral_connection_timeout: Duration::from_secs(0),
                 },
-                transport,
                 ..Default::default()
             },
             max_tx_count: 10000,
             gossip_batch_size: 0,
+            load: MempoolLoadConfig::default(),
         },
-        sync: SyncConfig {
+        value_sync: ValueSyncConfig {
             enabled: false,
             status_update_interval: Duration::from_secs(0),
             request_timeout: Duration::from_secs(0),
+            max_request_size: ByteSize::b(0),
+            max_response_size: ByteSize::b(0),
+            parallel_requests: 0,
+            scoring_strategy: ScoringStrategy::default(),
+            inactive_threshold: Duration::from_secs(0),
+            batch_size: 0,
         },
         metrics: MetricsConfig {
             enabled: true,

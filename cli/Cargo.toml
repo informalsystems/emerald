@@ -19,6 +19,7 @@ axum = { workspace = true }
 bytesize = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 color-eyre = { workspace = true }
+config = { workspace = true }
 directories = { workspace = true }
 itertools = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
@@ -30,6 +31,7 @@ tracing-subscriber = { workspace = true, features = [
   "fmt",
   "json",
 ] }
+serde = { workspace = true }
 serde_json = { workspace = true }
 rand = { workspace = true }
 toml = { workspace = true }

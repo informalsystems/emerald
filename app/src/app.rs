@@ -4,12 +4,13 @@ use ssz::{Decode, Encode};
 use tracing::{debug, error, info};
 
 use alloy_rpc_types_engine::ExecutionPayloadV3;
+use malachitebft_app_channel::app::engine::host::Next;
 use malachitebft_app_channel::app::streaming::StreamContent;
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::sync::RawDecidedValue;
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
-use malachitebft_app_channel::{AppMsg, Channels, ConsensusMsg, NetworkMsg};
+use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
 
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
@@ -42,10 +43,7 @@ pub async fn run(
                 // We can simply respond by telling the engine to start consensus
                 // at the current height, which is initially 1
                 if reply
-                    .send(ConsensusMsg::StartHeight(
-                        state.current_height,
-                        state.get_validator_set().clone(),
-                    ))
+                    .send((state.current_height, state.get_validator_set().clone()))
                     .is_err()
                 {
                     error!("Failed to send ConsensusReady reply");
@@ -58,13 +56,24 @@ pub async fn run(
                 height,
                 round,
                 proposer,
+                role,
+                reply_value,
             } => {
-                info!(%height, %round, %proposer, "🟢🟢 Started round");
+                info!(%height, %round, %proposer, ?role, "🟢🟢 Started round");
 
                 // We can use that opportunity to update our internal state
                 state.current_height = height;
                 state.current_round = round;
                 state.current_proposer = Some(proposer);
+
+                // TODO: Add pending parts validation
+                // For now, send empty proposals list to consensus
+                let proposals: Vec<ProposedValue<TestContext>> = Vec::new();
+                info!(%height, %round, "Found {} undecided proposals", proposals.len());
+
+                if reply_value.send(proposals).is_err() {
+                    error!("Failed to send undecided proposals");
+                }
             }
 
             // At some point, we may end up being the proposer for that round, and the consensus engine
@@ -104,9 +113,12 @@ pub async fn run(
                     error!("Failed to send GetValue reply");
                 }
 
+                // The POL round is always nil when we propose a newly built value.
+                // See L15/L18 of the Tendermint algorithm.
+                let pol_round = Round::Nil;
                 // Now what's left to do is to break down the value to propose into parts,
                 // and send those parts over the network to our peers, for them to re-assemble the full value.
-                for stream_message in state.stream_proposal(proposal, bytes) {
+                for stream_message in state.stream_proposal(proposal, bytes, pol_round) {
                     info!(%height, %round, "Streaming proposal part: {stream_message:?}");
                     channels
                         .network
@@ -149,7 +161,7 @@ pub async fn run(
             // In our case, our validator set stays constant between heights so we can
             // send back the validator set found in our genesis state.
             AppMsg::GetValidatorSet { height: _, reply } => {
-                if reply.send(state.get_validator_set().clone()).is_err() {
+                if reply.send(Some(state.get_validator_set().clone())).is_err() {
                     error!("🔴 Failed to send GetValidatorSet reply");
                 }
             }
@@ -240,6 +252,7 @@ pub async fn run(
                 );
 
                 // When that happens, we store the decided value in our store
+                // TODO: we should return an error reply if commit fails
                 state.commit(certificate).await?;
 
                 // Save the latest block
@@ -256,7 +269,7 @@ pub async fn run(
 
                 // And then we instruct consensus to start the next height
                 if reply
-                    .send(ConsensusMsg::StartHeight(
+                    .send(Next::Start(
                         state.current_height,
                         state.get_validator_set().clone(),
                     ))
@@ -287,14 +300,14 @@ pub async fn run(
 
                 // We send to consensus to see if it has been decided on
                 if reply
-                    .send(ProposedValue {
+                    .send(Some(ProposedValue {
                         height,
                         round,
                         valid_round: Round::Nil,
                         proposer,
                         value,
                         validity: Validity::Valid,
-                    })
+                    }))
                     .is_err()
                 {
                     error!("Failed to send ProcessSyncedValue reply");
@@ -346,19 +359,6 @@ pub async fn run(
                 }
             }
 
-            AppMsg::PeerJoined { peer_id } => {
-                info!(%peer_id, "🟢🟢 Peer joined our local view of network");
-
-                // You might want to track connected peers in your state
-                state.peers.insert(peer_id);
-            }
-
-            AppMsg::PeerLeft { peer_id } => {
-                info!(%peer_id, "🔴 Peer left our local view of network");
-
-                // Remove the peer from tracking
-                state.peers.remove(&peer_id);
-            }
         }
     }
 

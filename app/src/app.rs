@@ -358,7 +358,6 @@ pub async fn run(
                     error!("🔴 Failed to send VerifyVoteExtension reply");
                 }
             }
-
         }
     }
 

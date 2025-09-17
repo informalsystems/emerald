@@ -8,9 +8,9 @@ use color_eyre::eyre::{eyre, Result};
 use itertools::Itertools;
 use tracing::info;
 
-use malachitebft_app::node::{Node, CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile};
 use crate::config::*;
 use bytesize::ByteSize;
+use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, Node};
 
 use crate::args::Args;
 use crate::cmd::testnet::RuntimeFlavour;

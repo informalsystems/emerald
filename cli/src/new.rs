@@ -7,8 +7,8 @@ use rand::prelude::StdRng;
 use rand::rngs::OsRng;
 use rand::{seq::IteratorRandom, Rng, SeedableRng};
 
-use malachitebft_app::node::{Node, CanGeneratePrivateKey, CanMakeGenesis};
 use crate::config::*;
+use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, Node};
 use malachitebft_core_types::{PrivateKey, PublicKey};
 
 const MIN_VOTING_POWER: u64 = 1;

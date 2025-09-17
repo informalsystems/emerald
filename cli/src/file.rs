@@ -3,8 +3,8 @@
 use std::fs;
 use std::path::Path;
 
-use crate::error::Error;
 use crate::config::Config;
+use crate::error::Error;
 use malachitebft_app::node::Node;
 
 /// Save configuration to file

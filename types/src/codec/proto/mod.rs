@@ -6,8 +6,8 @@ use malachitebft_codec::Codec;
 use malachitebft_core_consensus::{LivenessMsg, ProposedValue, SignedConsensusMsg};
 use malachitebft_core_types::{
     CommitCertificate, CommitSignature, NilOrVal, PolkaCertificate, PolkaSignature, Round,
-    RoundCertificate, RoundCertificateType, RoundSignature, SignedExtension,
-    SignedProposal, SignedVote, Validity,
+    RoundCertificate, RoundCertificateType, RoundSignature, SignedExtension, SignedProposal,
+    SignedVote, Validity,
 };
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 use malachitebft_signing_ed25519::Signature;
@@ -235,9 +235,9 @@ impl Codec<sync::Request<TestContext>> for ProtobufCodec {
             proto::sync_request::Request::ValueRequest(req) => {
                 let start_height = Height::new(req.height);
                 let end_height = req.end_height.map(Height::new).unwrap_or(start_height);
-                Ok(sync::Request::ValueRequest(
-                    sync::ValueRequest::new(start_height..=end_height),
-                ))
+                Ok(sync::Request::ValueRequest(sync::ValueRequest::new(
+                    start_height..=end_height,
+                )))
             }
         }
     }
@@ -350,9 +350,9 @@ pub fn decode_certificate(
             let address = sig.validator_address.ok_or_else(|| {
                 ProtoError::missing_field::<proto::CommitSignature>("validator_address")
             })?;
-            let signature = sig.signature.ok_or_else(|| {
-                ProtoError::missing_field::<proto::CommitSignature>("signature")
-            })?;
+            let signature = sig
+                .signature
+                .ok_or_else(|| ProtoError::missing_field::<proto::CommitSignature>("signature"))?;
             let signature = decode_signature(signature)?;
             let address = Address::from_proto(address)?;
             Ok(CommitSignature::new(address, signature))

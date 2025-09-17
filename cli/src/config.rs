@@ -1,13 +1,12 @@
-use std::path::Path;
-use serde::{Deserialize, Serialize};
 use color_eyre::eyre;
 use malachitebft_app::node::NodeConfig;
+use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 pub use malachitebft_config::{
     BootstrapProtocol, ConsensusConfig, DiscoveryConfig, LoggingConfig, MempoolConfig,
-    MetricsConfig, P2pConfig, PubSubProtocol, RuntimeConfig, Selector, ValueSyncConfig,
-    TestConfig, TimeoutConfig, TransportProtocol, ValuePayload, MempoolLoadConfig,
-    ScoringStrategy,
+    MempoolLoadConfig, MetricsConfig, P2pConfig, PubSubProtocol, RuntimeConfig, ScoringStrategy,
+    Selector, TestConfig, TimeoutConfig, TransportProtocol, ValuePayload, ValueSyncConfig,
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

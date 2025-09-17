@@ -7,7 +7,7 @@ use clap::Parser;
 use color_eyre::{eyre::eyre, Result};
 use tracing::info;
 
-use malachitebft_app::node::{Node, CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile};
+use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, Node};
 use malachitebft_config::*;
 
 use crate::args::Args;

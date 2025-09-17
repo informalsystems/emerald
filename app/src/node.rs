@@ -14,10 +14,12 @@ use malachitebft_eth_engine::ethereum_rpc::EthereumRPC;
 use rand::{CryptoRng, RngCore};
 
 use malachitebft_app_channel::app::metrics::SharedRegistry;
-use malachitebft_eth_cli::config::Config;
+use malachitebft_app_channel::app::node::{
+    CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, EngineHandle, Node,
+};
 use malachitebft_app_channel::app::types::core::VotingPower;
 use malachitebft_app_channel::app::types::Keypair;
-use malachitebft_app_channel::app::node::{EngineHandle, Node, CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile};
+use malachitebft_eth_cli::config::Config;
 
 // Use the same types used for integration tests.
 // A real application would use its own types and context instead.
@@ -85,7 +87,6 @@ impl Node for App {
         Ed25519Provider::new(private_key)
     }
 
-
     fn get_address(&self, pk: &PublicKey) -> Address {
         Address::from_public_key(pk)
     }
@@ -107,12 +108,10 @@ impl Node for App {
         serde_json::from_str(&private_key).map_err(Into::into)
     }
 
-
     fn load_genesis(&self) -> eyre::Result<Self::Genesis> {
         let genesis = std::fs::read_to_string(&self.genesis_file)?;
         serde_json::from_str(&genesis).map_err(Into::into)
     }
-
 
     async fn start(&self) -> eyre::Result<Handle> {
         let config = self.load_config()?;
@@ -136,7 +135,7 @@ impl Node for App {
             self.clone(),
             config.clone(),
             codec.clone(), // WAL codec
-            codec, // Network codec
+            codec,         // Network codec
             self.start_height,
             initial_validator_set,
         )

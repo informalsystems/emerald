@@ -78,11 +78,16 @@ impl SigningProvider<TestContext> for Ed25519Provider {
         signature: &Signature,
         public_key: &PublicKey,
     ) -> bool {
-        public_key.verify(&proposal.to_sign_bytes(), signature).is_ok()
+        public_key
+            .verify(&proposal.to_sign_bytes(), signature)
+            .is_ok()
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
-    async fn sign_proposal_part(&self, proposal_part: ProposalPart) -> SignedProposalPart<TestContext> {
+    async fn sign_proposal_part(
+        &self,
+        proposal_part: ProposalPart,
+    ) -> SignedProposalPart<TestContext> {
         let signature = self.private_key.sign(&proposal_part.to_sign_bytes());
         SignedProposalPart::new(proposal_part, signature)
     }

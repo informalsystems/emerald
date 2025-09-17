@@ -463,7 +463,9 @@ impl State {
 /// This is done by multiplying all the factors in the parts.
 fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<TestContext>, Bytes) {
     // Get the init part to extract pol_round
-    let init = parts.parts.iter()
+    let init = parts
+        .parts
+        .iter()
         .find_map(|part| part.as_init())
         .expect("ProposalParts should have an init part");
 

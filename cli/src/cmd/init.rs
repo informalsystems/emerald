@@ -2,12 +2,12 @@
 
 use std::path::Path;
 
-use crate::error::Error;
 use crate::config::Config;
+use crate::error::Error;
 use crate::file::{save_config, save_genesis, save_priv_validator_key};
 use crate::new::{generate_config, generate_genesis, generate_private_keys};
 use clap::Parser;
-use malachitebft_app::node::{Node, CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile};
+use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, Node};
 use malachitebft_config::{
     BootstrapProtocol, LoggingConfig, RuntimeConfig, Selector, TransportProtocol,
 };

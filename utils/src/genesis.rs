@@ -52,11 +52,11 @@ pub(crate) fn generate_genesis() -> Result<()> {
         );
     }
 
-    // The Ethereum Cancun-Deneb (Dencun) upgrade was activated on the mainnet
-    // on March 13, 2024, at epoch 269,568.
-    let date = NaiveDate::from_ymd_opt(2024, 3, 14).unwrap();
+    // The Ethereum Prague-Electra (Pectra) upgrade was activated on the mainnet
+    // on May 7, 2025, at epoch 364,032.
+    let date = NaiveDate::from_ymd_opt(2025, 5, 7).unwrap();
     let datetime = date.and_hms_opt(0, 0, 0).unwrap();
-    let valid_cancun_timestamp = datetime.and_utc().timestamp() as u64;
+    let valid_pectra_timestamp = datetime.and_utc().timestamp() as u64;
 
     // Create genesis configuration
     let genesis = Genesis {
@@ -74,6 +74,7 @@ pub(crate) fn generate_genesis() -> Result<()> {
             london_block: Some(0),
             shanghai_time: Some(0),
             cancun_time: Some(0),
+            prague_time: Some(0),
             terminal_total_difficulty: Some(U256::ZERO),
             terminal_total_difficulty_passed: true,
             ..Default::default()
@@ -82,7 +83,7 @@ pub(crate) fn generate_genesis() -> Result<()> {
         ..Default::default()
     }
     .with_gas_limit(30_000_000)
-    .with_timestamp(valid_cancun_timestamp);
+    .with_timestamp(valid_pectra_timestamp);
 
     // Create data directory if it doesn't exist
     std::fs::create_dir_all("./assets")?;

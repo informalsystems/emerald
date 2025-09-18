@@ -123,7 +123,12 @@ impl Engine {
         let parent_block_hash = execution_payload.payload_inner.payload_inner.parent_hash;
         let execution_requests = vec![]; // TODO: Implement execution requests
         self.api
-            .new_payload(execution_payload, versioned_hashes, parent_block_hash, execution_requests)
+            .new_payload(
+                execution_payload,
+                versioned_hashes,
+                parent_block_hash,
+                execution_requests,
+            )
             .await
     }
 

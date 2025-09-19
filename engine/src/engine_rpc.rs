@@ -198,7 +198,7 @@ impl EngineRPC {
     ) -> eyre::Result<ExecutionPayloadV3> {
         let response: ExecutionPayloadEnvelopeV3 = self
             .rpc_request(
-                ENGINE_GET_PAYLOAD_V3,
+                ENGINE_GET_PAYLOAD_V4,
                 json!([payload_id]),
                 ENGINE_GET_PAYLOAD_TIMEOUT,
             )
@@ -211,10 +211,16 @@ impl EngineRPC {
         execution_payload: ExecutionPayloadV3,
         versioned_hashes: Vec<B256>,
         parent_block_hash: BlockHash,
+        execution_requests: Vec<Vec<u8>>,
     ) -> eyre::Result<PayloadStatus> {
         let payload = JsonExecutionPayloadV3::from(execution_payload);
-        let params = json!([payload, versioned_hashes, parent_block_hash]);
-        self.rpc_request(ENGINE_NEW_PAYLOAD_V3, params, ENGINE_NEW_PAYLOAD_TIMEOUT)
+        let params = json!([
+            payload,
+            versioned_hashes,
+            parent_block_hash,
+            execution_requests
+        ]);
+        self.rpc_request(ENGINE_NEW_PAYLOAD_V4, params, ENGINE_NEW_PAYLOAD_TIMEOUT)
             .await
     }
 }

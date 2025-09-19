@@ -1,6 +1,6 @@
 services:
   reth0:
-    image: ghcr.io/paradigmxyz/reth:latest
+    image: ghcr.io/paradigmxyz/reth:v1.7.0
     container_name: reth0
     volumes:
       - ./rethdata/0:/data/reth/execution-data
@@ -41,7 +41,7 @@ services:
       # - "--txpool.pending-max-count=50000" # default=10000
       # - "--txpool.queued-max-count=50000" # default=10000
   reth1:
-    image: ghcr.io/paradigmxyz/reth:latest
+    image: ghcr.io/paradigmxyz/reth:v1.7.0
     container_name: reth1
     volumes:
       - ./rethdata/1:/data/reth/execution-data
@@ -82,7 +82,7 @@ services:
       # - "--txpool.pending-max-count=50000" # default=10000
       # - "--txpool.queued-max-count=50000" # default=10000
   reth2:
-    image: ghcr.io/paradigmxyz/reth:latest
+    image: ghcr.io/paradigmxyz/reth:v1.7.0
     container_name: reth2
     volumes:
       - ./rethdata/2:/data/reth/execution-data

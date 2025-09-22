@@ -69,16 +69,6 @@ $ cast --help
 
 This example was generated using the [OpenZeppelin Wizard](https://wizard.openzeppelin.com/) for ERC20. It includes mintable and burnable features.
 
-## Requirements
-
-```shell
-# Install OpenZeppelin contracts
-forge install openzeppelin/openzeppelin-contracts
-
-# Create remapping for imports
-echo '@openzeppelin/=lib/openzeppelin-contracts/' > remappings.txt
-```
-
 ## Deploy the Contract
 
 ```bash

@@ -1,15 +1,16 @@
 name: Foundry
 
 on:
-  push:
-    branches: ['main']
+  merge_group:
   pull_request:
-    branches: ['main']
-  workflow_dispatch:
-  # Cancel previous runs of this workflow when a new commit is added to the PR, branch or tag
-  concurrency:
-    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-    cancel-in-progress: true
+  push:
+    branches: main
+
+# If new code is pushed to a PR branch, then cancel in progress workflows for that PR.
+# Ensures that we don't waste CI time, and returns results quicker.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 env:
   FOUNDRY_PROFILE: ci

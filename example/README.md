@@ -67,19 +67,19 @@ $ cast --help
 
 # Example
 
-## Deploy the Contract
+This example was generated using the [OpenZeppelin Wizard](https://wizard.openzeppelin.com/) for ERC20. It includes mintable and burnable features.
 
-### Option A: Deploy Command
+## Requirements
 
-```bash
-forge create src/Example.sol:TestToken \
-    --constructor-args "OWNER_ADDRESS" \
-    --private-key YOUR_PRIVATE_KEY \
-    --rpc-url http://localhost:8545 \
-    --broadcast
+```shell
+# Install OpenZeppelin contracts
+forge install openzeppelin/openzeppelin-contracts
+
+# Create remapping for imports
+echo '@openzeppelin/=lib/openzeppelin-contracts/' > remappings.txt
 ```
 
-### Option B: Using a Deployment Script
+## Deploy the Contract
 
 ```bash
 forge script script/DeployToken.s.sol \

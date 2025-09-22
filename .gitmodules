@@ -1,6 +1,6 @@
-[submodule "example/lib/forge-std"]
-	path = example/lib/forge-std
+[submodule "solidity/lib/forge-std"]
+	path = solidity/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
-[submodule "example/lib/openzeppelin-contracts"]
-	path = example/lib/openzeppelin-contracts
+[submodule "solidity/lib/openzeppelin-contracts"]
+	path = solidity/lib/openzeppelin-contracts
 	url = https://github.com/openzeppelin/openzeppelin-contracts

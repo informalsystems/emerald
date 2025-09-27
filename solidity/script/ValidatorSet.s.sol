@@ -25,9 +25,9 @@ contract ValidatorSetScript is Script {
         bytes32 VAL_PK_1 = keccak256("val_pk_1");
         bytes32 VAL_PK_2 = keccak256("val_pk_2");
         bytes32 VAL_PK_3 = keccak256("val_pk_3");
-        
+
         console.log("\nRegistering 3 validators in non-sequential order...");
-        
+
         vm.prank(validator2);
         validatorSet.register(VAL_PK_2, 100);
         console.log("- Registered:", validator2);
@@ -58,7 +58,7 @@ contract ValidatorSetScript is Script {
         console.log("\nUpdating voting power for", validator1, "to", newPower);
         vm.prank(validator1);
         validatorSet.updateVotingPower(newPower);
-        
+
         console.log("\n--- Verifying validator details after update ---");
         ValidatorSet.ValidatorDetails memory updatedValidator = validatorSet.getValidator(validator1);
         console.log(" -> ETH Address:", updatedValidator.ethAddress);
@@ -82,7 +82,7 @@ contract ValidatorSetScript is Script {
     function logValidators(ValidatorSet validatorSet) internal view {
         ValidatorSet.ValidatorDetails[] memory allValidators = validatorSet.getValidators();
         console.log("Found", allValidators.length, "validator(s).");
-        for (uint i = 0; i < allValidators.length; i++) {
+        for (uint256 i = 0; i < allValidators.length; i++) {
             console.log("  Validator #%s:", i + 1);
             console.log("    ETH Address: ", allValidators[i].ethAddress);
             console.log("    Public Key:  ");
@@ -91,7 +91,6 @@ contract ValidatorSetScript is Script {
         }
     }
 }
-
 
 contract GenesisScript is Script {
     // A helper struct to define initial validators in Solidity.
@@ -122,7 +121,7 @@ contract GenesisScript is Script {
 
         // The private key of the deployer (Anvil #0 account)
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        
+
         // --- Step 1: Deploy the contract using a broadcast ---
         vm.startBroadcast(deployerPrivateKey);
         ValidatorSet validatorSet = new ValidatorSet();
@@ -132,13 +131,13 @@ contract GenesisScript is Script {
 
         // --- Step 2: Register validators using pranks ---
         // We loop through each validator and impersonate them for the register call.
-        for (uint i = 0; i < initialValidators.length; i++) {
+        for (uint256 i = 0; i < initialValidators.length; i++) {
             InitialValidator memory v = initialValidators[i];
-            
+
             // `vm.prank` sets msg.sender for the *next single external call*
-            vm.prank(v.ethAddress); 
+            vm.prank(v.ethAddress);
             validatorSet.register(v.ed25519PublicKey, v.votingPower);
-            
+
             console.log("Registered validator:", v.ethAddress);
         }
     }

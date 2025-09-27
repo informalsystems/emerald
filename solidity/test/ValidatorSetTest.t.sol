@@ -17,7 +17,6 @@ contract ValidatorSetTest is Test {
     uint64 constant INITIAL_VOTING_POWER = 100;
     uint64 constant UPDATED_VOTING_POWER = 200;
 
-
     function setUp() public {
         validatorSet = new ValidatorSet();
     }
@@ -30,7 +29,7 @@ contract ValidatorSetTest is Test {
         // Expect the event to be emitted with correct parameters
         vm.expectEmit(true, true, true, true);
         emit ValidatorSet.ValidatorRegistered(alice, ALICE_PK, INITIAL_VOTING_POWER);
-        
+
         // Register Alice
         validatorSet.register(ALICE_PK, INITIAL_VOTING_POWER);
 
@@ -50,7 +49,6 @@ contract ValidatorSetTest is Test {
         vm.expectRevert(abi.encodeWithSelector(ValidatorSet.ValidatorAlreadyRegistered.selector, alice));
         validatorSet.register(ALICE_PK, INITIAL_VOTING_POWER);
     }
-
 
     // -- Unregistration Tests --
 
@@ -77,7 +75,6 @@ contract ValidatorSetTest is Test {
         vm.expectRevert(abi.encodeWithSelector(ValidatorSet.ValidatorNotRegistered.selector, bob));
         validatorSet.unregister();
     }
-
 
     // -- Voting Power Update Tests --
 
@@ -113,7 +110,7 @@ contract ValidatorSetTest is Test {
         address user1 = address(0x1000);
         address user2 = address(0x3000);
         address user3 = address(0x2000);
-        
+
         // Register in a non-sorted order
         vm.prank(user2);
         validatorSet.register(keccak256("pk2"), INITIAL_VOTING_POWER);
@@ -151,12 +148,12 @@ contract ValidatorSetTest is Test {
         // Unregister the last element (user2)
         vm.prank(user2);
         validatorSet.unregister();
-        
+
         // The list should be empty
         addresses = validatorSet.getValidatorAddresses();
         assertEq(addresses.length, 0, "Final list should be empty");
     }
-    
+
     function test_GetValidators_IsSorted() public {
         // Create two users with non-sequential addresses
         address user1 = address(0x2000);
@@ -204,4 +201,3 @@ contract ValidatorSetTest is Test {
         validatorSet.getValidator(bob);
     }
 }
-

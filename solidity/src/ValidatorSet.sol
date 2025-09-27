@@ -12,13 +12,13 @@ contract ValidatorSet {
 
     struct Validator {
         bytes32 ed25519PublicKey; // The consensus public key (e.g., Ed25519).
-        uint64 votingPower;      // The validator's voting power.
+        uint64 votingPower; // The validator's voting power.
     }
 
     struct ValidatorDetails {
-        address ethAddress;      // The Ethereum address of the validator.
+        address ethAddress; // The Ethereum address of the validator.
         bytes32 ed25519PublicKey; // The consensus public key (e.g., Ed25519).
-        uint64 votingPower;      // The validator's voting power.
+        uint64 votingPower; // The validator's voting power.
     }
 
     // Mapping from the validator's Ethereum address to their consensus details.
@@ -28,7 +28,6 @@ contract ValidatorSet {
     address[] public validatorAddresses;
     // Mapping to store the index of each validator in the validatorAddresses array.
     mapping(address => uint256) private validatorAddressIndex;
-
 
     // -- Events --
 
@@ -40,7 +39,6 @@ contract ValidatorSet {
 
     error ValidatorAlreadyRegistered(address validatorAddress);
     error ValidatorNotRegistered(address validatorAddress);
-
 
     // -- Modifiers --
 
@@ -67,10 +65,7 @@ contract ValidatorSet {
      * @param _votingPower The initial voting power for the validator.
      */
     function register(bytes32 _ed25519PublicKey, uint64 _votingPower) external onlyWhenNotRegistered(msg.sender) {
-        validators[msg.sender] = Validator({
-            ed25519PublicKey: _ed25519PublicKey,
-            votingPower: _votingPower
-        });
+        validators[msg.sender] = Validator({ed25519PublicKey: _ed25519PublicKey, votingPower: _votingPower});
 
         _insertSorted(msg.sender);
 
@@ -83,7 +78,7 @@ contract ValidatorSet {
      */
     function unregister() external onlyWhenRegistered(msg.sender) {
         _removeSorted(msg.sender);
-        
+
         delete validators[msg.sender];
         emit ValidatorUnregistered(msg.sender);
     }
@@ -115,14 +110,14 @@ contract ValidatorSet {
         uint256 validatorCount = validatorAddresses.length;
         ValidatorDetails[] memory _validators = new ValidatorDetails[](validatorCount);
 
-        for (uint i = 0; i < validatorCount; i++) {
+        for (uint256 i = 0; i < validatorCount; i++) {
             _validators[i] = ValidatorDetails({
                 ethAddress: validatorAddresses[i],
                 ed25519PublicKey: validators[validatorAddresses[i]].ed25519PublicKey,
                 votingPower: validators[validatorAddresses[i]].votingPower
             });
         }
-        
+
         return _validators;
     }
 
@@ -131,7 +126,12 @@ contract ValidatorSet {
      * @param _validatorAddress The address of the validator to query.
      * @return The Validator struct for the given address.
      */
-    function getValidator(address _validatorAddress) external view onlyWhenRegistered(_validatorAddress) returns (ValidatorDetails memory) {
+    function getValidator(address _validatorAddress)
+        external
+        view
+        onlyWhenRegistered(_validatorAddress)
+        returns (ValidatorDetails memory)
+    {
         return ValidatorDetails({
             ethAddress: _validatorAddress,
             ed25519PublicKey: validators[_validatorAddress].ed25519PublicKey,
@@ -167,7 +167,7 @@ contract ValidatorSet {
         validatorAddresses[insertionIndex] = _newValidator;
         validatorAddressIndex[_newValidator] = insertionIndex;
     }
-    
+
     /**
      * @dev Removes a validator address from the `validatorAddresses` array, shifting elements to maintain a sorted list.
      * Updates the `validatorAddressIndex` for all affected elements.
@@ -182,10 +182,9 @@ contract ValidatorSet {
             validatorAddresses[i] = addrToShift;
             validatorAddressIndex[addrToShift] = i;
         }
-        
+
         // Remove the last element and delete the index entry
         validatorAddresses.pop();
         delete validatorAddressIndex[_validatorToRemove];
     }
 }
-

@@ -184,6 +184,14 @@ pub async fn run(
 
                 assert_eq!(state.latest_block.unwrap().block_hash, parent_block_hash);
 
+                let block_number = execution_payload.payload_inner.payload_inner.block_number;
+
+                // call the ValidatorSet contract to get the list of validators
+                let new_validator_set = engine.eth.get_validators(block_number).await?;
+                debug!("🌈 Got validator set: {:?}", new_validator_set);
+
+                state.validator_set = new_validator_set;
+
                 let new_block_timestamp = execution_payload.timestamp();
                 let new_block_number = execution_payload.payload_inner.payload_inner.block_number;
 

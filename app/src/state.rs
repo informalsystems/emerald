@@ -38,7 +38,6 @@ const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB
 pub struct State {
     #[allow(dead_code)]
     ctx: TestContext,
-    genesis: Genesis,
     signing_provider: Ed25519Provider,
     address: Address,
     store: Store,
@@ -53,6 +52,8 @@ pub struct State {
     pub peers: HashSet<PeerId>,
 
     pub latest_block: Option<ExecutionBlock>,
+
+    pub validator_set: ValidatorSet,
 
     // For stats
     pub txs_count: u64,
@@ -96,7 +97,6 @@ impl State {
         store: Store,
     ) -> Self {
         Self {
-            genesis,
             ctx,
             signing_provider,
             current_height: height,
@@ -110,6 +110,7 @@ impl State {
             peers: HashSet::new(),
 
             latest_block: None,
+            validator_set: genesis.validator_set,
 
             txs_count: 0,
             chain_bytes: 0,
@@ -411,7 +412,7 @@ impl State {
 
     /// Returns the set of validators.
     pub fn get_validator_set(&self) -> &ValidatorSet {
-        &self.genesis.validator_set
+        &self.validator_set
     }
 
     /// Verifies the signature of the proposal.

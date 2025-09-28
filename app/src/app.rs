@@ -202,7 +202,7 @@ pub async fn run(
                 // call the ValidatorSet contract to get the list of validators
 
                 let provider = ProviderBuilder::new()
-                    .on_builtin(&engine.eth.url().to_string())
+                    .on_builtin(engine.eth.url().as_ref())
                     .await?;
                 let validator_set_contract =
                     ValidatorSet::new(GENESIS_VALIDATOR_SET_ACCOUNT, provider);

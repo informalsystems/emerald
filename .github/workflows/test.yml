@@ -44,8 +44,8 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run Forge build
-        run: forge build
         working-directory: ./solidity
+        run: forge build
       - name: Run tests
         run: |
           cargo nextest run \

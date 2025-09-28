@@ -192,7 +192,8 @@ contract ValidatorSet is Context, ReentrancyGuard {
         for (uint256 i = 0; i < length; i++) {
             address validatorAddr = _validatorAddresses.at(i);
             ValidatorInfo memory info = _validators[validatorAddr];
-            validators[i] = ValidatorInfoFull({validator: validatorAddr, ed25519Key: info.ed25519Key, power: info.power});
+            validators[i] =
+                ValidatorInfoFull({validator: validatorAddr, ed25519Key: info.ed25519Key, power: info.power});
         }
     }
 

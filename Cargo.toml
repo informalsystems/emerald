@@ -36,6 +36,7 @@ malachitebft-eth-types  = { version = "0.0.1", path = "types" }
 
 alloy-consensus        = { version = "0.11.1", default-features = false }
 alloy-rpc-types        = { version = "0.11.1", features = ["eth"], default-features = false }
+alloy-sol-types        = { version = "0.8.15", features = ["json"], default-features = false }
 alloy-rpc-types-eth    = { version = "0.11.1", default-features = false }
 alloy-rpc-types-engine = { version = "0.11.1", features = ["ssz"], default-features = false }
 

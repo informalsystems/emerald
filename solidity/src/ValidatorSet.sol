@@ -1,190 +1,255 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
+
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 
 /**
  * @title ValidatorSet
- * @notice Manages a set of validators for a consensus network.
- * @dev Validators can register, unregister, and update their voting power.
- * This contract maintains a canonically sorted list of validator addresses.
+ * @dev A contract for managing a set of validators with their voting power
+ * @dev Validators can register, unregister, and update their own power
  */
-contract ValidatorSet {
-    // -- State --
+contract ValidatorSet is Context, ReentrancyGuard {
+    using EnumerableSet for EnumerableSet.AddressSet;
 
-    struct Validator {
-        bytes32 ed25519PublicKey; // The consensus public key (e.g., Ed25519).
-        uint64 votingPower; // The validator's voting power.
+    struct ValidatorInfo {
+        bytes32 ed25519Key; // Ed25519 public key
+        uint256 power; // Voting power
     }
 
-    struct ValidatorDetails {
-        address ethAddress; // The Ethereum address of the validator.
-        bytes32 ed25519PublicKey; // The consensus public key (e.g., Ed25519).
-        uint64 votingPower; // The validator's voting power.
-    }
+    // State variables
+    EnumerableSet.AddressSet private _validatorAddresses;
+    mapping(address => ValidatorInfo) private _validators;
 
-    // Mapping from the validator's Ethereum address to their consensus details.
-    mapping(address => Validator) public validators;
-    // Array to store all registered validator addresses for easy iteration.
-    // This array is always kept sorted by address.
-    address[] public validatorAddresses;
-    // Mapping to store the index of each validator in the validatorAddresses array.
-    mapping(address => uint256) private validatorAddressIndex;
+    // Events
+    event ValidatorRegistered(address indexed validator, bytes32 indexed ed25519Key, uint256 power);
+    event ValidatorUnregistered(address indexed validator);
+    event ValidatorPowerUpdated(address indexed validator, uint256 oldPower, uint256 newPower);
+    event ValidatorKeyUpdated(address indexed validator, bytes32 oldKey, bytes32 newKey);
 
-    // -- Events --
+    // Errors
+    error ValidatorAlreadyExists();
+    error ValidatorDoesNotExist();
+    error InvalidPower();
+    error InvalidKey();
+    error UnauthorizedValidator();
 
-    event ValidatorRegistered(address indexed validatorAddress, bytes32 ed25519PublicKey, uint64 votingPower);
-    event ValidatorUnregistered(address indexed validatorAddress);
-    event VotingPowerUpdated(address indexed validatorAddress, uint64 newVotingPower);
-
-    // -- Errors --
-
-    error ValidatorAlreadyRegistered(address validatorAddress);
-    error ValidatorNotRegistered(address validatorAddress);
-
-    // -- Modifiers --
-
-    modifier onlyWhenRegistered(address _validator) {
-        if (validators[_validator].ed25519PublicKey == bytes32(0)) {
-            revert ValidatorNotRegistered(_validator);
+    /**
+     * @dev Modifier to check if a validator exists
+     * @param validator The address to check
+     */
+    modifier validatorExists(address validator) {
+        if (!_validatorAddresses.contains(validator)) {
+            revert ValidatorDoesNotExist();
         }
         _;
     }
 
-    modifier onlyWhenNotRegistered(address _validator) {
-        if (validators[_validator].ed25519PublicKey != bytes32(0)) {
-            revert ValidatorAlreadyRegistered(_validator);
+    /**
+     * @dev Modifier to check if a validator does not exist
+     * @param validator The address to check
+     */
+    modifier validatorNotExists(address validator) {
+        if (_validatorAddresses.contains(validator)) {
+            revert ValidatorAlreadyExists();
         }
         _;
     }
 
-    // -- Functions --
-
     /**
-     * @notice Registers the calling address as a validator, inserting it into the sorted set.
-     * @dev This operation is O(N) due to the sorted insertion.
-     * @param _ed25519PublicKey The 32-byte Ed25519 public key.
-     * @param _votingPower The initial voting power for the validator.
+     * @dev Modifier to ensure only the validator can modify their own data
+     * @param validator The validator address that should match the caller
      */
-    function register(bytes32 _ed25519PublicKey, uint64 _votingPower) external onlyWhenNotRegistered(msg.sender) {
-        validators[msg.sender] = Validator({ed25519PublicKey: _ed25519PublicKey, votingPower: _votingPower});
-
-        _insertSorted(msg.sender);
-
-        emit ValidatorRegistered(msg.sender, _ed25519PublicKey, _votingPower);
-    }
-
-    /**
-     * @notice Unregisters the calling address, removing them from the sorted validator set.
-     * @dev This operation is O(N) due to maintaining the sorted order.
-     */
-    function unregister() external onlyWhenRegistered(msg.sender) {
-        _removeSorted(msg.sender);
-
-        delete validators[msg.sender];
-        emit ValidatorUnregistered(msg.sender);
-    }
-
-    /**
-     * @notice Updates the voting power for the calling address.
-     * @param _newVotingPower The new voting power.
-     */
-    function updateVotingPower(uint64 _newVotingPower) external onlyWhenRegistered(msg.sender) {
-        validators[msg.sender].votingPower = _newVotingPower;
-        emit VotingPowerUpdated(msg.sender, _newVotingPower);
-    }
-
-    // -- View Functions --
-
-    /**
-     * @notice Returns the sorted list of all registered validator addresses.
-     * @return An array of addresses sorted in ascending order.
-     */
-    function getValidatorAddresses() external view returns (address[] memory) {
-        return validatorAddresses;
-    }
-
-    /**
-     * @notice Returns the details for all registered validators, sorted by address.
-     * @return An array of Validator structs, sorted by ethAddress.
-     */
-    function getValidators() external view returns (ValidatorDetails[] memory) {
-        uint256 validatorCount = validatorAddresses.length;
-        ValidatorDetails[] memory _validators = new ValidatorDetails[](validatorCount);
-
-        for (uint256 i = 0; i < validatorCount; i++) {
-            _validators[i] = ValidatorDetails({
-                ethAddress: validatorAddresses[i],
-                ed25519PublicKey: validators[validatorAddresses[i]].ed25519PublicKey,
-                votingPower: validators[validatorAddresses[i]].votingPower
-            });
+    modifier onlyValidator(address validator) {
+        if (_msgSender() != validator) {
+            revert UnauthorizedValidator();
         }
-
-        return _validators;
+        _;
     }
 
     /**
-     * @notice Gets the details for a specific validator.
-     * @param _validatorAddress The address of the validator to query.
-     * @return The Validator struct for the given address.
+     * @dev Modifier to check if power is valid (greater than 0)
+     * @param power The power value to validate
      */
-    function getValidator(address _validatorAddress)
+    modifier validPower(uint256 power) {
+        if (power == 0) {
+            revert InvalidPower();
+        }
+        _;
+    }
+
+    /**
+     * @dev Modifier to check if Ed25519 key is valid (not zero)
+     * @param key The Ed25519 public key to validate
+     */
+    modifier validKey(bytes32 key) {
+        if (key == bytes32(0)) {
+            revert InvalidKey();
+        }
+        _;
+    }
+
+    /**
+     * @dev Register a new validator with specified Ed25519 key and power
+     * @param ed25519Key The Ed25519 public key for the validator
+     * @param power The voting power for the validator
+     */
+    function register(bytes32 ed25519Key, uint256 power)
+        external
+        nonReentrant
+        validatorNotExists(_msgSender())
+        validKey(ed25519Key)
+        validPower(power)
+    {
+        address validator = _msgSender();
+
+        _validators[validator] = ValidatorInfo({ed25519Key: ed25519Key, power: power});
+        _validatorAddresses.add(validator);
+
+        emit ValidatorRegistered(validator, ed25519Key, power);
+    }
+
+    /**
+     * @dev Unregister a validator (only the validator can unregister themselves)
+     */
+    function unregister() external nonReentrant validatorExists(_msgSender()) onlyValidator(_msgSender()) {
+        address validator = _msgSender();
+
+        delete _validators[validator];
+        _validatorAddresses.remove(validator);
+
+        emit ValidatorUnregistered(validator);
+    }
+
+    /**
+     * @dev Update validator's power (only the validator can update their own power)
+     * @param newPower The new voting power
+     */
+    function updatePower(uint256 newPower)
+        external
+        nonReentrant
+        validatorExists(_msgSender())
+        onlyValidator(_msgSender())
+        validPower(newPower)
+    {
+        address validator = _msgSender();
+        uint256 oldPower = _validators[validator].power;
+
+        _validators[validator].power = newPower;
+
+        emit ValidatorPowerUpdated(validator, oldPower, newPower);
+    }
+
+    /**
+     * @dev Update validator's Ed25519 key (only the validator can update their own key)
+     * @param newKey The new Ed25519 public key
+     */
+    function updateKey(bytes32 newKey)
+        external
+        nonReentrant
+        validatorExists(_msgSender())
+        onlyValidator(_msgSender())
+        validKey(newKey)
+    {
+        address validator = _msgSender();
+        bytes32 oldKey = _validators[validator].ed25519Key;
+
+        _validators[validator].ed25519Key = newKey;
+
+        emit ValidatorKeyUpdated(validator, oldKey, newKey);
+    }
+
+    /**
+     * @dev Get validator information by address
+     * @param validator The validator address
+     * @return addr The validator address
+     * @return ed25519Key The validator's Ed25519 public key
+     * @return power The validator's voting power
+     * @return exists Whether the validator exists
+     */
+    function getValidator(address validator)
         external
         view
-        onlyWhenRegistered(_validatorAddress)
-        returns (ValidatorDetails memory)
+        returns (address addr, bytes32 ed25519Key, uint256 power, bool exists)
     {
-        return ValidatorDetails({
-            ethAddress: _validatorAddress,
-            ed25519PublicKey: validators[_validatorAddress].ed25519PublicKey,
-            votingPower: validators[_validatorAddress].votingPower
-        });
-    }
-
-    // -- Internal Functions --
-
-    /**
-     * @dev Inserts a new validator address into the `validatorAddresses` array while maintaining sort order.
-     * Updates the `validatorAddressIndex` for all affected elements.
-     */
-    function _insertSorted(address _newValidator) private {
-        uint256 len = validatorAddresses.length;
-        uint256 insertionIndex = 0;
-        // Find the insertion point
-        while (insertionIndex < len && validatorAddresses[insertionIndex] < _newValidator) {
-            insertionIndex++;
+        bool found = _validatorAddresses.contains(validator);
+        if (found) {
+            ValidatorInfo memory info = _validators[validator];
+            return (validator, info.ed25519Key, info.power, true);
+        } else {
+            return (validator, bytes32(0), 0, false);
         }
-
-        // Add a new empty slot at the end
-        validatorAddresses.push();
-
-        // Shift elements to the right to make space
-        for (uint256 i = len; i > insertionIndex; i--) {
-            address addrToShift = validatorAddresses[i - 1];
-            validatorAddresses[i] = addrToShift;
-            validatorAddressIndex[addrToShift] = i;
-        }
-
-        // Insert the new validator
-        validatorAddresses[insertionIndex] = _newValidator;
-        validatorAddressIndex[_newValidator] = insertionIndex;
     }
 
     /**
-     * @dev Removes a validator address from the `validatorAddresses` array, shifting elements to maintain a sorted list.
-     * Updates the `validatorAddressIndex` for all affected elements.
+     * @dev Get all validators with their information
+     * @return addresses Array of all validator addresses
+     * @return ed25519Keys Array of corresponding Ed25519 keys
+     * @return powers Array of corresponding validator powers
      */
-    function _removeSorted(address _validatorToRemove) private {
-        uint256 indexToRemove = validatorAddressIndex[_validatorToRemove];
-        uint256 len = validatorAddresses.length;
+    function getValidators()
+        external
+        view
+        returns (address[] memory addresses, bytes32[] memory ed25519Keys, uint256[] memory powers)
+    {
+        uint256 length = _validatorAddresses.length();
+        addresses = new address[](length);
+        ed25519Keys = new bytes32[](length);
+        powers = new uint256[](length);
 
-        // Shift elements to the left to fill the gap
-        for (uint256 i = indexToRemove; i < len - 1; i++) {
-            address addrToShift = validatorAddresses[i + 1];
-            validatorAddresses[i] = addrToShift;
-            validatorAddressIndex[addrToShift] = i;
+        for (uint256 i = 0; i < length; i++) {
+            address validatorAddr = _validatorAddresses.at(i);
+            ValidatorInfo memory info = _validators[validatorAddr];
+            addresses[i] = validatorAddr;
+            ed25519Keys[i] = info.ed25519Key;
+            powers[i] = info.power;
+        }
+    }
+
+    /**
+     * @dev Get the total number of validators
+     * @return The number of registered validators
+     */
+    function getValidatorCount() external view returns (uint256) {
+        return _validatorAddresses.length();
+    }
+
+    /**
+     * @dev Check if an address is a registered validator
+     * @param validator The address to check
+     * @return True if the address is a registered validator
+     */
+    function isValidator(address validator) external view returns (bool) {
+        return _validatorAddresses.contains(validator);
+    }
+
+    /**
+     * @dev Get all validator addresses
+     * @return addresses Array of all validator addresses
+     */
+    function getValidatorAddresses() external view returns (address[] memory addresses) {
+        uint256 length = _validatorAddresses.length();
+        addresses = new address[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            addresses[i] = _validatorAddresses.at(i);
+        }
+    }
+
+    /**
+     * @dev Get total power of all validators
+     * @return The sum of all validator powers
+     */
+    function getTotalPower() external view returns (uint256) {
+        uint256 total = 0;
+        uint256 length = _validatorAddresses.length();
+
+        for (uint256 i = 0; i < length; i++) {
+            address validatorAddr = _validatorAddresses.at(i);
+            total += _validators[validatorAddr].power;
         }
 
-        // Remove the last element and delete the index entry
-        validatorAddresses.pop();
-        delete validatorAddressIndex[_validatorToRemove];
+        return total;
     }
 }

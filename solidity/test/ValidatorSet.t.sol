@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.27;
 
 import {Test} from "forge-std/Test.sol";
 import {ValidatorSet} from "../src/ValidatorSet.sol";

@@ -18,6 +18,12 @@ contract ValidatorSet is Context, ReentrancyGuard {
         uint256 power; // Voting power
     }
 
+    struct ValidatorInfoFull {
+        address validator; // Validator address
+        bytes32 ed25519Key; // Ed25519 public key
+        uint256 power; // Voting power
+    }
+
     // State variables
     EnumerableSet.AddressSet private _validatorAddresses;
     mapping(address => ValidatorInfo) private _validators;
@@ -163,47 +169,30 @@ contract ValidatorSet is Context, ReentrancyGuard {
     /**
      * @dev Get validator information by address
      * @param validator The validator address
-     * @return addr The validator address
-     * @return ed25519Key The validator's Ed25519 public key
-     * @return power The validator's voting power
-     * @return exists Whether the validator exists
+     * @return info Complete validator info including address, key, and power
+     * @dev Reverts with {ValidatorDoesNotExist} if the address is not registered
      */
-    function getValidator(address validator)
-        external
-        view
-        returns (address addr, bytes32 ed25519Key, uint256 power, bool exists)
-    {
-        bool found = _validatorAddresses.contains(validator);
-        if (found) {
-            ValidatorInfo memory info = _validators[validator];
-            return (validator, info.ed25519Key, info.power, true);
-        } else {
-            return (validator, bytes32(0), 0, false);
+    function getValidator(address validator) external view returns (ValidatorInfoFull memory info) {
+        if (!_validatorAddresses.contains(validator)) {
+            revert ValidatorDoesNotExist();
         }
+
+        ValidatorInfo memory stored = _validators[validator];
+        return ValidatorInfoFull({validator: validator, ed25519Key: stored.ed25519Key, power: stored.power});
     }
 
     /**
      * @dev Get all validators with their information
-     * @return addresses Array of all validator addresses
-     * @return ed25519Keys Array of corresponding Ed25519 keys
-     * @return powers Array of corresponding validator powers
+     * @return validators Array of validator information
      */
-    function getValidators()
-        external
-        view
-        returns (address[] memory addresses, bytes32[] memory ed25519Keys, uint256[] memory powers)
-    {
+    function getValidators() external view returns (ValidatorInfoFull[] memory validators) {
         uint256 length = _validatorAddresses.length();
-        addresses = new address[](length);
-        ed25519Keys = new bytes32[](length);
-        powers = new uint256[](length);
+        validators = new ValidatorInfoFull[](length);
 
         for (uint256 i = 0; i < length; i++) {
             address validatorAddr = _validatorAddresses.at(i);
             ValidatorInfo memory info = _validators[validatorAddr];
-            addresses[i] = validatorAddr;
-            ed25519Keys[i] = info.ed25519Key;
-            powers[i] = info.power;
+            validators[i] = ValidatorInfoFull({validator: validatorAddr, ed25519Key: info.ed25519Key, power: info.power});
         }
     }
 

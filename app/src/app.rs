@@ -1,5 +1,7 @@
+use alloy_provider::ProviderBuilder;
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre};
+use ed25519_consensus::VerificationKey;
 use ssz::{Decode, Encode};
 use tracing::{debug, error, info};
 
@@ -11,10 +13,15 @@ use malachitebft_app_channel::app::types::sync::RawDecidedValue;
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
 use malachitebft_app_channel::{AppMsg, Channels, ConsensusMsg, NetworkMsg};
 
+use alloy_primitives::{address, Address};
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::{Block, BlockHash, TestContext};
+use malachitebft_eth_types::{
+    Block, BlockHash, PublicKey, TestContext, ValidatorSet as ValidatorSetType,
+};
+
+const GENESIS_VALIDATOR_SET_ACCOUNT: Address = address!("0000000000000000000000000000000000002000");
 
 use crate::state::{decode_value, State};
 
@@ -186,8 +193,46 @@ pub async fn run(
 
                 let block_number = execution_payload.payload_inner.payload_inner.block_number;
 
+                alloy_sol_types::sol!(
+                    #[sol(rpc)]
+                    ValidatorSet,
+                    "../solidity/out/ValidatorSet.sol/ValidatorSet.json"
+                );
+
                 // call the ValidatorSet contract to get the list of validators
-                let new_validator_set = engine.eth.get_validators(block_number).await?;
+
+                let provider = ProviderBuilder::new()
+                    .on_builtin(&engine.eth.url().to_string())
+                    .await?;
+                let validator_set_contract =
+                    ValidatorSet::new(GENESIS_VALIDATOR_SET_ACCOUNT, provider);
+                let new_validator_set_sol = validator_set_contract
+                    .getValidators()
+                    .block(block_number.into())
+                    .call()
+                    .await?;
+
+                let new_validator_set = ValidatorSetType::new(
+                    new_validator_set_sol
+                        .validators
+                        .into_iter()
+                        .map(
+                            |ValidatorSet::ValidatorInfoFull {
+                                 ed25519Key, power, ..
+                             }| {
+                                let pub_key_bytes: [u8; 32] = ed25519Key.into();
+                                let pub_key = PublicKey::new(
+                                    VerificationKey::try_from(pub_key_bytes).unwrap(),
+                                );
+                                malachitebft_eth_types::Validator::new(
+                                    pub_key,
+                                    power.try_into().unwrap(),
+                                )
+                            },
+                        )
+                        .collect::<Vec<_>>(),
+                );
+
                 debug!("🌈 Got validator set: {:?}", new_validator_set);
 
                 state.validator_set = new_validator_set;

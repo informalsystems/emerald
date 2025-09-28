@@ -135,6 +135,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "alloy-contract"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee6180fb232becdea70fad57c63b6967f01f74ab9595671b870f504116dd29de"
+dependencies = [
+ "alloy-dyn-abi",
+ "alloy-json-abi",
+ "alloy-network",
+ "alloy-network-primitives",
+ "alloy-primitives 0.8.22",
+ "alloy-provider",
+ "alloy-rpc-types-eth",
+ "alloy-sol-types",
+ "alloy-transport",
+ "futures",
+ "futures-util",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "alloy-dyn-abi"
+version = "0.8.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00e08c581811006021970bf07f2ecf3213f6237c125f7fd99607004b23627b61"
+dependencies = [
+ "alloy-json-abi",
+ "alloy-primitives 0.8.22",
+ "alloy-sol-type-parser",
+ "alloy-sol-types",
+ "const-hex",
+ "itoa",
+ "serde",
+ "serde_json",
+ "winnow",
+]
+
+[[package]]
 name = "alloy-eip2124"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -215,6 +252,7 @@ dependencies = [
  "alloy-primitives 0.8.22",
  "alloy-sol-type-parser",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -325,6 +363,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "alloy-provider"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbe0a2acff0c4bd1669c71251ce10fc455cbffa1b4d0a817d5ea4ba7e5bb3db7"
+dependencies = [
+ "alloy-chains",
+ "alloy-consensus",
+ "alloy-eips",
+ "alloy-json-rpc",
+ "alloy-network",
+ "alloy-network-primitives",
+ "alloy-primitives 0.8.22",
+ "alloy-rpc-client",
+ "alloy-rpc-types-eth",
+ "alloy-sol-types",
+ "alloy-transport",
+ "alloy-transport-http",
+ "async-stream",
+ "async-trait",
+ "auto_impl",
+ "dashmap",
+ "futures",
+ "futures-utils-wasm",
+ "lru 0.13.0",
+ "parking_lot",
+ "pin-project",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "url",
+ "wasmtimer",
+]
+
+[[package]]
 name = "alloy-rlp"
 version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -344,6 +419,29 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.99",
+]
+
+[[package]]
+name = "alloy-rpc-client"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b37cc3c7883dc41be1b01460127ad7930466d0a4bb6ba15a02ee34d2745e2d7c"
+dependencies = [
+ "alloy-json-rpc",
+ "alloy-primitives 0.8.22",
+ "alloy-transport",
+ "alloy-transport-http",
+ "futures",
+ "pin-project",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tower",
+ "tracing",
+ "url",
+ "wasmtimer",
 ]
 
 [[package]]
@@ -536,6 +634,7 @@ dependencies = [
  "alloy-primitives 0.8.22",
  "alloy-sol-macro",
  "const-hex",
+ "serde",
 ]
 
 [[package]]
@@ -903,6 +1002,28 @@ name = "async-recursion"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b43422f69d8ff38f95f1b2bb76517c91589a924d1559a0e935d7c8ce0274c11"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.99",
+]
+
+[[package]]
+name = "async-stream"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b5a71a6f37880a80d1d7f19efd781e4b5de42c88f0722cc13bcb6cc2cfe8476"
+dependencies = [
+ "async-stream-impl",
+ "futures-core",
+ "pin-project-lite",
+]
+
+[[package]]
+name = "async-stream-impl"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7c24de15d275a1ecfd47a380fb4d5ec9bfe0933f309ed5e705b775596a3574d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3897,7 +4018,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm-derive",
- "lru",
+ "lru 0.12.5",
  "multistream-select",
  "once_cell",
  "rand 0.8.5",
@@ -4046,6 +4167,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lru"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "227748d55f2f0ab4735d87fd623798cb6b664512fe979705f829c9f81c934465"
+dependencies = [
+ "hashbrown 0.15.2",
+]
+
+[[package]]
 name = "lz4_flex"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4056,12 +4186,17 @@ name = "malachitebft-eth-app"
 version = "0.0.1"
 dependencies = [
  "alloy-consensus",
+ "alloy-contract",
+ "alloy-primitives 0.8.22",
+ "alloy-provider",
  "alloy-rpc-types-engine",
  "alloy-rpc-types-eth",
+ "alloy-sol-types",
  "async-trait",
  "bytes",
  "color-eyre",
  "derive-where",
+ "ed25519-consensus",
  "ethereum_ssz",
  "hex",
  "informalsystems-malachitebft-app-channel",

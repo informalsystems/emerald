@@ -2,7 +2,6 @@
 //! cryptographic library used for signing.
 
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use async_trait::async_trait;
 use color_eyre::eyre;
@@ -44,6 +43,9 @@ pub struct App {
     pub genesis_file: PathBuf,
     pub private_key_file: PathBuf,
     pub start_height: Option<Height>,
+    pub jwt_secret_path: PathBuf,
+    pub engine_rpc_url: String,
+    pub etherium_rpc_url: String,
 }
 
 pub struct Handle {
@@ -163,9 +165,12 @@ impl Node for App {
                     "test-2" => 28551,
                     _ => 8551,
                 };
-                Url::parse(&format!("http://localhost:{engine_port}"))?
+
+                Url::parse(&format!("{}:{}", self.engine_rpc_url, engine_port))?
             };
-            let jwt_path = PathBuf::from_str("./assets/jwtsecret")?; // Should be the same secret used by the execution client.
+            //let jwt_path = PathBuf::from_str("./assets/jwtsecret")?; // Should be the same secret used by the execution client.
+            let jwt_path = self.jwt_secret_path.clone(); // Should be the same secret used by the execution client.
+
             let eth_url: Url = {
                 let eth_port = match config.moniker.as_str() {
                     "test-0" => 8545,
@@ -173,8 +178,10 @@ impl Node for App {
                     "test-2" => 28545,
                     _ => 8545,
                 };
-                Url::parse(&format!("http://localhost:{eth_port}"))?
+
+                Url::parse(&format!("{}:{}", self.etherium_rpc_url, eth_port))?
             };
+            println!("URL IS : {eth_url} ");
             Engine::new(
                 EngineRPC::new(engine_url, jwt_path.as_path())?,
                 EthereumRPC::new(eth_url)?,

@@ -85,6 +85,9 @@ fn start(args: &Args, cmd: &StartCmd, logging: config::LoggingConfig) -> Result<
         genesis_file: args.get_genesis_file_path()?,
         private_key_file: args.get_priv_validator_key_file_path()?,
         start_height: cmd.start_height.map(Height::new),
+        jwt_secret_path: args.get_jwt_secret_path()?,
+        engine_rpc_url: args.get_engine_rpc_url()?,
+        etherium_rpc_url: args.get_etherium_rpc()?,
     };
 
     // Start the node
@@ -100,6 +103,9 @@ fn init(args: &Args, cmd: &InitCmd, logging: config::LoggingConfig) -> Result<()
         genesis_file: args.get_genesis_file_path()?,
         private_key_file: args.get_priv_validator_key_file_path()?,
         start_height: Some(Height::new(1)), // We always start at height 1
+        jwt_secret_path: args.get_jwt_secret_path()?,
+        engine_rpc_url: args.get_engine_rpc_url()?,
+        etherium_rpc_url: args.get_etherium_rpc()?,
     };
 
     cmd.run(
@@ -120,6 +126,9 @@ fn testnet(args: &Args, cmd: &TestnetCmd, logging: config::LoggingConfig) -> Res
         genesis_file: args.get_genesis_file_path()?,
         private_key_file: args.get_priv_validator_key_file_path()?,
         start_height: Some(Height::new(1)), // We always start at height 1
+        jwt_secret_path: args.get_jwt_secret_path()?,
+        engine_rpc_url: args.get_engine_rpc_url()?,
+        etherium_rpc_url: args.get_etherium_rpc()?,
     };
 
     cmd.run(&app, &args.get_home_dir()?, logging)

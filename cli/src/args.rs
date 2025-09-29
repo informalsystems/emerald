@@ -7,6 +7,7 @@
 //! `clap` parses the command-line parameters into this structure.
 
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use clap::{Parser, Subcommand};
 use directories::BaseDirs;
@@ -23,6 +24,20 @@ const APP_FOLDER: &str = ".malachite";
 const CONFIG_FILE: &str = "config.toml";
 const GENESIS_FILE: &str = "genesis.json";
 const PRIV_VALIDATOR_KEY_FILE: &str = "priv_validator_key.json";
+#[derive(Parser, Clone, Debug, Default)]
+pub struct EthArgs {
+    /// Path to JWT secret file for Ethereum engine API authentication
+    #[arg(long, value_name = "JWT_SECRET_PATH", global = true)]
+    pub jwt_secret_path: Option<PathBuf>,
+
+    /// URL for Ethereum engine RPC endpoint
+    #[arg(long, value_name = "ENGINE_RPC_URL", global = true)]
+    pub engine_rpc_url: Option<String>,
+
+    /// URL for Ethereum RPC endpoint                                                                                                                                                               
+    #[arg(long, value_name = "ETHERIUM_RPC_URL", global = true)]
+    pub etherium_rpc_url: Option<String>,
+}
 
 #[derive(Parser, Clone, Debug, Default)]
 #[command(version, about, long_about = None)]
@@ -41,6 +56,9 @@ pub struct Args {
 
     #[command(subcommand)]
     pub command: Commands,
+
+    #[command(flatten)]
+    pub eth: EthArgs,
 }
 
 #[derive(Subcommand, Clone, Debug)]
@@ -108,5 +126,26 @@ impl Args {
     /// configuration folder.
     pub fn get_priv_validator_key_file_path(&self) -> Result<PathBuf, Error> {
         Ok(self.get_config_dir()?.join(PRIV_VALIDATOR_KEY_FILE))
+    }
+
+    pub fn get_jwt_secret_path(&self) -> Result<PathBuf, Error> {
+        match self.eth.jwt_secret_path {
+            Some(ref jwt_path) => Ok(jwt_path.clone()),
+            None => Ok(PathBuf::from_str("./assets/jwtsecret").unwrap()),
+        }
+    }
+
+    pub fn get_etherium_rpc(&self) -> Result<String, Error> {
+        match self.eth.etherium_rpc_url {
+            Some(ref url) => Ok(url.to_string()),
+            None => Ok("http://localhost".to_string()),
+        }
+    }
+
+    pub fn get_engine_rpc_url(&self) -> Result<String, Error> {
+        match self.eth.engine_rpc_url {
+            Some(ref url) => Ok(url.to_string()),
+            None => Ok("http://localhost".to_string()),
+        }
     }
 }

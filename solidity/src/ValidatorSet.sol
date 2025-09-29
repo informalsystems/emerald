@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -40,6 +40,7 @@ contract ValidatorSet is Context, ReentrancyGuard {
     error InvalidPower();
     error InvalidKey();
     error UnauthorizedValidator();
+    error ZeroAddress();
 
     /**
      * @dev Modifier to check if a validator exists
@@ -97,6 +98,17 @@ contract ValidatorSet is Context, ReentrancyGuard {
     }
 
     /**
+     * @dev Modifier to check if address is not zero
+     * @param addr The address to check
+     */
+    modifier nonZeroAddress(address addr) {
+        if (addr == address(0)) {
+            revert ZeroAddress();
+        }
+        _;
+    }
+
+    /**
      * @dev Register a new validator with specified Ed25519 key and power
      * @param ed25519Key The Ed25519 public key for the validator
      * @param power The voting power for the validator
@@ -104,6 +116,7 @@ contract ValidatorSet is Context, ReentrancyGuard {
     function register(bytes32 ed25519Key, uint256 power)
         external
         nonReentrant
+        nonZeroAddress(_msgSender())
         validatorNotExists(_msgSender())
         validKey(ed25519Key)
         validPower(power)
@@ -172,11 +185,12 @@ contract ValidatorSet is Context, ReentrancyGuard {
      * @return info Complete validator info including address, key, and power
      * @dev Reverts with {ValidatorDoesNotExist} if the address is not registered
      */
-    function getValidator(address validator) external view returns (ValidatorInfoFull memory info) {
-        if (!_validatorAddresses.contains(validator)) {
-            revert ValidatorDoesNotExist();
-        }
-
+    function getValidator(address validator)
+        external
+        view
+        validatorExists(validator)
+        returns (ValidatorInfoFull memory info)
+    {
         ValidatorInfo memory stored = _validators[validator];
         return ValidatorInfoFull({validator: validator, ed25519Key: stored.ed25519Key, power: stored.power});
     }

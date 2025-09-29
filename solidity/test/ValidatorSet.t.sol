@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.28;
 
-import {Test} from "forge-std/Test.sol";
+import {Test, console} from "forge-std/Test.sol";
 import {ValidatorSet} from "../src/ValidatorSet.sol";
 
 contract ValidatorSetTest is Test {
@@ -75,6 +75,18 @@ contract ValidatorSetTest is Test {
         vm.prank(alice);
         vm.expectRevert(ValidatorSet.InvalidPower.selector);
         validatorSet.register(ALICE_KEY, 0);
+    }
+
+    function testCannotRegisterWithZeroKey() public {
+        vm.prank(alice);
+        vm.expectRevert(ValidatorSet.InvalidKey.selector);
+        validatorSet.register(bytes32(0), INITIAL_POWER);
+    }
+
+    function testCannotRegisterZeroAddress() public {
+        vm.prank(address(0));
+        vm.expectRevert(ValidatorSet.ZeroAddress.selector);
+        validatorSet.register(ALICE_KEY, INITIAL_POWER);
     }
 
     function testCannotRegisterTwice() public {
@@ -393,5 +405,161 @@ contract ValidatorSetTest is Test {
         // Verify the modifier is working by checking state changes happen atomically
         assertEq(validatorSet.getTotalPower(), 100);
         assertTrue(validatorSet.isValidator(alice));
+    }
+
+    // Invariant Tests
+    function testInvariantTotalPowerConsistency() public {
+        // Register multiple validators
+        vm.prank(alice);
+        validatorSet.register(ALICE_KEY, 100);
+        vm.prank(bob);
+        validatorSet.register(BOB_KEY, 200);
+        vm.prank(charlie);
+        validatorSet.register(CHARLIE_KEY, 300);
+
+        // Manual calculation
+        uint256 expectedTotal = 100 + 200 + 300;
+        assertEq(validatorSet.getTotalPower(), expectedTotal);
+
+        // Update power
+        vm.prank(alice);
+        validatorSet.updatePower(150);
+        expectedTotal = 150 + 200 + 300;
+        assertEq(validatorSet.getTotalPower(), expectedTotal);
+
+        // Unregister
+        vm.prank(bob);
+        validatorSet.unregister();
+        expectedTotal = 150 + 300;
+        assertEq(validatorSet.getTotalPower(), expectedTotal);
+    }
+
+    // Gas Optimization Tests
+    function testGasBenchmarkGetValidators() public {
+        // Register 10 validators
+        for (uint256 i = 1; i <= 10; i++) {
+            address validator = address(uint160(i));
+            bytes32 key = bytes32(uint256(i * 1111));
+            vm.prank(validator);
+            validatorSet.register(key, i * 100);
+        }
+
+        // Measure gas for getValidators
+        uint256 gasBefore = gasleft();
+        validatorSet.getValidators();
+        uint256 gasUsed = gasBefore - gasleft();
+
+        // Log gas usage
+        console.log("Gas used for getValidators() with 10 validators:", gasUsed);
+        // Should be reasonable (adjust threshold as needed)
+        assertLt(gasUsed, 500000, "getValidators gas usage too high");
+    }
+
+    function testGasBenchmarkGetTotalPower() public {
+        // Register 10 validators
+        for (uint256 i = 1; i <= 10; i++) {
+            address validator = address(uint160(i));
+            bytes32 key = bytes32(uint256(i * 1111));
+            vm.prank(validator);
+            validatorSet.register(key, i * 100);
+        }
+
+        // Measure gas for getTotalPower
+        uint256 gasBefore = gasleft();
+        validatorSet.getTotalPower();
+        uint256 gasUsed = gasBefore - gasleft();
+
+        // Log gas usage
+        console.log("Gas used for getTotalPower() with 10 validators:", gasUsed);
+        assertLt(gasUsed, 200000, "getTotalPower gas usage too high");
+    }
+
+    // Edge case: Duplicate Ed25519 keys
+    function testDuplicateEd25519KeysAllowed() public {
+        // The contract currently allows duplicate Ed25519 keys
+        // This test documents this behavior
+        vm.prank(alice);
+        validatorSet.register(ALICE_KEY, 100);
+
+        vm.prank(bob);
+        validatorSet.register(ALICE_KEY, 200); // Same key, different validator
+
+        // Both validators should exist
+        assertTrue(validatorSet.isValidator(alice));
+        assertTrue(validatorSet.isValidator(bob));
+
+        ValidatorSet.ValidatorInfoFull memory aliceInfo = validatorSet.getValidator(alice);
+        ValidatorSet.ValidatorInfoFull memory bobInfo = validatorSet.getValidator(bob);
+
+        assertEq(aliceInfo.ed25519Key, ALICE_KEY);
+        assertEq(bobInfo.ed25519Key, ALICE_KEY);
+    }
+
+    // Edge case: Maximum uint256 power
+    function testMaxUint256PowerHandling() public {
+        uint256 maxPower = type(uint256).max;
+
+        vm.prank(alice);
+        validatorSet.register(ALICE_KEY, maxPower);
+
+        ValidatorSet.ValidatorInfoFull memory info = validatorSet.getValidator(alice);
+        assertEq(info.power, maxPower);
+    }
+
+    function testTotalPowerOverflow() public {
+        // Register validator with max uint256
+        vm.prank(alice);
+        validatorSet.register(ALICE_KEY, type(uint256).max);
+
+        // Trying to register another validator would cause overflow in getTotalPower
+        vm.prank(bob);
+        validatorSet.register(BOB_KEY, 1);
+
+        // getTotalPower will overflow (Solidity 0.8+ reverts on overflow)
+        vm.expectRevert();
+        validatorSet.getTotalPower();
+    }
+
+    // Key update edge cases
+    function testMultipleKeyUpdates() public {
+        vm.prank(alice);
+        validatorSet.register(ALICE_KEY, INITIAL_POWER);
+
+        // Update key multiple times
+        vm.prank(alice);
+        validatorSet.updateKey(BOB_KEY);
+
+        vm.prank(alice);
+        validatorSet.updateKey(CHARLIE_KEY);
+
+        vm.prank(alice);
+        validatorSet.updateKey(NEW_KEY);
+
+        ValidatorSet.ValidatorInfoFull memory info = validatorSet.getValidator(alice);
+        assertEq(info.ed25519Key, NEW_KEY);
+        assertEq(info.power, INITIAL_POWER); // Power unchanged
+    }
+
+    // Test validator enumeration order
+    function testValidatorEnumerationConsistency() public {
+        // Register in specific order
+        vm.prank(alice);
+        validatorSet.register(ALICE_KEY, 100);
+        vm.prank(bob);
+        validatorSet.register(BOB_KEY, 200);
+        vm.prank(charlie);
+        validatorSet.register(CHARLIE_KEY, 300);
+
+        // Get validators twice
+        ValidatorSet.ValidatorInfoFull[] memory validators1 = validatorSet.getValidators();
+        ValidatorSet.ValidatorInfoFull[] memory validators2 = validatorSet.getValidators();
+
+        // Should return same order
+        assertEq(validators1.length, validators2.length);
+        for (uint256 i = 0; i < validators1.length; i++) {
+            assertEq(validators1[i].validator, validators2[i].validator);
+            assertEq(validators1[i].ed25519Key, validators2[i].ed25519Key);
+            assertEq(validators1[i].power, validators2[i].power);
+        }
     }
 }

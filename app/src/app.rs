@@ -253,7 +253,7 @@ pub async fn run(
                 state.latest_block = Some(ExecutionBlock {
                     block_hash: new_block_hash,
                     block_number: new_block_number,
-                    parent_hash: latest_valid_hash,
+                    parent_hash: latest_valid_hash, // FIXME: should be parent_block_hash ?
                     timestamp: new_block_timestamp,
                     prev_randao: new_block_prev_randao,
                 });
@@ -268,28 +268,11 @@ pub async fn run(
 
                 // call the ValidatorSet contract to get the list of validators
 
-                println!("Engine ETH URL: {}", engine.eth.url());
-                println!(
-                    "Genesis Validator Set Account: {}",
-                    GENESIS_VALIDATOR_SET_ACCOUNT
-                );
-
-                let latest_block = engine.eth.get_block_by_number("latest").await?.unwrap();
-                let pending_block = engine.eth.get_block_by_number("pending").await?.unwrap();
-
-                debug!("👉 state.latest_block: {:?}", &state.latest_block.unwrap());
-                debug!("👉 latest_block: {:?}", latest_block);
-                debug!("👉 pending_block: {:?}", pending_block);
-
                 let provider = ProviderBuilder::new()
                     .on_builtin(engine.eth.url().as_ref())
                     .await?;
                 let validator_set_contract =
                     ValidatorSet::new(GENESIS_VALIDATOR_SET_ACCOUNT, provider);
-
-                dbg!(validator_set_contract.getTotalPower().call().await?); // Ensure contract is responsive
-                dbg!(validator_set_contract.getValidatorCount().call().await?);
-                dbg!(validator_set_contract.getValidators().call().await?);
 
                 let new_validator_set_sol = validator_set_contract
                     .getValidators()

@@ -1,5 +1,4 @@
 use alloy_provider::ProviderBuilder;
-use alloy_rpc_types_eth::BlockNumberOrTag;
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre};
 use ed25519_consensus::VerificationKey;
@@ -192,75 +191,6 @@ pub async fn run(
 
                 assert_eq!(state.latest_block.unwrap().block_hash, parent_block_hash);
 
-                let block_number = execution_payload.payload_inner.payload_inner.block_number;
-
-                alloy_sol_types::sol!(
-                    #[derive(Debug)]
-                    #[sol(rpc)]
-                    ValidatorSet,
-                    "../solidity/out/ValidatorSet.sol/ValidatorSet.json"
-                );
-
-                // call the ValidatorSet contract to get the list of validators
-
-                println!("Engine ETH URL: {}", engine.eth.url());
-                println!(
-                    "Genesis Validator Set Account: {}",
-                    GENESIS_VALIDATOR_SET_ACCOUNT
-                );
-
-                let latest_block = engine.eth.get_block_by_number("latest").await?.unwrap();
-                let pending_block = engine.eth.get_block_by_number("pending").await?.unwrap();
-
-                debug!(
-                    "🌈 execution_payload.inner: {:?}",
-                    execution_payload.payload_inner.payload_inner
-                );
-                debug!("👉 state.latest_block: {:?}", &state.latest_block.unwrap());
-                debug!("👉 latest_block: {:?}", latest_block);
-                debug!("👉 pending_block: {:?}", pending_block);
-
-                let provider = ProviderBuilder::new()
-                    .on_builtin(engine.eth.url().as_ref())
-                    .await?;
-                let validator_set_contract =
-                    ValidatorSet::new(GENESIS_VALIDATOR_SET_ACCOUNT, provider);
-
-                dbg!(validator_set_contract.getTotalPower().call().await?); // Ensure contract is responsive
-                dbg!(validator_set_contract.getValidatorCount().call().await?);
-                dbg!(validator_set_contract.getValidators().call().await?);
-
-                let new_validator_set_sol = validator_set_contract
-                    .getValidators()
-                    .block(BlockNumberOrTag::Pending.into())
-                    .call()
-                    .await?;
-
-                let new_validator_set = ValidatorSetType::new(
-                    new_validator_set_sol
-                        .validators
-                        .into_iter()
-                        .map(
-                            |ValidatorSet::ValidatorInfoFull {
-                                 ed25519Key, power, ..
-                             }| {
-                                let pub_key_bytes: [u8; 32] = ed25519Key.into();
-                                let pub_key = PublicKey::new(
-                                    VerificationKey::try_from(pub_key_bytes).unwrap(),
-                                );
-                                malachitebft_eth_types::Validator::new(
-                                    pub_key,
-                                    power.try_into().unwrap(),
-                                )
-                            },
-                        )
-                        .collect::<Vec<_>>(),
-                );
-
-                debug!("🌈 Got validator set: {:?}", new_validator_set);
-
-                state.validator_set = new_validator_set;
-
                 let new_block_timestamp = execution_payload.timestamp();
                 let new_block_number = execution_payload.payload_inner.payload_inner.block_number;
 
@@ -327,6 +257,70 @@ pub async fn run(
                     timestamp: new_block_timestamp,
                     prev_randao: new_block_prev_randao,
                 });
+
+                // Save the validator set at t
+                alloy_sol_types::sol!(
+                    #[derive(Debug)]
+                    #[sol(rpc)]
+                    ValidatorSet,
+                    "../solidity/out/ValidatorSet.sol/ValidatorSet.json"
+                );
+
+                // call the ValidatorSet contract to get the list of validators
+
+                println!("Engine ETH URL: {}", engine.eth.url());
+                println!(
+                    "Genesis Validator Set Account: {}",
+                    GENESIS_VALIDATOR_SET_ACCOUNT
+                );
+
+                let latest_block = engine.eth.get_block_by_number("latest").await?.unwrap();
+                let pending_block = engine.eth.get_block_by_number("pending").await?.unwrap();
+
+                debug!("👉 state.latest_block: {:?}", &state.latest_block.unwrap());
+                debug!("👉 latest_block: {:?}", latest_block);
+                debug!("👉 pending_block: {:?}", pending_block);
+
+                let provider = ProviderBuilder::new()
+                    .on_builtin(engine.eth.url().as_ref())
+                    .await?;
+                let validator_set_contract =
+                    ValidatorSet::new(GENESIS_VALIDATOR_SET_ACCOUNT, provider);
+
+                dbg!(validator_set_contract.getTotalPower().call().await?); // Ensure contract is responsive
+                dbg!(validator_set_contract.getValidatorCount().call().await?);
+                dbg!(validator_set_contract.getValidators().call().await?);
+
+                let new_validator_set_sol = validator_set_contract
+                    .getValidators()
+                    .block(latest_valid_hash.into())
+                    .call()
+                    .await?;
+
+                let new_validator_set = ValidatorSetType::new(
+                    new_validator_set_sol
+                        .validators
+                        .into_iter()
+                        .map(
+                            |ValidatorSet::ValidatorInfoFull {
+                                 ed25519Key, power, ..
+                             }| {
+                                let pub_key_bytes: [u8; 32] = ed25519Key.into();
+                                let pub_key = PublicKey::new(
+                                    VerificationKey::try_from(pub_key_bytes).unwrap(),
+                                );
+                                malachitebft_eth_types::Validator::new(
+                                    pub_key,
+                                    power.try_into().unwrap(),
+                                )
+                            },
+                        )
+                        .collect::<Vec<_>>(),
+                );
+
+                debug!("🌈 Got validator set: {:?}", new_validator_set);
+
+                state.validator_set = new_validator_set;
 
                 // Pause briefly before starting next height, just to make following the logs easier
                 // tokio::time::sleep(Duration::from_millis(500)).await;

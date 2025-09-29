@@ -5,6 +5,8 @@
 
 pub mod error;
 pub mod storage;
+#[cfg(test)]
+mod tests;
 pub mod types;
 
 use std::collections::BTreeMap;
@@ -57,10 +59,10 @@ pub fn generate_from_validator_set(validator_set: &ValidatorSet) -> Result<BTree
     let mut storage = BTreeMap::new();
 
     // ReentrancyGuard initial status
-    storage.insert(B256::ZERO, B256::from(U256::from(1u64))); // _status = 1
+    // storage.insert(B256::ZERO, B256::from(U256::from(1u64))); // _status = 1
 
-    set_validator_addresses_set(&mut storage, validator_set)?;
-    set_validators_mapping(&mut storage, validator_set)?;
+    set_validator_addresses_set(&mut storage, validator_set, U256::from(0))?;
+    set_validators_mapping(&mut storage, validator_set, U256::from(2))?;
 
     Ok(storage)
 }

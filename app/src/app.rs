@@ -1,4 +1,5 @@
 use alloy_provider::ProviderBuilder;
+use alloy_rpc_types_eth::BlockNumberOrTag;
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre};
 use ed25519_consensus::VerificationKey;
@@ -194,6 +195,7 @@ pub async fn run(
                 let block_number = execution_payload.payload_inner.payload_inner.block_number;
 
                 alloy_sol_types::sol!(
+                    #[derive(Debug)]
                     #[sol(rpc)]
                     ValidatorSet,
                     "../solidity/out/ValidatorSet.sol/ValidatorSet.json"
@@ -201,14 +203,36 @@ pub async fn run(
 
                 // call the ValidatorSet contract to get the list of validators
 
+                println!("Engine ETH URL: {}", engine.eth.url());
+                println!(
+                    "Genesis Validator Set Account: {}",
+                    GENESIS_VALIDATOR_SET_ACCOUNT
+                );
+
+                let latest_block = engine.eth.get_block_by_number("latest").await?.unwrap();
+                let pending_block = engine.eth.get_block_by_number("pending").await?.unwrap();
+
+                debug!(
+                    "🌈 execution_payload.inner: {:?}",
+                    execution_payload.payload_inner.payload_inner
+                );
+                debug!("👉 state.latest_block: {:?}", &state.latest_block.unwrap());
+                debug!("👉 latest_block: {:?}", latest_block);
+                debug!("👉 pending_block: {:?}", pending_block);
+
                 let provider = ProviderBuilder::new()
                     .on_builtin(engine.eth.url().as_ref())
                     .await?;
                 let validator_set_contract =
                     ValidatorSet::new(GENESIS_VALIDATOR_SET_ACCOUNT, provider);
+
+                dbg!(validator_set_contract.getTotalPower().call().await?); // Ensure contract is responsive
+                dbg!(validator_set_contract.getValidatorCount().call().await?);
+                dbg!(validator_set_contract.getValidators().call().await?);
+
                 let new_validator_set_sol = validator_set_contract
                     .getValidators()
-                    .block(block_number.into())
+                    .block(BlockNumberOrTag::Pending.into())
                     .call()
                     .await?;
 

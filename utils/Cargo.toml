@@ -48,3 +48,8 @@ reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.2.0" 
 [dev-dependencies]
 reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", tag = "v1.2.0" }
 alloy-eips = "0.11.1"
+alloy-provider = "0.11.1"
+ethers-signers = "2"
+tempfile = "3"
+anyhow = "1"
+alloy-contract = "0.11.1"

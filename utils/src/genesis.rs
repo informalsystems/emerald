@@ -1,9 +1,11 @@
 use alloy_genesis::{ChainConfig, Genesis, GenesisAccount};
-use alloy_primitives::{address, b256, Address, U256};
+use alloy_primitives::{address, Address, B256, U256};
 use alloy_signer_local::{coins_bip39::English, LocalSigner, MnemonicBuilder};
 use chrono::NaiveDate;
 use color_eyre::eyre::Result;
 use k256::ecdsa::SigningKey;
+use malachitebft_eth_types::PrivateKey;
+use rand::{rngs::StdRng, SeedableRng};
 use std::{collections::BTreeMap, str::FromStr};
 
 use crate::validator_set::{self, Validator};
@@ -56,20 +58,26 @@ pub(crate) fn generate_genesis() -> Result<()> {
         );
     }
 
+    let mut rng = StdRng::seed_from_u64(0x42);
+    let public_keys: Vec<_> = (0..3)
+        .map(|_| PrivateKey::generate(&mut rng))
+        .map(|pk| pk.public_key())
+        .collect();
+
     let initial_validators = vec![
         Validator {
             address: address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
-            ed25519_key: b256!("58501dc30e998b7874d03f5441c5e0952a8e9cfd896d5f68abc4648e4697c701"),
+            ed25519_key: B256::from(public_keys[0].as_bytes()),
             power: U256::from(100),
         },
         Validator {
             address: address!("70997970C51812dc3A010C7d01b50e0d17dc79C8"),
-            ed25519_key: b256!("75f904c0d021ec21f711e64add102b8a920b7dc0e6447c0998b181c7496d320f"),
+            ed25519_key: B256::from(public_keys[1].as_bytes()),
             power: U256::from(120),
         },
         Validator {
             address: address!("3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"),
-            ed25519_key: b256!("6e864c490123a7b30ce8246ec893c326be160bd8c53e29e3614f35de565b3fec"),
+            ed25519_key: B256::from(public_keys[2].as_bytes()),
             power: U256::from(110),
         },
     ];
@@ -86,7 +94,7 @@ pub(crate) fn generate_genesis() -> Result<()> {
         GenesisAccount {
             nonce: None,
             balance: U256::ZERO,
-            code: Some(ValidatorSet::BYTECODE.clone()),
+            code: Some(ValidatorSet::DEPLOYED_BYTECODE.clone()),
             storage: Some(storage),
             private_key: None,
         },

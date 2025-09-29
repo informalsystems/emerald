@@ -37,8 +37,8 @@ impl StorageSlotCalculator {
 pub(crate) fn set_validator_addresses_set(
     storage: &mut BTreeMap<B256, B256>,
     validator_set: &ValidatorSet,
+    base_slot: U256,
 ) -> Result<()> {
-    let base_slot = U256::from(1); // _validatorAddresses is at slot 1
     let base_slot_b256 = B256::from(base_slot.to_be_bytes::<32>());
     let addresses: Vec<Address> = validator_set.validator_order.clone();
 
@@ -76,9 +76,8 @@ pub(crate) fn set_validator_addresses_set(
 pub(crate) fn set_validators_mapping(
     storage: &mut BTreeMap<B256, B256>,
     validator_set: &ValidatorSet,
+    base_slot: U256,
 ) -> Result<()> {
-    let base_slot = U256::from(3); // _validators mapping is at slot 3
-
     for validator in validator_set.get_validators() {
         let validator_slot =
             StorageSlotCalculator::mapping_slot(validator.address.into_word(), base_slot);

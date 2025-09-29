@@ -26,7 +26,7 @@ env:
 
 jobs:
   malaketh:
-    name: Unit Tests
+    name: Malaketh Block Production
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -1,0 +1,56 @@
+name: Malaketh CI
+
+on:
+  merge_group:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# If new code is pushed to a PR branch, then cancel in progress workflows for that PR.
+# Ensures that we don't waste CI time, and returns results quicker.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: 1
+  CARGO_PROFILE_RELEASE_DEBUG: 1
+  RUST_BACKTRACE: short
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  malaketh:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@cargo-nextest
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+      - name: Run Forge build
+        working-directory: ./solidity
+        run: forge build
+      - name: Run malaketh
+        run: |
+            cargo build
+            cargo run --bin malachitebft-eth-utils genesis
+            docker compose up -d
+            ./scripts/add_peers.sh
+            cargo run --bin malachitebft-eth-app -- testnet --nodes 3 --home nodes --deterministic
+            bash scripts/spawn.bash --nodes 3 --home nodes --no-wait

@@ -59,23 +59,18 @@ pub(crate) fn generate_genesis() -> Result<()> {
     let initial_validators = vec![
         Validator {
             address: address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
-            ed25519_key: b256!("1000000000000000000000000000000000000000000000000000000000000000"),
+            ed25519_key: b256!("58501dc30e998b7874d03f5441c5e0952a8e9cfd896d5f68abc4648e4697c701"),
             power: U256::from(100),
         },
         Validator {
             address: address!("70997970C51812dc3A010C7d01b50e0d17dc79C8"),
-            ed25519_key: b256!("2000000000000000000000000000000000000000000000000000000000000000"),
+            ed25519_key: b256!("75f904c0d021ec21f711e64add102b8a920b7dc0e6447c0998b181c7496d320f"),
             power: U256::from(120),
         },
         Validator {
             address: address!("3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"),
-            ed25519_key: b256!("3000000000000000000000000000000000000000000000000000000000000000"),
+            ed25519_key: b256!("6e864c490123a7b30ce8246ec893c326be160bd8c53e29e3614f35de565b3fec"),
             power: U256::from(110),
-        },
-        Validator {
-            address: address!("90F79bf6EB2c4f870365E785982E1f101E93b906"),
-            ed25519_key: b256!("4000000000000000000000000000000000000000000000000000000000000000"),
-            power: U256::from(130),
         },
     ];
 

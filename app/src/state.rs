@@ -17,8 +17,8 @@ use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, Propose
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::{
-    Address, Ed25519Provider, Genesis, Height, ProposalData, ProposalFin, ProposalInit,
-    ProposalPart, MalakethContext, ValidatorSet, Value,
+    Address, Ed25519Provider, Genesis, Height, MalakethContext, ProposalData, ProposalFin,
+    ProposalInit, ProposalPart, ValidatorSet, Value,
 };
 
 use crate::store::{DecidedValue, Store};

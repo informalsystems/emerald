@@ -4,7 +4,7 @@ use malachitebft_core_types::{
     SignedExtension, SignedProposal, SignedProposalPart, SignedVote, SigningProvider,
 };
 
-use crate::{Proposal, ProposalPart, MalakethContext, Vote};
+use crate::{MalakethContext, Proposal, ProposalPart, Vote};
 
 pub use malachitebft_signing_ed25519::*;
 

@@ -37,7 +37,9 @@ fn decode_certificate(bytes: &[u8]) -> Result<CommitCertificate<MalakethContext>
     codec::decode_certificate(proto)
 }
 
-fn encode_certificate(certificate: &CommitCertificate<MalakethContext>) -> Result<Vec<u8>, ProtoError> {
+fn encode_certificate(
+    certificate: &CommitCertificate<MalakethContext>,
+) -> Result<Vec<u8>, ProtoError> {
     let proto = codec::encode_certificate(certificate)?;
     Ok(proto.encode_to_vec())
 }

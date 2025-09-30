@@ -14,7 +14,7 @@ use malachitebft_signing_ed25519::Signature;
 use malachitebft_sync::{self as sync, PeerId};
 
 use crate::{decode_votetype, encode_votetype, proto};
-use crate::{Address, Height, Proposal, ProposalPart, MalakethContext, Value, ValueId, Vote};
+use crate::{Address, Height, MalakethContext, Proposal, ProposalPart, Value, ValueId, Vote};
 
 #[derive(Copy, Clone, Debug)]
 pub struct ProtobufCodec;
@@ -346,17 +346,19 @@ pub fn decode_certificate(
     let commit_signatures = certificate
         .signatures
         .into_iter()
-        .map(|sig| -> Result<CommitSignature<MalakethContext>, ProtoError> {
-            let address = sig.validator_address.ok_or_else(|| {
-                ProtoError::missing_field::<proto::CommitSignature>("validator_address")
-            })?;
-            let signature = sig
-                .signature
-                .ok_or_else(|| ProtoError::missing_field::<proto::CommitSignature>("signature"))?;
-            let signature = decode_signature(signature)?;
-            let address = Address::from_proto(address)?;
-            Ok(CommitSignature::new(address, signature))
-        })
+        .map(
+            |sig| -> Result<CommitSignature<MalakethContext>, ProtoError> {
+                let address = sig.validator_address.ok_or_else(|| {
+                    ProtoError::missing_field::<proto::CommitSignature>("validator_address")
+                })?;
+                let signature = sig.signature.ok_or_else(|| {
+                    ProtoError::missing_field::<proto::CommitSignature>("signature")
+                })?;
+                let signature = decode_signature(signature)?;
+                let address = Address::from_proto(address)?;
+                Ok(CommitSignature::new(address, signature))
+            },
+        )
         .collect::<Result<Vec<_>, _>>()?;
 
     let certificate = CommitCertificate {
@@ -391,7 +393,9 @@ pub fn encode_certificate(
     })
 }
 
-pub fn decode_extension(ext: proto::Extension) -> Result<SignedExtension<MalakethContext>, ProtoError> {
+pub fn decode_extension(
+    ext: proto::Extension,
+) -> Result<SignedExtension<MalakethContext>, ProtoError> {
     let extension = ext.data;
     let signature = ext
         .signature
@@ -454,18 +458,20 @@ pub fn decode_polka_certificate(
         polka_signatures: certificate
             .signatures
             .into_iter()
-            .map(|sig| -> Result<PolkaSignature<MalakethContext>, ProtoError> {
-                let address = sig.validator_address.ok_or_else(|| {
-                    ProtoError::missing_field::<proto::PolkaCertificate>("validator_address")
-                })?;
-                let signature = sig.signature.ok_or_else(|| {
-                    ProtoError::missing_field::<proto::PolkaCertificate>("signature")
-                })?;
+            .map(
+                |sig| -> Result<PolkaSignature<MalakethContext>, ProtoError> {
+                    let address = sig.validator_address.ok_or_else(|| {
+                        ProtoError::missing_field::<proto::PolkaCertificate>("validator_address")
+                    })?;
+                    let signature = sig.signature.ok_or_else(|| {
+                        ProtoError::missing_field::<proto::PolkaCertificate>("signature")
+                    })?;
 
-                let signature = decode_signature(signature)?;
-                let address = Address::from_proto(address)?;
-                Ok(PolkaSignature::new(address, signature))
-            })
+                    let signature = decode_signature(signature)?;
+                    let address = Address::from_proto(address)?;
+                    Ok(PolkaSignature::new(address, signature))
+                },
+            )
             .collect::<Result<Vec<_>, _>>()?,
     })
 }
@@ -485,25 +491,27 @@ pub fn decode_round_certificate(
         round_signatures: certificate
             .signatures
             .into_iter()
-            .map(|sig| -> Result<RoundSignature<MalakethContext>, ProtoError> {
-                let vote_type = decode_votetype(sig.vote_type());
-                let address = sig.validator_address.ok_or_else(|| {
-                    ProtoError::missing_field::<proto::RoundCertificate>("validator_address")
-                })?;
+            .map(
+                |sig| -> Result<RoundSignature<MalakethContext>, ProtoError> {
+                    let vote_type = decode_votetype(sig.vote_type());
+                    let address = sig.validator_address.ok_or_else(|| {
+                        ProtoError::missing_field::<proto::RoundCertificate>("validator_address")
+                    })?;
 
-                let signature = sig.signature.ok_or_else(|| {
-                    ProtoError::missing_field::<proto::RoundCertificate>("signature")
-                })?;
+                    let signature = sig.signature.ok_or_else(|| {
+                        ProtoError::missing_field::<proto::RoundCertificate>("signature")
+                    })?;
 
-                let value_id = match sig.value_id {
-                    None => NilOrVal::Nil,
-                    Some(value_id) => NilOrVal::Val(ValueId::from_proto(value_id)?),
-                };
+                    let value_id = match sig.value_id {
+                        None => NilOrVal::Nil,
+                        Some(value_id) => NilOrVal::Val(ValueId::from_proto(value_id)?),
+                    };
 
-                let signature = decode_signature(signature)?;
-                let address = Address::from_proto(address)?;
-                Ok(RoundSignature::new(vote_type, value_id, address, signature))
-            })
+                    let signature = decode_signature(signature)?;
+                    let address = Address::from_proto(address)?;
+                    Ok(RoundSignature::new(vote_type, value_id, address, signature))
+                },
+            )
             .collect::<Result<Vec<_>, _>>()?,
     })
 }

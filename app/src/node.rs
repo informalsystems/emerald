@@ -26,7 +26,7 @@ use malachitebft_eth_cli::config::Config;
 use malachitebft_eth_cli::metrics;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::{
-    Address, Ed25519Provider, Genesis, Height, PrivateKey, PublicKey, MalakethContext, Validator,
+    Address, Ed25519Provider, Genesis, Height, MalakethContext, PrivateKey, PublicKey, Validator,
     ValidatorSet,
 };
 use tokio::task::JoinHandle;

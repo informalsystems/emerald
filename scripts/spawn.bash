@@ -66,13 +66,18 @@ done
 
 # Function to handle cleanup on interrupt
 function exit_and_cleanup {
+    RETURN_CODE=$1
     echo "Stopping all nodes..."
     for NODE in $(seq 0 $((NODES_COUNT - 1))); do
         NODE_PID=$(cat "$NODES_HOME/$NODE/node.pid")
         echo "[Node $NODE] Stopping node (PID: $NODE_PID)..."
         kill "$NODE_PID"
     done
-    exit 0
+    if [[ -z "$RETURN_CODE" ]]; then
+        exit 0
+    else
+        exit $RETURN_CODE
+    fi
 }
 
 function wait_for_reth {
@@ -90,7 +95,7 @@ function wait_for_reth {
         fi
     done
     echo "Reth node at port $NODE_PORT did not reach height 1 in time. Exiting with error."
-    exit_and_cleanup && exit 1
+    exit_and_cleanup 1
 }
 
 function check_reth_progress {
@@ -100,7 +105,7 @@ function check_reth_progress {
     NEW_BLOCK=$(cast block-number --rpc-url 127.0.0.1:$NODE_PORT)
     if [[ ! $INITIAL_BLOCK -lt $NEW_BLOCK ]]; then
         echo "No new blocks mined on node at port $NODE_PORT. Exiting with error."
-        exit_and_cleanup && exit 1
+        exit_and_cleanup 1
     else
         echo "Node at port $NODE_PORT is making progress."
     fi
@@ -109,7 +114,7 @@ function check_reth_progress {
 wait_for_reth 8545
 
 for NODE_PORT in 8545 18545 28545; do
-    check_reth_progress $NODE_PORT
+    check_reth_progress $NODE_PORT || exit_and_cleanup 1
 done
 
 # Trap the INT signal (Ctrl+C) to run the cleanup function

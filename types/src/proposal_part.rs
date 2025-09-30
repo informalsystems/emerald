@@ -8,7 +8,7 @@ use malachitebft_proto::{self as proto, Error as ProtoError, Protobuf};
 use malachitebft_signing_ed25519::Signature;
 
 use crate::codec::proto::{decode_signature, encode_signature};
-use crate::{Address, Height, TestContext};
+use crate::{Address, Height, MalakethContext};
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProposalData {
@@ -113,7 +113,7 @@ impl ProposalFin {
     }
 }
 
-impl malachitebft_core_types::ProposalPart<TestContext> for ProposalPart {
+impl malachitebft_core_types::ProposalPart<MalakethContext> for ProposalPart {
     fn is_first(&self) -> bool {
         matches!(self, Self::Init(_))
     }

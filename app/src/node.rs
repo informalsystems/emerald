@@ -26,7 +26,7 @@ use malachitebft_eth_cli::config::Config;
 use malachitebft_eth_cli::metrics;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::{
-    Address, Ed25519Provider, Genesis, Height, PrivateKey, PublicKey, TestContext, Validator,
+    Address, Ed25519Provider, Genesis, Height, PrivateKey, PublicKey, MalakethContext, Validator,
     ValidatorSet,
 };
 use tokio::task::JoinHandle;
@@ -49,12 +49,12 @@ pub struct App {
 pub struct Handle {
     pub app: JoinHandle<()>,
     pub engine: EngineHandle,
-    pub tx_event: TxEvent<TestContext>,
+    pub tx_event: TxEvent<MalakethContext>,
 }
 
 #[async_trait]
-impl NodeHandle<TestContext> for Handle {
-    fn subscribe(&self) -> RxEvent<TestContext> {
+impl NodeHandle<MalakethContext> for Handle {
+    fn subscribe(&self) -> RxEvent<MalakethContext> {
         self.tx_event.subscribe()
     }
 
@@ -68,7 +68,7 @@ impl NodeHandle<TestContext> for Handle {
 
 #[async_trait]
 impl Node for App {
-    type Context = TestContext;
+    type Context = MalakethContext;
     type Config = Config;
     type Genesis = Genesis;
     type PrivateKeyFile = PrivateKey;
@@ -123,7 +123,7 @@ impl Node for App {
         let public_key = self.get_public_key(&private_key);
         let address = self.get_address(&public_key);
         let signing_provider = self.get_signing_provider(private_key);
-        let ctx = TestContext::new();
+        let ctx = MalakethContext::new();
 
         let genesis = self.load_genesis()?;
         let initial_validator_set = genesis.validator_set.clone();

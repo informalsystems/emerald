@@ -3,7 +3,7 @@ use malachitebft_core_types::{NilOrVal, Round, SignedExtension, VoteType};
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 
 use crate::proto;
-use crate::{Address, Height, TestContext, ValueId};
+use crate::{Address, Height, MalakethContext, ValueId};
 
 pub use malachitebft_core_types::Extension;
 
@@ -15,7 +15,7 @@ pub struct Vote {
     pub round: Round,
     pub value: NilOrVal<ValueId>,
     pub validator_address: Address,
-    pub extension: Option<SignedExtension<TestContext>>,
+    pub extension: Option<SignedExtension<MalakethContext>>,
 }
 
 impl Vote {
@@ -64,7 +64,7 @@ impl Vote {
     }
 }
 
-impl malachitebft_core_types::Vote<TestContext> for Vote {
+impl malachitebft_core_types::Vote<MalakethContext> for Vote {
     fn height(&self) -> Height {
         self.height
     }
@@ -89,15 +89,15 @@ impl malachitebft_core_types::Vote<TestContext> for Vote {
         &self.validator_address
     }
 
-    fn extension(&self) -> Option<&SignedExtension<TestContext>> {
+    fn extension(&self) -> Option<&SignedExtension<MalakethContext>> {
         self.extension.as_ref()
     }
 
-    fn take_extension(&mut self) -> Option<SignedExtension<TestContext>> {
+    fn take_extension(&mut self) -> Option<SignedExtension<MalakethContext>> {
         self.extension.take()
     }
 
-    fn extend(self, extension: SignedExtension<TestContext>) -> Self {
+    fn extend(self, extension: SignedExtension<MalakethContext>) -> Self {
         Self {
             extension: Some(extension),
             ..self

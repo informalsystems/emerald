@@ -15,13 +15,13 @@ use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::{Block, BlockHash, TestContext};
+use malachitebft_eth_types::{Block, BlockHash, MalakethContext};
 
 use crate::state::{decode_value, extract_block_header, State};
 
 pub async fn run(
     state: &mut State,
-    channels: &mut Channels<TestContext>,
+    channels: &mut Channels<MalakethContext>,
     engine: Engine,
 ) -> eyre::Result<()> {
     while let Some(msg) = channels.consensus.recv().await {
@@ -68,7 +68,7 @@ pub async fn run(
 
                 // TODO: Add pending parts validation
                 // For now, send empty proposals list to consensus
-                let proposals: Vec<ProposedValue<TestContext>> = Vec::new();
+                let proposals: Vec<ProposedValue<MalakethContext>> = Vec::new();
                 info!(%height, %round, "Found {} undecided proposals", proposals.len());
 
                 if reply_value.send(proposals).is_err() {
@@ -101,7 +101,7 @@ pub async fn run(
                 debug!("🎁 block size: {:?}, height: {}", bytes.len(), height);
 
                 // Prepare block proposal.
-                let proposal: LocallyProposedValue<TestContext> =
+                let proposal: LocallyProposedValue<MalakethContext> =
                     state.propose_value(height, round, bytes.clone()).await?;
 
                 // When the node is not the proposer, store the block data,

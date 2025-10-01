@@ -18,7 +18,7 @@ use malachitebft_app_channel::app::types::ProposedValue;
 use malachitebft_eth_types::codec::proto as codec;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::proto;
-use malachitebft_eth_types::{Height, TestContext, Value};
+use malachitebft_eth_types::{Height, MalakethContext, Value};
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 
 mod keys;
@@ -29,15 +29,17 @@ use crate::metrics::DbMetrics;
 #[derive(Clone, Debug)]
 pub struct DecidedValue {
     pub value: Value,
-    pub certificate: CommitCertificate<TestContext>,
+    pub certificate: CommitCertificate<MalakethContext>,
 }
 
-fn decode_certificate(bytes: &[u8]) -> Result<CommitCertificate<TestContext>, ProtoError> {
+fn decode_certificate(bytes: &[u8]) -> Result<CommitCertificate<MalakethContext>, ProtoError> {
     let proto = proto::CommitCertificate::decode(bytes)?;
     codec::decode_certificate(proto)
 }
 
-fn encode_certificate(certificate: &CommitCertificate<TestContext>) -> Result<Vec<u8>, ProtoError> {
+fn encode_certificate(
+    certificate: &CommitCertificate<MalakethContext>,
+) -> Result<Vec<u8>, ProtoError> {
     let proto = codec::encode_certificate(certificate)?;
     Ok(proto.encode_to_vec())
 }
@@ -168,7 +170,7 @@ impl Db {
         &self,
         height: Height,
         round: Round,
-    ) -> Result<Option<ProposedValue<TestContext>>, StoreError> {
+    ) -> Result<Option<ProposedValue<MalakethContext>>, StoreError> {
         let start = Instant::now();
         let mut read_bytes = 0;
 
@@ -198,7 +200,7 @@ impl Db {
 
     fn insert_undecided_proposal(
         &self,
-        proposal: ProposedValue<TestContext>,
+        proposal: ProposedValue<MalakethContext>,
     ) -> Result<(), StoreError> {
         let start = Instant::now();
 
@@ -501,7 +503,7 @@ impl Store {
 
     pub async fn store_decided_value(
         &self,
-        certificate: &CommitCertificate<TestContext>,
+        certificate: &CommitCertificate<MalakethContext>,
         value: Value,
     ) -> Result<(), StoreError> {
         let decided_value = DecidedValue {
@@ -515,7 +517,7 @@ impl Store {
 
     pub async fn store_undecided_proposal(
         &self,
-        value: ProposedValue<TestContext>,
+        value: ProposedValue<MalakethContext>,
     ) -> Result<(), StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.insert_undecided_proposal(value)).await?
@@ -525,7 +527,7 @@ impl Store {
         &self,
         height: Height,
         round: Round,
-    ) -> Result<Option<ProposedValue<TestContext>>, StoreError> {
+    ) -> Result<Option<ProposedValue<MalakethContext>>, StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.get_undecided_proposal(height, round)).await?
     }

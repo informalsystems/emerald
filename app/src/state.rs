@@ -17,8 +17,8 @@ use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, Propose
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::{
-    Address, Ed25519Provider, Genesis, Height, ProposalData, ProposalFin, ProposalInit,
-    ProposalPart, TestContext, ValidatorSet, Value,
+    Address, Ed25519Provider, Genesis, Height, MalakethContext, ProposalData, ProposalFin,
+    ProposalInit, ProposalPart, ValidatorSet, Value,
 };
 
 use crate::store::{DecidedValue, Store};
@@ -35,7 +35,7 @@ const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB
 /// Contains information about current height, round, proposals and blocks
 pub struct State {
     #[allow(dead_code)]
-    ctx: TestContext,
+    ctx: MalakethContext,
     genesis: Genesis,
     signing_provider: Ed25519Provider,
     address: Address,
@@ -86,7 +86,7 @@ impl State {
     /// Creates a new State instance with the given validator address and starting height
     pub fn new(
         genesis: Genesis,
-        ctx: TestContext,
+        ctx: MalakethContext,
         signing_provider: Ed25519Provider,
         address: Address,
         height: Height,
@@ -127,7 +127,7 @@ impl State {
         &mut self,
         from: PeerId,
         part: StreamMessage<ProposalPart>,
-    ) -> eyre::Result<Option<ProposedValue<TestContext>>> {
+    ) -> eyre::Result<Option<ProposedValue<MalakethContext>>> {
         let sequence = part.sequence;
 
         // Check if we have a full proposal - for now we are assuming that the network layer will stop spam/DOS
@@ -205,7 +205,7 @@ impl State {
     /// and moving to the next height
     pub async fn commit(
         &mut self,
-        certificate: CommitCertificate<TestContext>,
+        certificate: CommitCertificate<MalakethContext>,
         block_header_bytes: Bytes,
     ) -> eyre::Result<()> {
         info!(
@@ -312,7 +312,7 @@ impl State {
         height: Height,
         round: Round,
         data: Bytes,
-    ) -> eyre::Result<LocallyProposedValue<TestContext>> {
+    ) -> eyre::Result<LocallyProposedValue<MalakethContext>> {
         assert_eq!(height, self.current_height);
         assert_eq!(round, self.current_round);
 
@@ -353,7 +353,7 @@ impl State {
     /// Updates internal sequence number and current proposal.
     pub fn stream_proposal(
         &mut self,
-        value: LocallyProposedValue<TestContext>,
+        value: LocallyProposedValue<MalakethContext>,
         data: Bytes,
         pol_round: Round,
     ) -> impl Iterator<Item = StreamMessage<ProposalPart>> {
@@ -376,7 +376,7 @@ impl State {
 
     fn make_proposal_parts(
         &self,
-        value: LocallyProposedValue<TestContext>,
+        value: LocallyProposedValue<MalakethContext>,
         data: Bytes,
         pol_round: Round,
     ) -> Vec<ProposalPart> {
@@ -467,7 +467,7 @@ impl State {
 /// Re-assemble a [`ProposedValue`] from its [`ProposalParts`].
 ///
 /// This is done by multiplying all the factors in the parts.
-fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<TestContext>, Bytes) {
+fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<MalakethContext>, Bytes) {
     // Get the init part to extract pol_round
     let init = parts
         .parts

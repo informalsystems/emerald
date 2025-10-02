@@ -66,4 +66,5 @@ pub struct MalakethConfig {
     pub moniker: String,
     pub execution_authrpc_address: String,
     pub engine_authrpc_address: String,
+    pub jwt_token_path: String,
 }

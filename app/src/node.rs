@@ -164,7 +164,7 @@ impl Node for App {
 
         let engine: Engine = {
             let engine_url = Url::parse(&malaketh_config.engine_authrpc_address)?;
-            let jwt_path = PathBuf::from_str("./assets/jwtsecret")?; // Should be the same secret used by the execution client.
+            let jwt_path = PathBuf::from_str(&malaketh_config.jwt_token_path)?;
 
             let eth_url = Url::parse(&malaketh_config.execution_authrpc_address)?;
             Engine::new(

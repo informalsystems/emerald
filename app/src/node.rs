@@ -1,6 +1,7 @@
 //! The Application (or Node) definition. The Node trait implements the Consensus context and the
 //! cryptographic library used for signing.
 
+use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -42,6 +43,7 @@ pub struct App {
     pub config: Config,
     pub home_dir: PathBuf,
     pub genesis_file: PathBuf,
+    pub malaketh_config_file: PathBuf,
     pub private_key_file: PathBuf,
     pub start_height: Option<Height>,
 }
@@ -154,27 +156,17 @@ impl Node for App {
         let start_height = self.start_height.unwrap_or_default();
         let mut state = State::new(genesis, ctx, signing_provider, address, start_height, store);
 
+        let malaketh_config_content = fs::read_to_string(&self.malaketh_config_file)
+            .map_err(|e| eyre::eyre!("Failed to read malaketh config file: {e}"))?;
+        let malaketh_config =
+            toml::from_str::<crate::config::MalakethConfig>(&malaketh_config_content)
+                .map_err(|e| eyre::eyre!("Failed to parse malaketh config file: {e}"))?;
+
         let engine: Engine = {
-            // TODO: make EL host, EL port, and jwt secret configurable
-            let engine_url: Url = {
-                let engine_port = match config.moniker.as_str() {
-                    "test-0" => 8551,
-                    "test-1" => 18551,
-                    "test-2" => 28551,
-                    _ => 8551,
-                };
-                Url::parse(&format!("http://localhost:{engine_port}"))?
-            };
+            let engine_url = Url::parse(&malaketh_config.engine_authrpc_address)?;
             let jwt_path = PathBuf::from_str("./assets/jwtsecret")?; // Should be the same secret used by the execution client.
-            let eth_url: Url = {
-                let eth_port = match config.moniker.as_str() {
-                    "test-0" => 8545,
-                    "test-1" => 18545,
-                    "test-2" => 28545,
-                    _ => 8545,
-                };
-                Url::parse(&format!("http://localhost:{eth_port}"))?
-            };
+
+            let eth_url = Url::parse(&malaketh_config.execution_authrpc_address)?;
             Engine::new(
                 EngineRPC::new(engine_url, jwt_path.as_path())?,
                 EthereumRPC::new(eth_url)?,

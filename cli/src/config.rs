@@ -61,7 +61,9 @@ pub fn load_config(path: impl AsRef<Path>, prefix: Option<&str>) -> eyre::Result
         .map_err(Into::into)
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MalakethConfig {
     pub moniker: String,
+    pub execution_authrpc_address: String,
+    pub engine_authrpc_address: String,
 }

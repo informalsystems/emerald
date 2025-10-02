@@ -83,6 +83,7 @@ fn start(args: &Args, cmd: &StartCmd, logging: config::LoggingConfig) -> Result<
         config,
         home_dir: args.get_home_dir()?,
         genesis_file: args.get_genesis_file_path()?,
+        malaketh_config_file: args.get_malaketch_config_file()?,
         private_key_file: args.get_priv_validator_key_file_path()?,
         start_height: cmd.start_height.map(Height::new),
     };
@@ -98,6 +99,7 @@ fn init(args: &Args, cmd: &InitCmd, logging: config::LoggingConfig) -> Result<()
         config: Default::default(), // There is not existing configuration yet
         home_dir: args.get_home_dir()?,
         genesis_file: args.get_genesis_file_path()?,
+        malaketh_config_file: args.get_malaketch_config_file()?,
         private_key_file: args.get_priv_validator_key_file_path()?,
         start_height: Some(Height::new(1)), // We always start at height 1
     };
@@ -119,6 +121,7 @@ fn testnet(args: &Args, cmd: &TestnetCmd, logging: config::LoggingConfig) -> Res
         config: Default::default(), // There is not existing configuration yet
         home_dir: args.get_home_dir()?,
         genesis_file: args.get_genesis_file_path()?,
+        malaketh_config_file: args.get_malaketch_config_file()?,
         private_key_file: args.get_priv_validator_key_file_path()?,
         start_height: Some(Height::new(1)), // We always start at height 1
     };

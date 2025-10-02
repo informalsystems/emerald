@@ -3,3 +3,9 @@
 
 # Moniker prefix used when creating the Malachite configuration file
 moniker = "test-0"
+
+# RPC endpoint for Etherium
+execution_authrpc_address = "http://localhost:8545"
+
+# RPC endpoint for Engine
+engine_authrpc_address = "http://localhost:8551"

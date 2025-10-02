@@ -1,9 +1,10 @@
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre};
+use malachitebft_app_channel::app::metrics::prometheus::metrics::info;
 use ssz::{Decode, Encode};
 use tracing::{debug, error, info};
 
-use alloy_rpc_types_engine::ExecutionPayloadV3;
+use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
 use malachitebft_app_channel::app::engine::host::Next;
 use malachitebft_app_channel::app::streaming::StreamContent;
 use malachitebft_app_channel::app::types::codec::Codec;
@@ -15,9 +16,34 @@ use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::{Block, BlockHash, TestContext};
+use malachitebft_eth_types::{Block, BlockHash, Height, TestContext};
 
 use crate::state::{decode_value, State};
+
+pub async fn get_lates_block_candidate(
+    state: &mut State,
+    height: Height,
+) -> Option<ExecutionBlock> {
+    let decided_value = state.get_decided_value(height).await?;
+    let certificate = decided_value.certificate;
+
+    let block_data = state
+        .get_block_data(certificate.height, certificate.round)
+        .await
+        .expect("certificate should have associated block data");
+    debug!("🎁 block size: {:?}, height: {}", block_data.len(), height);
+
+    let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_data).unwrap();
+    let latest_block = Some(ExecutionBlock {
+        block_hash: execution_payload.payload_inner.payload_inner.block_hash,
+        block_number: execution_payload.payload_inner.payload_inner.block_number,
+        parent_hash: execution_payload.payload_inner.payload_inner.parent_hash,
+        timestamp: execution_payload.payload_inner.payload_inner.timestamp,
+        prev_randao: execution_payload.payload_inner.payload_inner.prev_randao,
+    })
+    .expect("there should not be an error here");
+    return Some(latest_block);
+}
 
 pub async fn run(
     state: &mut State,
@@ -35,17 +61,84 @@ pub async fn run(
                 // Check compatibility with execution client
                 engine.check_capabilities().await?;
 
-                // Get the latest block from the execution engine
-                let latest_block = engine.eth.get_block_by_number("latest").await?.unwrap();
-                debug!("👉 latest_block: {:?}", latest_block);
-                state.latest_block = Some(latest_block);
+                let start_height: Height;
+                let val_set = state.get_validator_set().clone();
+
+                // Get latest state from local store
+                let start_height_from_store = state
+                    .store
+                    .max_decided_value_height()
+                    .await
+                    .map(|height| height.increment());
+
+                match start_height_from_store {
+                    Some(s) => start_height = s,
+                    None => {
+                        // There was no decided value in the store, so start frm default hegiht
+                        start_height = Height::default();
+                    }
+                }
+
+                // If there was somethign stored in the store for height, we should be able to retrieve
+                // block data as well.
+                let latest_block_candidate_from_store =
+                    get_lates_block_candidate(state, start_height).await;
+
+                match latest_block_candidate_from_store {
+                    Some(latest_block_candidate) => {
+                        let payload_status = engine
+                            .send_forkchoice_updated(latest_block_candidate.block_hash)
+                            .await?;
+
+                        match payload_status.status {
+                            // PayloadStatusEnum::Valid => Ok(),
+                            PayloadStatusEnum::Syncing => {
+                                // From the Engine API spec:
+                                // 8. Client software MUST respond to this method call in the
+                                //    following way:
+                                //   * {payloadStatus: {status: SYNCING, latestValidHash: null,
+                                //   * validationError: null}, payloadId: null} if
+                                //     forkchoiceState.headBlockHash references an unknown
+                                //     payload or a payload that can't be validated because
+                                //     requisite data for the validation is missing
+                                debug!("reth is syncing but all good to proceed withconsensus")
+                            }
+                            PayloadStatusEnum::Invalid { validation_error } => {
+                                // From the Engine API spec:
+                                // 8. Client software MUST respond to this method call in the
+                                //    following way:
+                                //   * {payloadStatus: {status: SYNCING, latestValidHash: null,
+                                //   * validationError: null}, payloadId: null} if
+                                //     forkchoiceState.headBlockHash references an unknown
+                                //     payload or a payload that can't be validated because
+                                //     requisite data for the validation is missing
+                                debug!("error in payload {validation_error}")
+                                // TODO What to do here
+                            }
+
+                            PayloadStatusEnum::Accepted => {
+                                debug!("payload accepted")
+                                // TODO Same as invalid
+                            }
+
+                            PayloadStatusEnum::Valid => {
+                                debug!("payload valid")
+                            }
+                        }
+
+                        // TODO @Jasmina - check if state is initialized , if not set state.latest_height
+                        // TODO @Jasmina latest_block should be in shim layer store at this point. And we do not need to retrieve it from
+                        // consensus.
+                        state.current_height = start_height;
+                        state.latest_block = Some(latest_block_candidate);
+                        info!("latest_block latest_block_cand")
+                    }
+                    None => {}
+                }
 
                 // We can simply respond by telling the engine to start consensus
                 // at the current height, which is initially 1
-                if reply
-                    .send((state.current_height, state.get_validator_set().clone()))
-                    .is_err()
-                {
+                if reply.send((state.current_height, val_set)).is_err() {
                     error!("Failed to send ConsensusReady reply");
                 }
             }
@@ -92,8 +185,9 @@ pub async fn run(
 
                 // We need to ask the execution engine for a new value to
                 // propose. Then we send it back to consensus.
-                let latest_block = state.latest_block.expect("Head block hash is not set");
-                let execution_payload = engine.generate_block(&latest_block).await?;
+
+                // let latest_block = state.latest_block.expect("Head block hash is not set");
+                let execution_payload = engine.generate_block(&state.latest_block).await?;
                 debug!("🌈 Got execution payload: {:?}", execution_payload);
 
                 // Store block in state and propagate to peers.

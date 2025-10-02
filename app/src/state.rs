@@ -39,7 +39,7 @@ pub struct State {
     genesis: Genesis,
     signing_provider: Ed25519Provider,
     address: Address,
-    store: Store,
+    pub store: Store,
     stream_nonce: u32,
     streams_map: PartStreamsMap,
     #[allow(dead_code)]

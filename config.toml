@@ -9,3 +9,6 @@ execution_authrpc_address = "http://localhost:8545"
 
 # RPC endpoint for Engine
 engine_authrpc_address = "http://localhost:8551"
+
+# Path of the JWT token file
+jwt_token_path = "./assets/jwtsecret"

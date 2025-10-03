@@ -52,5 +52,5 @@ jobs:
             cargo run --bin malachitebft-eth-utils genesis
             docker compose up -d
             ./scripts/add_peers.sh
-            cargo run --bin malachitebft-eth-app -- testnet --nodes 3 --home nodes --deterministic
+            cargo run --bin malachitebft-eth-app -- testnet --nodes 3 --home nodes --config .testnet/config --deterministic
             bash scripts/spawn.bash --nodes 3 --home nodes --no-wait

@@ -6,14 +6,12 @@ use color_eyre::eyre;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sha3::Digest;
-use ssz::{Decode, Encode};
 use tokio::time::Instant;
 use tracing::{debug, error, info};
 
 use malachitebft_app_channel::app::streaming::{StreamContent, StreamId, StreamMessage};
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Round, Validity};
-use malachitebft_app_channel::app::types::sync::RawDecidedValue;
 use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
 
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
@@ -23,7 +21,7 @@ use malachitebft_eth_types::{
     ProposalInit, ProposalPart, ValidatorSet, Value,
 };
 
-use crate::store::{DecidedValue, Store};
+use crate::store::Store;
 use crate::streaming::{PartStreamsMap, ProposalParts};
 
 /// Size of randomly generated blocks in bytes
@@ -201,102 +199,6 @@ impl State {
             .store_undecided_block_data(height, round, data)
             .await
             .map_err(|e| eyre::Report::new(e))
-    }
-
-    /// Retrieves a decided block at the given height
-    pub async fn get_decided_value(&self, height: Height) -> Option<DecidedValue> {
-        self.store.get_decided_value(height).await.ok().flatten()
-    }
-
-    /// Retrieves a decided value for sync, attempting reconstruction from EL if pruned
-    pub async fn get_decided_value_for_sync(
-        &self,
-        height: Height,
-        engine: &malachitebft_eth_engine::engine::Engine,
-    ) -> Option<malachitebft_app_channel::app::types::sync::RawDecidedValue<MalakethContext>> {
-        let earliest_unpruned_height = self.get_earliest_unpruned_height().await;
-
-        // Check if height is in unpruned decided values table
-        if height >= earliest_unpruned_height {
-            // Height is in our decided values table - get it directly from store
-            info!(%height, earliest_unpruned_height = %earliest_unpruned_height, "Getting decided value from local storage");
-            let decided_value = self.get_decided_value(height).await?;
-
-            Some(RawDecidedValue {
-                certificate: decided_value.certificate,
-                value_bytes: ProtobufCodec.encode(&decided_value.value).unwrap(),
-            })
-        } else {
-            // Height has been pruned from decided values
-            // Try to reconstruct from header + PayloadBody
-            info!(%height, %earliest_unpruned_height, "Height pruned from storage, reconstructing from block header + EL");
-
-            // Get certificate and block header
-            let (certificate, header_bytes) =
-                match self.store.get_certificate_and_header(height).await {
-                    Ok(Some((cert, header))) => (cert, header),
-                    Ok(None) => {
-                        error!(%height, "Certificate or block header not found for pruned height");
-                        return None;
-                    }
-                    Err(e) => {
-                        error!(%height, error = %e, "Failed to get certificate and header");
-                        return None;
-                    }
-                };
-
-            let header =
-                match alloy_rpc_types_engine::ExecutionPayloadV3::from_ssz_bytes(&header_bytes) {
-                    Ok(h) => h,
-                    Err(e) => {
-                        error!(%height, error = ?e, "Failed to deserialize block header");
-                        return None;
-                    }
-                };
-
-            let block_number = header.payload_inner.payload_inner.block_number;
-
-            // Request payload body from EL
-            let bodies = match engine.get_payload_bodies_by_range(block_number, 1).await {
-                Ok(b) => b,
-                Err(e) => {
-                    error!(%height, block_number, error = %e, "Failed to get payload body from EL");
-                    return None;
-                }
-            };
-
-            if bodies.is_empty() {
-                // Empty array means requested range is beyond latest known block
-                error!(%height, block_number, "EL returned empty array - block beyond latest known");
-                return None;
-            }
-
-            let body = match bodies.first() {
-                Some(Some(body)) => body,
-                Some(None) => {
-                    // Body is null - block unavailable (pruned or not downloaded by EL)
-                    error!(%height, block_number, "EL returned null - block pruned or unavailable");
-                    return None;
-                }
-                None => {
-                    error!(%height, block_number, "EL returned unexpected empty response");
-                    return None;
-                }
-            };
-
-            info!(%height, block_number, "Successfully retrieved payload body from EL");
-
-            let full_payload = reconstruct_execution_payload(header, body.clone());
-            let payload_bytes = Bytes::from(full_payload.as_ssz_bytes());
-
-            // Create Value from payload bytes
-            let value = Value::new(payload_bytes);
-
-            Some(RawDecidedValue {
-                certificate,
-                value_bytes: ProtobufCodec.encode(&value).unwrap(),
-            })
-        }
     }
 
     /// Retrieves a decided block data at the given height

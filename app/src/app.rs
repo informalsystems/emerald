@@ -1,6 +1,8 @@
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre};
+use malachitebft_eth_cli::config::HostConfig;
 use ssz::{Decode, Encode};
+use std::time::Duration;
 use tracing::{debug, error, info};
 
 use alloy_rpc_types_engine::ExecutionPayloadV3;
@@ -10,6 +12,7 @@ use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
 use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
 
+use crate::sync_handler::{get_decided_value_for_sync, validate_synced_payload};
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::{Block, BlockHash, MalakethContext};
@@ -20,6 +23,7 @@ pub async fn run(
     state: &mut State,
     channels: &mut Channels<MalakethContext>,
     engine: Engine,
+    host_config: HostConfig,
 ) -> eyre::Result<()> {
     while let Some(msg) = channels.consensus.recv().await {
         match msg {
@@ -321,43 +325,40 @@ pub async fn run(
                 let versioned_hashes: Vec<BlockHash> =
                     block.body.blob_versioned_hashes_iter().copied().collect();
 
-                // Attempt to validate the synced block with the execution engine
-                // During sync, validation might fail if the execution client doesn't have the right state
-                // but we should still attempt validation to detect malicious blocks
-                match engine
-                    .notify_new_block(execution_payload, versioned_hashes)
-                    .await
-                {
-                    Ok(payload_status) => {
-                        if !payload_status.status.is_valid() {
-                            error!(%height, %round, "🔴 Synced block validation failed: invalid payload status: {}", payload_status.status);
-                            // Reject invalid blocks - don't store or reply with them
-                            if reply
-                                .send(Some(ProposedValue {
-                                    height,
-                                    round,
-                                    valid_round: Round::Nil,
-                                    proposer,
-                                    value,
-                                    validity: Validity::Invalid,
-                                }))
-                                .is_err()
-                            {
-                                error!("Failed to send ProcessSyncedValue rejection reply");
-                            }
-                            continue;
-                        }
-                        debug!(
-                            "💡 Sync block validated at height {} with hash: {}",
-                            height, new_block_hash
-                        );
+                // Validate the synced block
+                let validity = validate_synced_payload(
+                    &engine,
+                    &execution_payload,
+                    &versioned_hashes,
+                    Duration::from_millis(host_config.sync_timeout_ms),
+                    Duration::from_millis(host_config.sync_initial_delay_ms),
+                    height,
+                    round,
+                )
+                .await?;
+
+                if validity == Validity::Invalid {
+                    // Reject invalid blocks - don't store or reply with them
+                    if reply
+                        .send(Some(ProposedValue {
+                            height,
+                            round,
+                            valid_round: Round::Nil,
+                            proposer,
+                            value,
+                            validity: Validity::Invalid,
+                        }))
+                        .is_err()
+                    {
+                        error!("Failed to send ProcessSyncedValue rejection reply");
                     }
-                    Err(e) => {
-                        // Log validation errors but don't reject the block during sync
-                        // as the execution client might not have the right state yet
-                        debug!(%height, %round, "⚠️  Sync block validation failed (might be expected during sync): {}", e);
-                    }
+                    continue;
                 }
+
+                debug!(
+                    "💡 Sync block validated at height {} with hash: {}",
+                    height, new_block_hash
+                );
                 let proposed_value = ProposedValue {
                     height,
                     round,
@@ -406,7 +407,9 @@ pub async fn run(
                     info!(%height, current_height = %state.current_height, "Requested height is >= current height");
                     None
                 } else {
-                    state.get_decided_value_for_sync(height, &engine).await
+                    let earliest_unpruned = state.get_earliest_unpruned_height().await;
+                    get_decided_value_for_sync(&state.store, &engine, height, earliest_unpruned)
+                        .await
                 };
 
                 if reply.send(raw_decided_value).is_err() {

@@ -17,6 +17,7 @@ mod node;
 mod state;
 mod store;
 mod streaming;
+mod sync_handler;
 
 use node::App;
 

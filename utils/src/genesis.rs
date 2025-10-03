@@ -10,28 +10,23 @@ use std::{collections::BTreeMap, str::FromStr};
 
 use crate::validator_set::{contract::ValidatorSet, generate_storage_data, Validator};
 
-/// Test mnemonics for wallet generation
-const TEST_MNEMONICS: [&str; 3] = [
-    "test test test test test test test test test test test junk",
-    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-    "zero zero zero zero zero zero zero zero zero zero zero zoo",
-];
+/// Test mnemonic for wallet generation
+const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
 const GENESIS_VALIDATOR_SET_ACCOUNT: Address = address!("0000000000000000000000000000000000002000");
 
 /// Create a signer from a mnemonic.
-pub(crate) fn make_signer(mnemonic: &str) -> LocalSigner<SigningKey> {
+pub(crate) fn make_signer(index: u64) -> LocalSigner<SigningKey> {
     MnemonicBuilder::<English>::default()
-        .phrase(mnemonic)
+        .phrase(TEST_MNEMONIC)
+        .derivation_path(format!("m/44'/60'/0'/0/{index}"))
+        .expect("Failed to set derivation path")
         .build()
         .expect("Failed to create wallet")
 }
 
 pub(crate) fn make_signers() -> Vec<LocalSigner<SigningKey>> {
-    TEST_MNEMONICS
-        .iter()
-        .map(|&mnemonic| make_signer(mnemonic))
-        .collect()
+    (0..3).map(make_signer).collect()
 }
 
 pub(crate) fn generate_genesis() -> Result<()> {
@@ -42,8 +37,11 @@ pub(crate) fn generate_genesis() -> Result<()> {
     let signer_addresses: Vec<Address> = signers.iter().map(|signer| signer.address()).collect();
 
     println!("Using signer addresses:");
-    for (i, addr) in signer_addresses.iter().enumerate() {
-        println!("Signer {i}: {addr}");
+    for (i, (signer, addr)) in signers.iter().zip(signer_addresses.iter()).enumerate() {
+        println!(
+            "Signer {i}: {addr} ({})",
+            B256::from_slice(&signer.credential().to_bytes())
+        );
     }
 
     // Create genesis configuration with pre-funded accounts
@@ -59,10 +57,9 @@ pub(crate) fn generate_genesis() -> Result<()> {
     }
 
     let mut rng = StdRng::seed_from_u64(0x42);
-    let public_keys: Vec<_> = (0..3)
-        .map(|_| PrivateKey::generate(&mut rng))
-        .map(|pk| pk.public_key())
-        .collect();
+    let private_keys: Vec<_> = (0..3).map(|_| PrivateKey::generate(&mut rng)).collect();
+
+    let public_keys: Vec<_> = private_keys.iter().map(|pk| pk.public_key()).collect();
 
     let initial_validators = vec![
         Validator {
@@ -87,11 +84,9 @@ pub(crate) fn generate_genesis() -> Result<()> {
     alloc.insert(
         GENESIS_VALIDATOR_SET_ACCOUNT,
         GenesisAccount {
-            nonce: None,
-            balance: U256::ZERO,
             code: Some(ValidatorSet::DEPLOYED_BYTECODE.clone()),
             storage: Some(storage),
-            private_key: None,
+            ..Default::default()
         },
     );
 

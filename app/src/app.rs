@@ -19,7 +19,7 @@ use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::{
-    Block, BlockHash, PublicKey, MalakethContext, ValidatorSet as ValidatorSetType,
+    Block, BlockHash, MalakethContext, PublicKey, ValidatorSet as ValidatorSetType,
 };
 
 const GENESIS_VALIDATOR_SET_ACCOUNT: Address = address!("0000000000000000000000000000000000002000");

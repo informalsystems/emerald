@@ -3,7 +3,7 @@
 use color_eyre::eyre::{eyre, Result};
 use tracing::{info, trace};
 
-use malachitebft_app_channel::app::Node;
+use malachitebft_app_channel::app::node::Node;
 use malachitebft_eth_cli::args::{Args, Commands};
 use malachitebft_eth_cli::cmd::init::InitCmd;
 use malachitebft_eth_cli::cmd::start::StartCmd;
@@ -106,6 +106,7 @@ fn init(args: &Args, cmd: &InitCmd, logging: config::LoggingConfig) -> Result<()
         &app,
         &args.get_config_file_path()?,
         &args.get_genesis_file_path()?,
+        &args.get_malaketch_config_file()?,
         &args.get_priv_validator_key_file_path()?,
         logging,
     )
@@ -122,6 +123,11 @@ fn testnet(args: &Args, cmd: &TestnetCmd, logging: config::LoggingConfig) -> Res
         start_height: Some(Height::new(1)), // We always start at height 1
     };
 
-    cmd.run(&app, &args.get_home_dir()?, logging)
-        .map_err(|error| eyre!("Failed to run testnet command {:?}", error))
+    cmd.run(
+        &app,
+        &args.get_home_dir()?,
+        &args.get_malaketch_config_dir()?,
+        logging,
+    )
+    .map_err(|error| eyre!("Failed to run testnet command {:?}", error))
 }

@@ -7,8 +7,8 @@ use rand::prelude::StdRng;
 use rand::rngs::OsRng;
 use rand::{seq::IteratorRandom, Rng, SeedableRng};
 
-use malachitebft_app::Node;
-use malachitebft_config::*;
+use crate::config::*;
+use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, Node};
 use malachitebft_core_types::{PrivateKey, PublicKey};
 
 const MIN_VOTING_POWER: u64 = 1;
@@ -25,7 +25,7 @@ pub fn generate_private_keys<N>(
     deterministic: bool,
 ) -> Vec<PrivateKey<N::Context>>
 where
-    N: Node,
+    N: Node + CanGeneratePrivateKey,
 {
     if deterministic {
         let mut rng = StdRng::seed_from_u64(0x42);
@@ -41,11 +41,14 @@ where
 
 /// Generate a Genesis file from the public keys and voting power.
 /// Voting power can be random or deterministically pseudo-random.
-pub fn generate_genesis<N: Node>(
+pub fn generate_genesis<N>(
     node: &N,
     pks: Vec<PublicKey<N::Context>>,
     deterministic: bool,
-) -> N::Genesis {
+) -> N::Genesis
+where
+    N: Node + CanMakeGenesis,
+{
     let validators: Vec<_> = if deterministic {
         let mut rng = StdRng::seed_from_u64(0x42);
         pks.into_iter()
@@ -74,13 +77,14 @@ pub fn generate_config(
     ephemeral_connection_timeout_ms: u64,
     transport: TransportProtocol,
     logging: LoggingConfig,
+    malaketh_config: MalakethConfig,
 ) -> Config {
     let consensus_port = CONSENSUS_BASE_PORT + index;
     let mempool_port = MEMPOOL_BASE_PORT + index;
     let metrics_port = METRICS_BASE_PORT + index;
 
     Config {
-        moniker: format!("test-{index}"),
+        moniker: malaketh_config.moniker,
         consensus: ConsensusConfig {
             timeouts: TimeoutConfig::default(),
             p2p: P2pConfig {
@@ -114,13 +118,15 @@ pub fn generate_config(
                     selector,
                     num_outbound_peers,
                     num_inbound_peers,
+                    max_connections_per_peer: 5,
                     ephemeral_connection_timeout: Duration::from_millis(
                         ephemeral_connection_timeout_ms,
                     ),
                 },
-                transport,
                 ..Default::default()
             },
+            value_payload: ValuePayload::default(),
+            queue_capacity: 0,
         },
         mempool: MempoolConfig {
             p2p: P2pConfig {
@@ -134,19 +140,20 @@ pub fn generate_config(
                     enabled: false,
                     bootstrap_protocol,
                     selector,
-                    num_outbound_peers,
-                    num_inbound_peers,
+                    num_outbound_peers: 0,
+                    num_inbound_peers: 0,
+                    max_connections_per_peer: 5,
                     ephemeral_connection_timeout: Duration::from_millis(
                         ephemeral_connection_timeout_ms,
                     ),
                 },
-                transport,
                 ..Default::default()
             },
             max_tx_count: 10000,
             gossip_batch_size: 0,
+            load: MempoolLoadConfig::default(),
         },
-        sync: Default::default(),
+        value_sync: ValueSyncConfig::default(),
         metrics: MetricsConfig {
             enabled: true,
             listen_addr: format!("127.0.0.1:{metrics_port}").parse().unwrap(),

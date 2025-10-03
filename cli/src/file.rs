@@ -3,9 +3,9 @@
 use std::fs;
 use std::path::Path;
 
+use crate::config::Config;
 use crate::error::Error;
-use malachitebft_app::Node;
-use malachitebft_config::Config;
+use malachitebft_app::node::Node;
 
 /// Save configuration to file
 pub fn save_config(config_file: &Path, config: &Config) -> Result<(), Error> {

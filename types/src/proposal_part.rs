@@ -8,7 +8,7 @@ use malachitebft_proto::{self as proto, Error as ProtoError, Protobuf};
 use malachitebft_signing_ed25519::Signature;
 
 use crate::codec::proto::{decode_signature, encode_signature};
-use crate::{Address, Height, TestContext};
+use crate::{Address, Height, MalakethContext};
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProposalData {
@@ -86,14 +86,17 @@ pub struct ProposalInit {
     pub height: Height,
     #[serde(with = "RoundDef")]
     pub round: Round,
+    #[serde(with = "RoundDef")]
+    pub pol_round: Round,
     pub proposer: Address,
 }
 
 impl ProposalInit {
-    pub fn new(height: Height, round: Round, proposer: Address) -> Self {
+    pub fn new(height: Height, round: Round, pol_round: Round, proposer: Address) -> Self {
         Self {
             height,
             round,
+            pol_round,
             proposer,
         }
     }
@@ -110,7 +113,7 @@ impl ProposalFin {
     }
 }
 
-impl malachitebft_core_types::ProposalPart<TestContext> for ProposalPart {
+impl malachitebft_core_types::ProposalPart<MalakethContext> for ProposalPart {
     fn is_first(&self) -> bool {
         matches!(self, Self::Init(_))
     }
@@ -135,6 +138,7 @@ impl Protobuf for ProposalPart {
             Part::Init(init) => Ok(Self::Init(ProposalInit {
                 height: Height::new(init.height),
                 round: Round::new(init.round),
+                pol_round: Round::from(init.pol_round),
                 proposer: init
                     .proposer
                     .ok_or_else(|| ProtoError::missing_field::<Self::Proto>("proposer"))
@@ -160,6 +164,7 @@ impl Protobuf for ProposalPart {
                 part: Some(Part::Init(proto::ProposalInit {
                     height: init.height.as_u64(),
                     round: init.round.as_u32().unwrap(),
+                    pol_round: init.pol_round.as_u32(),
                     proposer: Some(init.proposer.to_proto()?),
                 })),
             }),

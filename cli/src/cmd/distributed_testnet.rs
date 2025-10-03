@@ -1,5 +1,6 @@
 //! Distributed testnet command
 
+use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
@@ -8,8 +9,9 @@ use color_eyre::eyre::{eyre, Result};
 use itertools::Itertools;
 use tracing::info;
 
-use malachitebft_app::Node;
-use malachitebft_config::*;
+use crate::config::*;
+use bytesize::ByteSize;
+use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, Node};
 
 use crate::args::Args;
 use crate::cmd::testnet::RuntimeFlavour;
@@ -86,9 +88,15 @@ pub struct DistributedTestnetCmd {
 
 impl DistributedTestnetCmd {
     /// Execute the testnet command
-    pub fn run<N>(&self, node: &N, home_dir: &Path, logging: LoggingConfig) -> Result<()>
+    pub fn run<N>(
+        &self,
+        node: &N,
+        home_dir: &Path,
+        malaketh_config_dir: &Path,
+        logging: LoggingConfig,
+    ) -> Result<()>
     where
-        N: Node,
+        N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
     {
         let runtime = match self.runtime {
             RuntimeFlavour::SingleThreaded => RuntimeConfig::SingleThreaded,
@@ -99,6 +107,7 @@ impl DistributedTestnetCmd {
             node,
             self.nodes,
             home_dir,
+            malaketh_config_dir,
             runtime,
             self.machines.clone(),
             self.enable_discovery,
@@ -126,6 +135,7 @@ fn distributed_testnet<N>(
     node: &N,
     nodes: usize,
     home_dir: &Path,
+    malaketh_config_dir: &Path,
     runtime: RuntimeConfig,
     machines: Vec<String>,
     enable_discovery: bool,
@@ -140,7 +150,7 @@ fn distributed_testnet<N>(
     deterministic: bool,
 ) -> Result<()>
 where
-    N: Node,
+    N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
 {
     let private_keys = crate::new::generate_private_keys(node, nodes, deterministic);
     let public_keys = private_keys
@@ -153,6 +163,27 @@ where
         let node_home_dir = home_dir
             .join((i % machines.len()).to_string())
             .join(i.to_string());
+
+        let node_malaketh_config_file = malaketh_config_dir
+            .join((i % machines.len()).to_string())
+            .join(i.to_string())
+            .join("config.toml");
+        let malaketh_config_content =
+            fs::read_to_string(&node_malaketh_config_file).map_err(|e| {
+                eyre!(
+                    "Failed to read {} file content. Details {e}",
+                    node_malaketh_config_file.display()
+                )
+            })?;
+        let malaketh_config = toml::from_str::<crate::config::MalakethConfig>(
+            &malaketh_config_content,
+        )
+        .map_err(|e| {
+            eyre!(
+                "Failed to parse TOML file {}. Details {e}",
+                node_malaketh_config_file.display()
+            )
+        })?;
 
         info!(
             id = %i,
@@ -181,6 +212,7 @@ where
                 bootstrap_set_size,
                 transport,
                 logging,
+                malaketh_config,
             ),
         )?;
 
@@ -217,6 +249,7 @@ fn generate_distributed_config(
     bootstrap_set_size: usize,
     transport: TransportProtocol,
     logging: LoggingConfig,
+    malaketh_config: MalakethConfig,
 ) -> Config {
     let machine = machines[index % machines.len()].clone();
     let consensus_port = CONSENSUS_BASE_PORT + (index / machines.len());
@@ -224,7 +257,7 @@ fn generate_distributed_config(
     let metrics_port = METRICS_BASE_PORT + (index / machines.len());
 
     Config {
-        moniker: format!("test-{index}"),
+        moniker: malaketh_config.moniker,
         consensus: ConsensusConfig {
             timeouts: TimeoutConfig::default(),
             p2p: P2pConfig {
@@ -263,13 +296,15 @@ fn generate_distributed_config(
                     selector,
                     num_outbound_peers,
                     num_inbound_peers,
+                    max_connections_per_peer: 5,
                     ephemeral_connection_timeout: Duration::from_millis(
                         ephemeral_connection_timeout_ms,
                     ),
                 },
-                transport,
                 ..Default::default()
             },
+            value_payload: ValuePayload::default(),
+            queue_capacity: 0,
         },
         mempool: MempoolConfig {
             p2p: P2pConfig {
@@ -282,18 +317,25 @@ fn generate_distributed_config(
                     selector,
                     num_outbound_peers: 0,
                     num_inbound_peers: 0,
+                    max_connections_per_peer: 5,
                     ephemeral_connection_timeout: Duration::from_secs(0),
                 },
-                transport,
                 ..Default::default()
             },
             max_tx_count: 10000,
             gossip_batch_size: 0,
+            load: MempoolLoadConfig::default(),
         },
-        sync: SyncConfig {
+        value_sync: ValueSyncConfig {
             enabled: false,
             status_update_interval: Duration::from_secs(0),
             request_timeout: Duration::from_secs(0),
+            max_request_size: ByteSize::b(0),
+            max_response_size: ByteSize::b(0),
+            parallel_requests: 0,
+            scoring_strategy: ScoringStrategy::default(),
+            inactive_threshold: Duration::from_secs(0),
+            batch_size: 0,
         },
         metrics: MetricsConfig {
             enabled: true,

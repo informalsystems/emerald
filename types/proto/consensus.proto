@@ -7,12 +7,11 @@ message Address {
 }
 
 message Value {
-    uint64 value = 1;
-    bytes extensions = 2;
+    optional bytes value = 1;
 }
 
 message ValueId {
-    uint64 value = 1;
+    optional bytes value = 1;
 }
 
 enum VoteType {
@@ -60,6 +59,7 @@ message ProposalInit {
     uint64 height = 1;
     uint32 round = 2;
     Address proposer = 4;
+    optional uint32 pol_round = 5;
 }
 
 message ProposalData {

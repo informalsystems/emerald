@@ -18,8 +18,8 @@ pub enum Error {
     WriteFile(PathBuf),
 
     /// Error loading file
-    #[error("Error loading file: {}", .0.display())]
-    LoadFile(PathBuf),
+    #[error("Error loading file: {}. Details: {}", .0.display(), .1)]
+    LoadFile(PathBuf, std::io::Error),
 
     /// Error converting to JSON
     #[error("Error converting to JSON: {0}")]
@@ -32,4 +32,7 @@ pub enum Error {
     /// Error joining threads
     #[error("Error joining threads")]
     Join,
+
+    #[error("Error decoding .toml file. Details: {0}")]
+    FromTOML(toml::de::Error),
 }

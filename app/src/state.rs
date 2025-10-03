@@ -1,8 +1,6 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
-use std::collections::HashSet;
-
 use bytes::Bytes;
 use color_eyre::eyre;
 use rand::rngs::StdRng;
@@ -19,8 +17,8 @@ use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, Propose
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::{
-    Address, Ed25519Provider, Genesis, Height, ProposalData, ProposalFin, ProposalInit,
-    ProposalPart, TestContext, ValidatorSet, Value,
+    Address, Ed25519Provider, Genesis, Height, MalakethContext, ProposalData, ProposalFin,
+    ProposalInit, ProposalPart, ValidatorSet, Value,
 };
 
 use crate::store::{DecidedValue, Store};
@@ -37,7 +35,7 @@ const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB
 /// Contains information about current height, round, proposals and blocks
 pub struct State {
     #[allow(dead_code)]
-    ctx: TestContext,
+    ctx: MalakethContext,
     signing_provider: Ed25519Provider,
     address: Address,
     store: Store,
@@ -49,7 +47,6 @@ pub struct State {
     pub current_height: Height,
     pub current_round: Round,
     pub current_proposer: Option<Address>,
-    pub peers: HashSet<PeerId>,
 
     pub latest_block: Option<ExecutionBlock>,
 
@@ -90,7 +87,7 @@ impl State {
     /// Creates a new State instance with the given validator address and starting height
     pub fn new(
         _genesis: Genesis, // all genesis data is in EVM via genesis.json
-        ctx: TestContext,
+        ctx: MalakethContext,
         signing_provider: Ed25519Provider,
         address: Address,
         height: Height,
@@ -107,7 +104,6 @@ impl State {
             stream_nonce: 0,
             streams_map: PartStreamsMap::new(),
             rng: StdRng::seed_from_u64(seed_from_address(&address)),
-            peers: HashSet::new(),
 
             latest_block: None,
             validator_set: None,
@@ -132,7 +128,7 @@ impl State {
         &mut self,
         from: PeerId,
         part: StreamMessage<ProposalPart>,
-    ) -> eyre::Result<Option<ProposedValue<TestContext>>> {
+    ) -> eyre::Result<Option<ProposedValue<MalakethContext>>> {
         let sequence = part.sequence;
 
         // Check if we have a full proposal - for now we are assuming that the network layer will stop spam/DOS
@@ -210,7 +206,7 @@ impl State {
     /// and moving to the next height
     pub async fn commit(
         &mut self,
-        certificate: CommitCertificate<TestContext>,
+        certificate: CommitCertificate<MalakethContext>,
     ) -> eyre::Result<()> {
         info!(
             height = %certificate.height,
@@ -311,7 +307,7 @@ impl State {
         height: Height,
         round: Round,
         data: Bytes,
-    ) -> eyre::Result<LocallyProposedValue<TestContext>> {
+    ) -> eyre::Result<LocallyProposedValue<MalakethContext>> {
         assert_eq!(height, self.current_height);
         assert_eq!(round, self.current_round);
 
@@ -352,10 +348,11 @@ impl State {
     /// Updates internal sequence number and current proposal.
     pub fn stream_proposal(
         &mut self,
-        value: LocallyProposedValue<TestContext>,
+        value: LocallyProposedValue<MalakethContext>,
         data: Bytes,
+        pol_round: Round,
     ) -> impl Iterator<Item = StreamMessage<ProposalPart>> {
-        let parts = self.make_proposal_parts(value, data);
+        let parts = self.make_proposal_parts(value, data, pol_round);
 
         let stream_id = self.stream_id();
 
@@ -374,8 +371,9 @@ impl State {
 
     fn make_proposal_parts(
         &self,
-        value: LocallyProposedValue<TestContext>,
+        value: LocallyProposedValue<MalakethContext>,
         data: Bytes,
+        pol_round: Round,
     ) -> Vec<ProposalPart> {
         let mut hasher = sha3::Keccak256::new();
         let mut parts = Vec::new();
@@ -385,6 +383,7 @@ impl State {
             parts.push(ProposalPart::Init(ProposalInit::new(
                 value.height,
                 value.round,
+                pol_round,
                 self.address,
             )));
 
@@ -468,7 +467,14 @@ impl State {
 /// Re-assemble a [`ProposedValue`] from its [`ProposalParts`].
 ///
 /// This is done by multiplying all the factors in the parts.
-fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<TestContext>, Bytes) {
+fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<MalakethContext>, Bytes) {
+    // Get the init part to extract pol_round
+    let init = parts
+        .parts
+        .iter()
+        .find_map(|part| part.as_init())
+        .expect("ProposalParts should have an init part");
+
     // Calculate total size and allocate buffer
     let total_size: usize = parts
         .parts
@@ -489,7 +495,7 @@ fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<TestContext
     let proposed_value = ProposedValue {
         height: parts.height,
         round: parts.round,
-        valid_round: Round::Nil,
+        valid_round: init.pol_round,
         proposer: parts.proposer,
         value: Value::new(data.clone()),
         validity: Validity::Valid,

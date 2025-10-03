@@ -3,6 +3,7 @@
 //! This library provides functionality to generate storage slots and values
 //! for the ValidatorSet smart contract based on a given validator list.
 
+pub mod contract;
 pub mod error;
 pub mod storage;
 #[cfg(test)]

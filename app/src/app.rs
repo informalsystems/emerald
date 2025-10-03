@@ -23,6 +23,13 @@ use malachitebft_eth_types::{
 
 const GENESIS_VALIDATOR_SET_ACCOUNT: Address = address!("0000000000000000000000000000000000002000");
 
+alloy_sol_types::sol!(
+    #[derive(Debug)]
+    #[sol(rpc)]
+    ValidatorSet,
+    "../solidity/out/ValidatorSet.sol/ValidatorSet.json"
+);
+
 use crate::state::{decode_value, State};
 
 pub async fn run(
@@ -41,10 +48,51 @@ pub async fn run(
                 // Check compatibility with execution client
                 engine.check_capabilities().await?;
 
-                // Get the latest block from the execution engine
-                let latest_block = engine.eth.get_block_by_number("latest").await?.unwrap();
-                debug!("👉 latest_block: {:?}", latest_block);
-                state.latest_block = Some(latest_block);
+                // Get the genesis block from the execution engine
+                let genesis_block = engine.eth.get_block_by_number("earliest").await?.unwrap();
+                debug!("👉 genesis_block: {:?}", genesis_block);
+                state.latest_block = Some(genesis_block);
+
+                {
+                    // Get the validator set from the ValidatorSet contract at genesis block
+                    let provider = ProviderBuilder::new()
+                        .on_builtin(engine.eth.url().as_ref())
+                        .await?;
+
+                    let validator_set_contract =
+                        ValidatorSet::new(GENESIS_VALIDATOR_SET_ACCOUNT, provider);
+
+                    let genesis_validator_set_sol = validator_set_contract
+                        .getValidators()
+                        .block(genesis_block.block_hash.into())
+                        .call()
+                        .await?;
+
+                    let genesis_validator_set = ValidatorSetType::new(
+                        genesis_validator_set_sol
+                            .validators
+                            .into_iter()
+                            .map(
+                                |ValidatorSet::ValidatorInfoFull {
+                                     ed25519Key, power, ..
+                                 }| {
+                                    let pub_key_bytes: [u8; 32] = ed25519Key.into();
+                                    let pub_key = PublicKey::new(
+                                        VerificationKey::try_from(pub_key_bytes).unwrap(),
+                                    );
+                                    malachitebft_eth_types::Validator::new(
+                                        pub_key,
+                                        power.try_into().unwrap(),
+                                    )
+                                },
+                            )
+                            .collect::<Vec<_>>(),
+                    );
+
+                    debug!("🌈 Got validator set: {:?}", genesis_validator_set);
+
+                    state.set_validator_set(genesis_validator_set);
+                }
 
                 // We can simply respond by telling the engine to start consensus
                 // at the current height, which is initially 1
@@ -258,14 +306,6 @@ pub async fn run(
                     prev_randao: new_block_prev_randao,
                 });
 
-                // Save the validator set at t
-                alloy_sol_types::sol!(
-                    #[derive(Debug)]
-                    #[sol(rpc)]
-                    ValidatorSet,
-                    "../solidity/out/ValidatorSet.sol/ValidatorSet.json"
-                );
-
                 // call the ValidatorSet contract to get the list of validators
 
                 let provider = ProviderBuilder::new()
@@ -303,7 +343,7 @@ pub async fn run(
 
                 debug!("🌈 Got validator set: {:?}", new_validator_set);
 
-                state.validator_set = new_validator_set;
+                state.set_validator_set(new_validator_set);
 
                 // Pause briefly before starting next height, just to make following the logs easier
                 // tokio::time::sleep(Duration::from_millis(500)).await;

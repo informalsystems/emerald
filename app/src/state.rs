@@ -53,7 +53,7 @@ pub struct State {
 
     pub latest_block: Option<ExecutionBlock>,
 
-    pub validator_set: ValidatorSet,
+    validator_set: Option<ValidatorSet>,
 
     // For stats
     pub txs_count: u64,
@@ -89,7 +89,7 @@ fn seed_from_address(address: &Address) -> u64 {
 impl State {
     /// Creates a new State instance with the given validator address and starting height
     pub fn new(
-        genesis: Genesis,
+        _genesis: Genesis, // all genesis data is in EVM via genesis.json
         ctx: TestContext,
         signing_provider: Ed25519Provider,
         address: Address,
@@ -110,7 +110,7 @@ impl State {
             peers: HashSet::new(),
 
             latest_block: None,
-            validator_set: genesis.validator_set,
+            validator_set: None,
 
             txs_count: 0,
             chain_bytes: 0,
@@ -412,7 +412,12 @@ impl State {
 
     /// Returns the set of validators.
     pub fn get_validator_set(&self) -> &ValidatorSet {
-        &self.validator_set
+        self.validator_set.as_ref().unwrap()
+    }
+
+    /// Sets the validator set.
+    pub fn set_validator_set(&mut self, validator_set: ValidatorSet) {
+        self.validator_set = Some(validator_set);
     }
 
     /// Verifies the signature of the proposal.

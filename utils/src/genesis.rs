@@ -8,7 +8,7 @@ use malachitebft_eth_types::PrivateKey;
 use rand::{rngs::StdRng, SeedableRng};
 use std::{collections::BTreeMap, str::FromStr};
 
-use crate::validator_set::{self, Validator};
+use crate::validator_set::{contract::ValidatorSet, generate_storage_data, Validator};
 
 /// Test mnemonics for wallet generation
 const TEST_MNEMONICS: [&str; 3] = [
@@ -82,12 +82,7 @@ pub(crate) fn generate_genesis() -> Result<()> {
         },
     ];
 
-    let storage = validator_set::generate_storage_data(initial_validators)?;
-
-    alloy_sol_types::sol!(
-        ValidatorSet,
-        "../solidity/out/ValidatorSet.sol/ValidatorSet.json",
-    );
+    let storage = generate_storage_data(initial_validators)?;
 
     alloc.insert(
         GENESIS_VALIDATOR_SET_ACCOUNT,

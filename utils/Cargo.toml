@@ -10,6 +10,10 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[[bin]]
+name = "load"
+path = "src/load.rs"
+
 [dependencies]
 rand = { workspace = true }
 color-eyre = { workspace = true }
@@ -31,6 +35,8 @@ ethereum_serde_utils = "0.8"
 malachitebft-eth-types = { workspace = true }
 
 alloy-consensus        = { workspace = true }
+alloy-contract         = { workspace = true }
+alloy-provider         = "0.11.1"
 alloy-genesis          = "0.11.1"
 alloy-network          = "0.11.1"
 alloy-primitives       = { workspace = true }

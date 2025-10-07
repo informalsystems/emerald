@@ -56,7 +56,12 @@ async fn main() {
 
         println!("Signer {i}: {address}");
 
-        if let Ok(_) = validator_set_contract.getValidator(address).call().await {
+        if validator_set_contract
+            .getValidator(address)
+            .call()
+            .await
+            .is_ok()
+        {
             // unregister
 
             if count == U256::from(1u64) {

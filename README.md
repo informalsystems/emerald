@@ -213,7 +213,7 @@ cargo run --bin malachitebft-eth-utils spam --time=60 --rate=1000
 [malachite]: https://github.com/informalsystems/malachite
 [engine-api]: https://github.com/ethereum/execution-apis/tree/main/src/engine
 [foundry]: https://book.getfoundry.sh/getting-started/installation
-[cast]: https://book.getfoundry.sh/cast/
+[cast]: https://getfoundry.sh/cast/reference/cast/
 [channels]: https://github.com/informalsystems/malachite/blob/13bca14cd209d985c3adf101a02924acde8723a5/docs/tutorials/channels.md
 [flexible]: https://informal.systems/blog/the-most-flexible-consensus-api-in-the-world
 

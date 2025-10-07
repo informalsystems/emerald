@@ -8,10 +8,8 @@ use malachitebft_eth_types::PrivateKey;
 use rand::{rngs::StdRng, SeedableRng};
 use std::{collections::BTreeMap, str::FromStr};
 
-use crate::validator_set::{contract::ValidatorSet, generate_storage_data, Validator};
 use crate::validator_set::contract::GENESIS_VALIDATOR_SET_ACCOUNT;
-
-
+use crate::validator_set::{contract::ValidatorSet, generate_storage_data, Validator};
 
 /// Test mnemonic for wallet generation
 const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";

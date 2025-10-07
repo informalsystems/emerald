@@ -17,10 +17,4 @@ pub enum StorageError {
 
     #[error("Duplicate validator {0}")]
     DuplicateValidator(Address),
-
-    #[error("Storage encoding error: {0}")]
-    StorageEncoding(String),
-
-    #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
 }

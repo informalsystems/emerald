@@ -3,8 +3,8 @@ use alloy_primitives::U256;
 use alloy_provider::ProviderBuilder;
 use alloy_signer_local::{coins_bip39::English, MnemonicBuilder};
 use malachitebft_eth_utils::validator_set::contract::ValidatorSet;
-use rand::Rng;
 use malachitebft_eth_utils::validator_set::contract::GENESIS_VALIDATOR_SET_ACCOUNT;
+use rand::Rng;
 
 const MNEMONIC: &str = "test test test test test test test test test test test junk";
 

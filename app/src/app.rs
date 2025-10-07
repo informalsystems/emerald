@@ -19,7 +19,7 @@ use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::{
-    Block, BlockHash, MalakethContext, PublicKey, ValidatorSet as ValidatorSetType,
+    Block, BlockHash, MalakethContext, PublicKey, Validator, ValidatorSet as ValidatorSetType,
 };
 
 const GENESIS_VALIDATOR_SET_ACCOUNT: Address = address!("0000000000000000000000000000000000002000");
@@ -32,6 +32,37 @@ alloy_sol_types::sol!(
 );
 
 use crate::state::{decode_value, State};
+
+pub async fn get_validator_set(
+    eth_url: &str,
+    block_hash: &BlockHash,
+) -> eyre::Result<ValidatorSetType> {
+    let provider = ProviderBuilder::new().on_builtin(eth_url).await?;
+
+    let validator_set_contract = ValidatorSet::new(GENESIS_VALIDATOR_SET_ACCOUNT, provider);
+
+    let genesis_validator_set_sol = validator_set_contract
+        .getValidators()
+        .block((*block_hash).into())
+        .call()
+        .await?;
+
+    Ok(ValidatorSetType::new(
+        genesis_validator_set_sol
+            .validators
+            .into_iter()
+            .map(
+                |ValidatorSet::ValidatorInfoFull {
+                     ed25519Key, power, ..
+                 }| {
+                    let pub_key_bytes: [u8; 32] = ed25519Key.into();
+                    let pub_key = PublicKey::new(VerificationKey::try_from(pub_key_bytes).unwrap());
+                    Validator::new(pub_key, power.try_into().unwrap())
+                },
+            )
+            .collect::<Vec<_>>(),
+    ))
+}
 
 pub async fn run(
     state: &mut State,
@@ -55,44 +86,11 @@ pub async fn run(
                 state.latest_block = Some(genesis_block);
 
                 {
-                    // Get the validator set from the ValidatorSet contract at genesis block
-                    let provider = ProviderBuilder::new()
-                        .on_builtin(engine.eth.url().as_ref())
-                        .await?;
-
-                    let validator_set_contract =
-                        ValidatorSet::new(GENESIS_VALIDATOR_SET_ACCOUNT, provider);
-
-                    let genesis_validator_set_sol = validator_set_contract
-                        .getValidators()
-                        .block(genesis_block.block_hash.into())
-                        .call()
-                        .await?;
-
-                    let genesis_validator_set = ValidatorSetType::new(
-                        genesis_validator_set_sol
-                            .validators
-                            .into_iter()
-                            .map(
-                                |ValidatorSet::ValidatorInfoFull {
-                                     ed25519Key, power, ..
-                                 }| {
-                                    let pub_key_bytes: [u8; 32] = ed25519Key.into();
-                                    let pub_key = PublicKey::new(
-                                        VerificationKey::try_from(pub_key_bytes).unwrap(),
-                                    );
-                                    malachitebft_eth_types::Validator::new(
-                                        pub_key,
-                                        power.try_into().unwrap(),
-                                    )
-                                },
-                            )
-                            .collect::<Vec<_>>(),
-                    );
-
-                    debug!("🌈 Got validator set: {:?}", genesis_validator_set);
-
-                    state.set_validator_set(genesis_validator_set);
+                    let genesis_validator_set =
+                        get_validator_set(engine.eth.url().as_ref(), &genesis_block.block_hash)
+                            .await?;
+                    state.set_validator_set(genesis_validator_set.clone());
+                    debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
                 }
 
                 // We can simply respond by telling the engine to start consensus
@@ -319,44 +317,14 @@ pub async fn run(
                     prev_randao: new_block_prev_randao,
                 });
 
-                // call the ValidatorSet contract to get the list of validators
+                {
+                    let new_validator_set =
+                        get_validator_set(engine.eth.url().as_ref(), &latest_valid_hash).await?;
 
-                let provider = ProviderBuilder::new()
-                    .on_builtin(engine.eth.url().as_ref())
-                    .await?;
-                let validator_set_contract =
-                    ValidatorSet::new(GENESIS_VALIDATOR_SET_ACCOUNT, provider);
+                    debug!("🌈 Got validator set: {:?}", new_validator_set);
 
-                let new_validator_set_sol = validator_set_contract
-                    .getValidators()
-                    .block(latest_valid_hash.into())
-                    .call()
-                    .await?;
-
-                let new_validator_set = ValidatorSetType::new(
-                    new_validator_set_sol
-                        .validators
-                        .into_iter()
-                        .map(
-                            |ValidatorSet::ValidatorInfoFull {
-                                 ed25519Key, power, ..
-                             }| {
-                                let pub_key_bytes: [u8; 32] = ed25519Key.into();
-                                let pub_key = PublicKey::new(
-                                    VerificationKey::try_from(pub_key_bytes).unwrap(),
-                                );
-                                malachitebft_eth_types::Validator::new(
-                                    pub_key,
-                                    power.try_into().unwrap(),
-                                )
-                            },
-                        )
-                        .collect::<Vec<_>>(),
-                );
-
-                debug!("🌈 Got validator set: {:?}", new_validator_set);
-
-                state.set_validator_set(new_validator_set);
+                    state.set_validator_set(new_validator_set);
+                }
 
                 // Pause briefly before starting next height, just to make following the logs easier
                 // tokio::time::sleep(Duration::from_millis(500)).await;

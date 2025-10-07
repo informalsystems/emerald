@@ -125,7 +125,7 @@ echo "Press Ctrl+C to stop the nodes."
 
 if [[ -z "$NO_WAIT" ]]; then
     # Keep the script running
-    sleep infinity
+    tail -f /dev/null
 else
     echo "Exiting without waiting as per --no-wait flag."
     exit_and_cleanup

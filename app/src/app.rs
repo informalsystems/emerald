@@ -22,7 +22,7 @@ use malachitebft_eth_types::{
     Block, BlockHash, MalakethContext, PublicKey, Validator, ValidatorSet as ValidatorSetType,
 };
 
-const GENESIS_VALIDATOR_SET_ACCOUNT: Address = address!("0000000000000000000000000000000000002000");
+const GENESIS_VALIDATOR_SET_ACCOUNT: Address = address!("0x0000000000000000000000000000000000002000");
 
 alloy_sol_types::sol!(
     #[derive(Debug)]

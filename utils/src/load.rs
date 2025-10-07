@@ -1,14 +1,12 @@
 use alloy_network::EthereumWallet;
-use alloy_primitives::{address, Address, U256};
+use alloy_primitives::U256;
 use alloy_provider::ProviderBuilder;
 use alloy_signer_local::{coins_bip39::English, MnemonicBuilder};
 use malachitebft_eth_utils::validator_set::contract::ValidatorSet;
 use rand::Rng;
+use malachitebft_eth_utils::validator_set::contract::GENESIS_VALIDATOR_SET_ACCOUNT;
 
 const MNEMONIC: &str = "test test test test test test test test test test test junk";
-
-const GENESIS_VALIDATOR_SET_ACCOUNT: Address =
-    address!("0x0000000000000000000000000000000000002000");
 
 const RPC_ENDPOINT: &str = "http://localhost:8545";
 

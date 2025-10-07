@@ -1,5 +1,4 @@
 use color_eyre::eyre;
-use malachitebft_eth_types::ValidatorSet;
 use reqwest::{header::CONTENT_TYPE, Client, Url};
 use serde::de::DeserializeOwned;
 use serde_json::json;
@@ -84,20 +83,5 @@ impl EthereumRPC {
     pub async fn txpool_inspect(&self) -> eyre::Result<TxpoolInspect> {
         self.rpc_request("txpool_inspect", json!([]), Duration::from_secs(1))
             .await
-    }
-
-    pub async fn get_validators(&self, block_number: u64) -> eyre::Result<ValidatorSet> {
-        // calling a contract address!("0000000000000000000000000000000000002000")
-        // method signature: "getValidators()"
-
-        self.rpc_request(
-            "eth_call",
-            json!([{
-            "to": "0000000000000000000000000000000000002000",
-            "data": "0x".to_owned() + &hex::encode("getValidators()".as_bytes())
-        }, format!("{block_number}")]),
-            Duration::from_secs(5),
-        )
-        .await
     }
 }

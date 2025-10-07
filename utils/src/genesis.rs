@@ -1,5 +1,5 @@
 use alloy_genesis::{ChainConfig, Genesis, GenesisAccount};
-use alloy_primitives::{address, Address, B256, U256};
+use alloy_primitives::{Address, B256, U256};
 use alloy_signer_local::{coins_bip39::English, LocalSigner, MnemonicBuilder};
 use chrono::NaiveDate;
 use color_eyre::eyre::Result;
@@ -9,11 +9,12 @@ use rand::{rngs::StdRng, SeedableRng};
 use std::{collections::BTreeMap, str::FromStr};
 
 use crate::validator_set::{contract::ValidatorSet, generate_storage_data, Validator};
+use crate::validator_set::contract::GENESIS_VALIDATOR_SET_ACCOUNT;
+
+
 
 /// Test mnemonic for wallet generation
 const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
-
-const GENESIS_VALIDATOR_SET_ACCOUNT: Address = address!("0000000000000000000000000000000000002000");
 
 /// Create a signer from a mnemonic.
 pub(crate) fn make_signer(index: u64) -> LocalSigner<SigningKey> {

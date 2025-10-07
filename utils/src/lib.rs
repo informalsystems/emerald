@@ -6,7 +6,7 @@ use spammer::Spammer;
 pub mod genesis;
 pub mod spammer;
 pub mod tx;
-pub mod validator_set;
+pub mod validator_manager;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]

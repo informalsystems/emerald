@@ -8,8 +8,8 @@ use malachitebft_eth_types::PrivateKey;
 use rand::{rngs::StdRng, SeedableRng};
 use std::{collections::BTreeMap, str::FromStr};
 
-use crate::validator_set::contract::GENESIS_VALIDATOR_SET_ACCOUNT;
-use crate::validator_set::{contract::ValidatorSet, generate_storage_data, Validator};
+use crate::validator_manager::contract::GENESIS_VALIDATOR_MANAGER_ACCOUNT;
+use crate::validator_manager::{contract::ValidatorManager, generate_storage_data, Validator};
 
 /// Test mnemonic for wallet generation
 const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
@@ -61,29 +61,17 @@ pub(crate) fn generate_genesis() -> Result<()> {
     let public_keys: Vec<_> = private_keys.iter().map(|pk| pk.public_key()).collect();
 
     let initial_validators = vec![
-        Validator {
-            address: signer_addresses[0],
-            ed25519_key: B256::from(public_keys[0].as_bytes()),
-            power: U256::from(100),
-        },
-        Validator {
-            address: signer_addresses[1],
-            ed25519_key: B256::from(public_keys[1].as_bytes()),
-            power: U256::from(120),
-        },
-        Validator {
-            address: signer_addresses[2],
-            ed25519_key: B256::from(public_keys[2].as_bytes()),
-            power: U256::from(110),
-        },
+        Validator::from_public_key(B256::from(public_keys[0].as_bytes()), U256::from(100)),
+        Validator::from_public_key(B256::from(public_keys[1].as_bytes()), U256::from(120)),
+        Validator::from_public_key(B256::from(public_keys[2].as_bytes()), U256::from(110)),
     ];
 
-    let storage = generate_storage_data(initial_validators)?;
+    let storage = generate_storage_data(initial_validators, signer_addresses[0])?;
 
     alloc.insert(
-        GENESIS_VALIDATOR_SET_ACCOUNT,
+        GENESIS_VALIDATOR_MANAGER_ACCOUNT,
         GenesisAccount {
-            code: Some(ValidatorSet::DEPLOYED_BYTECODE.clone()),
+            code: Some(ValidatorManager::DEPLOYED_BYTECODE.clone()),
             storage: Some(storage),
             ..Default::default()
         },

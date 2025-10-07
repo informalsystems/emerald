@@ -3,9 +3,11 @@ use std::net::TcpListener;
 use std::process::{Child, Command, Stdio};
 use std::str::FromStr;
 
+use crate::validator_manager::contract::ValidatorManager;
+
 use super::{generate_storage_data, Validator};
 use alloy_network::EthereumWallet;
-use alloy_primitives::{keccak256, Address, U256};
+use alloy_primitives::{address, keccak256, Address, B256, U256};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_signer_local::PrivateKeySigner;
 use ethers_signers::coins_bip39::English;
@@ -14,25 +16,16 @@ use reqwest::Url;
 use tempfile::TempDir;
 use tokio::time::{sleep, Duration};
 
-alloy_sol_types::sol!(
-    #[derive(Debug)]
-    #[sol(rpc)]
-    ValidatorSet,
-    "../solidity/out/ValidatorSet.sol/ValidatorSet.json"
-);
-
-#[derive(Debug, Clone)]
-struct ValidatorWallet {
-    validator: Validator,
-    signer: PrivateKeySigner,
-}
-
 /// Generate validators from "test test ... junk" mnemonic using sequential derivation paths.
 ///
 /// Each validator is derived from path `m/44'/60'/0'/0/{index}` and includes both
 /// the validator metadata and the associated ECDSA signing key required to submit
 /// transactions on behalf of that validator.
-fn generate_validators_from_mnemonic(count: usize) -> anyhow::Result<Vec<ValidatorWallet>> {
+const TEST_OWNER_ADDRESS: Address = address!("0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65");
+const TEST_OWNER_PRIVATE_KEY: &str =
+    "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a";
+
+fn generate_validators_from_mnemonic(count: usize) -> anyhow::Result<Vec<Validator>> {
     let mnemonic = "test test test test test test test test test test test junk";
     let mut derived = Vec::with_capacity(count);
 
@@ -57,18 +50,15 @@ fn generate_validators_from_mnemonic(count: usize) -> anyhow::Result<Vec<Validat
 
         let power = U256::from(1000 * (i + 1));
 
-        derived.push(ValidatorWallet {
-            validator: Validator::new_with_key(address, ed25519_key, power),
-            signer,
-        });
+        derived.push(Validator::from_public_key(B256::from(ed25519_key), power));
     }
 
     Ok(derived)
 }
 
-/// Deploy ValidatorSet contract on Anvil and compare storage values
+/// Deploy ValidatorManager contract on Anvil and compare storage values
 ///
-/// This test attempts to deploy a ValidatorSet contract on a local Anvil node
+/// This test attempts to deploy a ValidatorManager contract on a local Anvil node
 /// and compare the generated storage values with the actual contract storage.
 /// Currently disabled due to alloy v0.6 API changes requiring proper transaction
 /// construction for contract deployment.
@@ -83,21 +73,13 @@ async fn test_anvil_storage_comparison() -> anyhow::Result<()> {
     println!("🚀 Starting Anvil storage comparison test");
 
     // Generate validators from mnemonic with sequential derivation paths
-    let validator_wallets = generate_validators_from_mnemonic(5)?;
-    println!(
-        "✅ Generated {} validators from mnemonic",
-        validator_wallets.len()
-    );
-    for (i, wallet) in validator_wallets.iter().enumerate() {
-        println!("   Validator {}: {:#x}", i, wallet.validator.address);
+    let validators = generate_validators_from_mnemonic(5)?;
+    println!("✅ Generated {} validators from mnemonic", validators.len());
+    for (i, validator) in validators.iter().enumerate() {
+        println!("   Validator {} key: {}", i, validator.validatorKey);
     }
 
-    // Generate expected storage values
-    let validators: Vec<Validator> = validator_wallets
-        .iter()
-        .map(|wallet| wallet.validator.clone())
-        .collect();
-    let expected_storage = generate_storage_data(validators.clone())?;
+    let expected_storage = generate_storage_data(validators.clone(), TEST_OWNER_ADDRESS)?;
     println!(
         "✅ Generated {} expected storage slots",
         expected_storage.len()
@@ -105,7 +87,8 @@ async fn test_anvil_storage_comparison() -> anyhow::Result<()> {
 
     // Deploy contract and register validators on Anvil
     let rpc_url = anvil.rpc_url().clone();
-    let contract_address = deploy_and_register_validators(&validator_wallets, &rpc_url).await?;
+    let contract_address =
+        deploy_and_register_validators(&validators, TEST_OWNER_ADDRESS, &rpc_url).await?;
     println!(
         "✅ Contract deployed and validators registered at: {:#x}",
         contract_address
@@ -141,13 +124,12 @@ async fn test_anvil_storage_comparison() -> anyhow::Result<()> {
 }
 
 async fn deploy_and_register_validators(
-    validator_wallets: &[ValidatorWallet],
+    validators: &[Validator],
+    owner: Address,
     rpc_endpoint: &Url,
 ) -> anyhow::Result<Address> {
-    // Use first Anvil account as deployer (default Anvil account)
-    let deployer_key = PrivateKeySigner::from_str(
-        "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-    )?;
+    let deployer_key = PrivateKeySigner::from_str(TEST_OWNER_PRIVATE_KEY)?;
+    debug_assert_eq!(deployer_key.address(), owner);
     let deployer_wallet = EthereumWallet::from(deployer_key);
 
     let deployer_provider = ProviderBuilder::new()
@@ -155,11 +137,11 @@ async fn deploy_and_register_validators(
         .on_http(rpc_endpoint.clone());
 
     // Deploy the contract using the generated bindings
-    let deployed_contract = ValidatorSet::deploy(deployer_provider).await?;
+    let deployed_contract = ValidatorManager::deploy(deployer_provider.clone()).await?;
     let contract_address = *deployed_contract.address();
 
     println!(
-        "✅ Deployed ValidatorSet contract at: {:#x}",
+        "✅ Deployed ValidatorManager contract at: {:#x}",
         contract_address
     );
 
@@ -168,23 +150,14 @@ async fn deploy_and_register_validators(
     let code = provider.get_code_at(contract_address).await?;
 
     // assert bytecode matches
-    assert_eq!(code, ValidatorSet::DEPLOYED_BYTECODE);
+    assert_eq!(code, ValidatorManager::DEPLOYED_BYTECODE);
 
     println!("✅ Contract verified to have bytecode");
 
-    // Register each validator using their derived private key
-    for (i, wallet_entry) in validator_wallets.iter().enumerate() {
-        let validator_provider = ProviderBuilder::new()
-            .wallet(EthereumWallet::from(wallet_entry.signer.clone()))
-            .on_http(rpc_endpoint.clone());
-
-        let contract = ValidatorSet::new(contract_address, validator_provider);
-
-        let pending_tx = contract
-            .register(
-                wallet_entry.validator.ed25519_key,
-                wallet_entry.validator.power,
-            )
+    let owner_contract = ValidatorManager::new(contract_address, deployer_provider.clone());
+    for (i, validator) in validators.iter().enumerate() {
+        let pending_tx = owner_contract
+            .register(validator.validatorKey, validator.power)
             .send()
             .await?;
 
@@ -193,14 +166,10 @@ async fn deploy_and_register_validators(
             return Err(anyhow::anyhow!(
                 "Failed to register validator {}: {:#x}",
                 i,
-                wallet_entry.validator.address
+                validator.validatorKey
             ));
         }
     }
-
-    dbg!(deployed_contract.getTotalPower().call().await?); // Ensure contract is responsive
-    dbg!(deployed_contract.getValidatorCount().call().await?);
-    dbg!(deployed_contract.getValidators().call().await?);
 
     Ok(contract_address)
 }

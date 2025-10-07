@@ -1,6 +1,6 @@
 //! Error types for storage data generation
 
-use alloy_primitives::Address;
+use alloy_primitives::U256;
 use thiserror::Error;
 
 /// Result type for storage operations
@@ -13,8 +13,8 @@ pub enum StorageError {
     EmptyValidatorSet,
 
     #[error("Invalid power for validator {0}")]
-    InvalidPower(Address),
+    InvalidPower(U256),
 
     #[error("Duplicate validator {0}")]
-    DuplicateValidator(Address),
+    DuplicateValidator(U256),
 }

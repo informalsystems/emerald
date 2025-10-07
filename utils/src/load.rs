@@ -2,8 +2,8 @@ use alloy_network::EthereumWallet;
 use alloy_primitives::U256;
 use alloy_provider::ProviderBuilder;
 use alloy_signer_local::{coins_bip39::English, MnemonicBuilder};
-use malachitebft_eth_utils::validator_set::contract::ValidatorSet;
-use malachitebft_eth_utils::validator_set::contract::GENESIS_VALIDATOR_SET_ACCOUNT;
+use malachitebft_eth_utils::validator_manager::contract::ValidatorManager;
+use malachitebft_eth_utils::validator_manager::contract::GENESIS_VALIDATOR_MANAGER_ACCOUNT;
 use rand::Rng;
 
 const MNEMONIC: &str = "test test test test test test test test test test test junk";
@@ -14,7 +14,7 @@ const RPC_ENDPOINT: &str = "http://localhost:8545";
 async fn main() {
     let provider = ProviderBuilder::new().on_http(RPC_ENDPOINT.parse().unwrap());
 
-    let validator_set_contract = ValidatorSet::new(GENESIS_VALIDATOR_SET_ACCOUNT, provider);
+    let validator_set_contract = ValidatorManager::new(GENESIS_VALIDATOR_MANAGER_ACCOUNT, provider);
 
     let original_validators = validator_set_contract
         .getValidators()
@@ -43,7 +43,7 @@ async fn main() {
             .on_http(RPC_ENDPOINT.parse().unwrap());
 
         let validator_set_contract =
-            ValidatorSet::new(GENESIS_VALIDATOR_SET_ACCOUNT, validator_provider);
+            ValidatorManager::new(GENESIS_VALIDATOR_MANAGER_ACCOUNT, validator_provider);
 
         let count = validator_set_contract
             .getValidatorCount()
@@ -54,12 +54,17 @@ async fn main() {
 
         println!("Signer {i}: {address}");
 
-        if validator_set_contract
-            .getValidator(address)
+        let validator_info = &original_validators[i];
+        let validator_key = validator_info.validatorKey;
+
+        let is_validator = validator_set_contract
+            .isValidator(validator_key)
             .call()
             .await
-            .is_ok()
-        {
+            .unwrap()
+            ._0;
+
+        if is_validator {
             // unregister
 
             if count == U256::from(1u64) {
@@ -71,7 +76,7 @@ async fn main() {
             println!("Unregistering {address:?}");
 
             let _ = validator_set_contract
-                .unregister()
+                .unregister(validator_key)
                 .send()
                 .await
                 .unwrap()
@@ -83,13 +88,8 @@ async fn main() {
 
             println!("Registering {address:?}");
 
-            let old_info = original_validators
-                .iter()
-                .find(|v| v.validator == address)
-                .unwrap();
-
             let _ = validator_set_contract
-                .register(old_info.ed25519Key, old_info.power)
+                .register(validator_key, validator_info.power)
                 .send()
                 .await
                 .unwrap()

@@ -19,17 +19,17 @@ use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::{
-    Block, BlockHash, MalakethContext, PublicKey, Validator, ValidatorSet as ValidatorSetType,
+    Block, BlockHash, MalakethContext, PublicKey, Validator, ValidatorSet,
 };
 
-const GENESIS_VALIDATOR_SET_ACCOUNT: Address =
+const GENESIS_VALIDATOR_MANAGER_ACCOUNT: Address =
     address!("0x0000000000000000000000000000000000002000");
 
 alloy_sol_types::sol!(
     #[derive(Debug)]
     #[sol(rpc)]
-    ValidatorSet,
-    "../solidity/out/ValidatorSet.sol/ValidatorSet.json"
+    ValidatorManager,
+    "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
 );
 
 use crate::state::{decode_value, State};
@@ -37,26 +37,28 @@ use crate::state::{decode_value, State};
 pub async fn get_validator_set(
     eth_url: &str,
     block_hash: &BlockHash,
-) -> eyre::Result<ValidatorSetType> {
+) -> eyre::Result<ValidatorSet> {
     let provider = ProviderBuilder::new().on_builtin(eth_url).await?;
 
-    let validator_set_contract = ValidatorSet::new(GENESIS_VALIDATOR_SET_ACCOUNT, provider);
+    let validator_manager_contract =
+        ValidatorManager::new(GENESIS_VALIDATOR_MANAGER_ACCOUNT, provider);
 
-    let genesis_validator_set_sol = validator_set_contract
+    let genesis_validator_set_sol = validator_manager_contract
         .getValidators()
         .block((*block_hash).into())
         .call()
         .await?;
 
-    Ok(ValidatorSetType::new(
+    Ok(ValidatorSet::new(
         genesis_validator_set_sol
             .validators
             .into_iter()
             .map(
-                |ValidatorSet::ValidatorInfoFull {
-                     ed25519Key, power, ..
+                |ValidatorManager::ValidatorInfo {
+                     validatorKey,
+                     power,
                  }| {
-                    let pub_key_bytes: [u8; 32] = ed25519Key.into();
+                    let pub_key_bytes = validatorKey.to_be_bytes::<32>();
                     let pub_key = PublicKey::new(VerificationKey::try_from(pub_key_bytes).unwrap());
                     Validator::new(pub_key, power.try_into().unwrap())
                 },

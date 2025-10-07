@@ -1,11 +1,11 @@
 use alloy_primitives::{address, Address};
 
-pub const GENESIS_VALIDATOR_SET_ACCOUNT: Address =
+pub const GENESIS_VALIDATOR_MANAGER_ACCOUNT: Address =
     address!("0x0000000000000000000000000000000000002000");
 
 alloy_sol_types::sol!(
     #[derive(Debug)]
     #[sol(rpc)]
-    ValidatorSet,
-    "../solidity/out/ValidatorSet.sol/ValidatorSet.json",
+    ValidatorManager,
+    "../solidity/out/ValidatorManager.sol/ValidatorManager.json",
 );

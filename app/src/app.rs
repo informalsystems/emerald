@@ -86,13 +86,10 @@ pub async fn run(
                 debug!("👉 genesis_block: {:?}", genesis_block);
                 state.latest_block = Some(genesis_block);
 
-                {
-                    let genesis_validator_set =
-                        get_validator_set(engine.eth.url().as_ref(), &genesis_block.block_hash)
-                            .await?;
-                    state.set_validator_set(genesis_validator_set.clone());
-                    debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
-                }
+                let genesis_validator_set =
+                    get_validator_set(engine.eth.url().as_ref(), &genesis_block.block_hash).await?;
+                debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
+                state.set_validator_set(genesis_validator_set);
 
                 // We can simply respond by telling the engine to start consensus
                 // at the current height, which is initially 1
@@ -318,17 +315,13 @@ pub async fn run(
                     prev_randao: new_block_prev_randao,
                 });
 
-                {
-                    let new_validator_set =
-                        get_validator_set(engine.eth.url().as_ref(), &latest_valid_hash).await?;
-
-                    debug!("🌈 Got validator set: {:?}", new_validator_set);
-
-                    state.set_validator_set(new_validator_set);
-                }
+                let new_validator_set =
+                    get_validator_set(engine.eth.url().as_ref(), &latest_valid_hash).await?;
+                debug!("🌈 Got validator set: {:?}", new_validator_set);
+                state.set_validator_set(new_validator_set);
 
                 // Pause briefly before starting next height, just to make following the logs easier
-                // tokio::time::sleep(Duration::from_millis(500)).await;
+                // tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
                 // And then we instruct consensus to start the next height
                 if reply

@@ -411,7 +411,9 @@ impl State {
 
     /// Returns the set of validators.
     pub fn get_validator_set(&self) -> &ValidatorSet {
-        self.validator_set.as_ref().unwrap()
+        self.validator_set
+            .as_ref()
+            .expect("Validator set must be initialized before use")
     }
 
     /// Sets the validator set.

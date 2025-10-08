@@ -71,8 +71,10 @@ pub(crate) fn generate_genesis(public_keys_file: &str, genesis_output_file: &str
 
     // The Ethereum Prague-Electra (Pectra) upgrade was activated on the mainnet
     // on May 7, 2025, at epoch 364,032.
-    let date = NaiveDate::from_ymd_opt(2025, 5, 7).unwrap();
-    let datetime = date.and_hms_opt(0, 0, 0).unwrap();
+    let date = NaiveDate::from_ymd_opt(2025, 5, 7).expect("Failed to create date for May 7, 2025");
+    let datetime = date
+        .and_hms_opt(0, 0, 0)
+        .expect("Failed to create datetime with 00:00:00");
     let valid_pectra_timestamp = datetime.and_utc().timestamp() as u64;
 
     // Create genesis configuration

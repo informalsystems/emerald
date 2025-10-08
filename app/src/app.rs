@@ -59,8 +59,16 @@ pub async fn read_validators_from_contract(
                      power,
                  }| {
                     let pub_key_bytes = validatorKey.to_be_bytes::<32>();
-                    let pub_key = PublicKey::new(VerificationKey::try_from(pub_key_bytes).unwrap());
-                    Validator::new(pub_key, power.try_into().unwrap())
+                    let pub_key = PublicKey::new(
+                        VerificationKey::try_from(pub_key_bytes)
+                            .expect("Failed to convert validator key bytes to VerificationKey"),
+                    );
+                    Validator::new(
+                        pub_key,
+                        power
+                            .try_into()
+                            .expect("Failed to convert validator power to VotingPower"),
+                    )
                 },
             )
             .collect::<Vec<_>>(),
@@ -84,7 +92,11 @@ pub async fn run(
                 engine.check_capabilities().await?;
 
                 // Get the genesis block from the execution engine
-                let genesis_block = engine.eth.get_block_by_number("earliest").await?.unwrap();
+                let genesis_block = engine
+                    .eth
+                    .get_block_by_number("earliest")
+                    .await?
+                    .expect("Genesis block must exist");
                 debug!("👉 genesis_block: {:?}", genesis_block);
                 state.latest_block = Some(genesis_block);
 

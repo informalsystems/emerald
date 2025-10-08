@@ -126,11 +126,6 @@ fn testnet(args: &Args, cmd: &TestnetCmd, logging: config::LoggingConfig) -> Res
         start_height: Some(Height::new(1)), // We always start at height 1
     };
 
-    cmd.run(
-        &app,
-        &args.get_home_dir()?,
-        &args.get_malaketch_config_dir()?,
-        logging,
-    )
-    .map_err(|error| eyre!("Failed to run testnet command {:?}", error))
+    cmd.run(&app, &args.get_home_dir()?, logging)
+        .map_err(|error| eyre!("Failed to run testnet command {:?}", error))
 }

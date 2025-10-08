@@ -34,7 +34,7 @@ alloy_sol_types::sol!(
 
 use crate::state::{decode_value, State};
 
-pub async fn get_validator_set(
+pub async fn read_validators_from_contract(
     eth_url: &str,
     block_hash: &BlockHash,
 ) -> eyre::Result<ValidatorSet> {
@@ -88,8 +88,11 @@ pub async fn run(
                 debug!("👉 genesis_block: {:?}", genesis_block);
                 state.latest_block = Some(genesis_block);
 
-                let genesis_validator_set =
-                    get_validator_set(engine.eth.url().as_ref(), &genesis_block.block_hash).await?;
+                let genesis_validator_set = read_validators_from_contract(
+                    engine.eth.url().as_ref(),
+                    &genesis_block.block_hash,
+                )
+                .await?;
                 debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
                 state.set_validator_set(genesis_validator_set);
 
@@ -318,7 +321,8 @@ pub async fn run(
                 });
 
                 let new_validator_set =
-                    get_validator_set(engine.eth.url().as_ref(), &latest_valid_hash).await?;
+                    read_validators_from_contract(engine.eth.url().as_ref(), &latest_valid_hash)
+                        .await?;
                 debug!("🌈 Got validator set: {:?}", new_validator_set);
                 state.set_validator_set(new_validator_set);
 

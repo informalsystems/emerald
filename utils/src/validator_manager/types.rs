@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use alloy_primitives::{B256, U256};
+use alloy_primitives::U256;
 
 use crate::validator_manager::contract::ValidatorManager;
 
@@ -10,10 +10,10 @@ use crate::validator_manager::contract::ValidatorManager;
 pub type Validator = ValidatorManager::ValidatorInfo;
 
 impl ValidatorManager::ValidatorInfo {
-    /// Construct a validator from a raw Ed25519 key encoded as `B256`
-    pub fn from_public_key(ed25519_key: B256, power: U256) -> Self {
+    /// Construct a validator from a raw Ed25519 key encoded as `U256`
+    pub fn from_public_key(ed25519_key: U256, power: U256) -> Self {
         Self {
-            validatorKey: U256::from_be_slice(ed25519_key.as_slice()),
+            validatorKey: ed25519_key,
             power,
         }
     }

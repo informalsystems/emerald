@@ -7,7 +7,7 @@ use crate::validator_manager::contract::ValidatorManager;
 
 use super::{generate_storage_data, Validator};
 use alloy_network::EthereumWallet;
-use alloy_primitives::{address, keccak256, Address, B256, U256};
+use alloy_primitives::{address, keccak256, Address, U256};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_signer_local::PrivateKeySigner;
 use ethers_signers::coins_bip39::English;
@@ -50,7 +50,10 @@ fn generate_validators_from_mnemonic(count: usize) -> anyhow::Result<Vec<Validat
 
         let power = U256::from(1000 * (i + 1));
 
-        derived.push(Validator::from_public_key(B256::from(ed25519_key), power));
+        derived.push(Validator::from_public_key(
+            U256::from_be_slice(ed25519_key.as_slice()),
+            power,
+        ));
     }
 
     Ok(derived)

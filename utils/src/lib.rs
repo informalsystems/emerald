@@ -18,7 +18,10 @@ pub struct Cli {
 impl Cli {
     pub async fn run(&self) -> Result<()> {
         match &self.command {
-            Commands::Genesis => generate_genesis(),
+            Commands::Genesis {
+                public_keys_file,
+                output,
+            } => generate_genesis(public_keys_file, output),
             Commands::Spam(spam_cmd) => spam_cmd.run().await,
         }
     }
@@ -27,7 +30,13 @@ impl Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Generate genesis file
-    Genesis,
+    Genesis {
+        #[clap(short, long)]
+        public_keys_file: String,
+
+        #[clap(long, default_value = "./assets/genesis.json")]
+        output: String,
+    },
 
     /// Spam transactions
     #[command(arg_required_else_help = true)]

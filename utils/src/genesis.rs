@@ -4,8 +4,6 @@ use alloy_signer_local::{coins_bip39::English, LocalSigner, MnemonicBuilder};
 use chrono::NaiveDate;
 use color_eyre::eyre::Result;
 use k256::ecdsa::SigningKey;
-use malachitebft_eth_types::PrivateKey;
-use rand::{rngs::StdRng, SeedableRng};
 use std::{collections::BTreeMap, str::FromStr};
 
 use crate::validator_manager::contract::GENESIS_VALIDATOR_MANAGER_ACCOUNT;
@@ -28,8 +26,8 @@ pub(crate) fn make_signers() -> Vec<LocalSigner<SigningKey>> {
     (0..3).map(make_signer).collect()
 }
 
-pub(crate) fn generate_genesis() -> Result<()> {
-    let genesis_file = "./assets/genesis.json";
+pub(crate) fn generate_genesis(public_keys_file: &str, output: &str) -> Result<()> {
+    let genesis_file = output;
 
     // Create signers and get their addresses
     let signers = make_signers();
@@ -55,16 +53,12 @@ pub(crate) fn generate_genesis() -> Result<()> {
         );
     }
 
-    let mut rng = StdRng::seed_from_u64(0x42);
-    let private_keys: Vec<_> = (0..3).map(|_| PrivateKey::generate(&mut rng)).collect();
-
-    let public_keys: Vec<_> = private_keys.iter().map(|pk| pk.public_key()).collect();
-
-    let initial_validators = vec![
-        Validator::from_public_key(B256::from(public_keys[0].as_bytes()), U256::from(100)),
-        Validator::from_public_key(B256::from(public_keys[1].as_bytes()), U256::from(120)),
-        Validator::from_public_key(B256::from(public_keys[2].as_bytes()), U256::from(110)),
-    ];
+    let initial_validators = std::fs::read_to_string(public_keys_file)?
+        .lines()
+        .map(|line| {
+            U256::from_str(line.trim()).map(|key| Validator::from_public_key(key, U256::from(100)))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let storage = generate_storage_data(initial_validators, signer_addresses[0])?;
 

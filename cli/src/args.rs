@@ -15,6 +15,7 @@ use malachitebft_config::{LogFormat, LogLevel};
 
 use crate::cmd::distributed_testnet::DistributedTestnetCmd;
 use crate::cmd::init::InitCmd;
+use crate::cmd::show_pubkey::ShowPubkeyCmd;
 use crate::cmd::start::StartCmd;
 use crate::cmd::testnet::TestnetCmd;
 use crate::error::Error;
@@ -61,6 +62,9 @@ pub enum Commands {
 
     /// Generate distributed testnet configuration
     DistributedTestnet(DistributedTestnetCmd),
+
+    /// Extract Ed25519 public key from Tendermint private key file
+    ShowPubkey(ShowPubkeyCmd),
 }
 
 impl Default for Commands {

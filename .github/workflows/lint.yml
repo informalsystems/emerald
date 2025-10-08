@@ -46,6 +46,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
@@ -54,6 +56,11 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           components: clippy
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+      - name: Run Forge build
+        working-directory: ./solidity
+        run: forge build
       - name: Run clippy
         uses: auguwu/clippy-action@1.4.0
         with:

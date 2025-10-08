@@ -16,6 +16,7 @@ use ethers_signers::{LocalWallet, MnemonicBuilder};
 use reqwest::Url;
 use tempfile::TempDir;
 use tokio::time::{sleep, Duration};
+use tracing::debug;
 
 /// Generate validators from "test test ... junk" mnemonic using sequential derivation paths.
 ///
@@ -72,19 +73,21 @@ fn generate_validators_from_mnemonic(count: usize) -> eyre::Result<Vec<Validator
 /// 2. Run: `cargo test anvil_integration_tests::test_anvil_storage_comparison -- --ignored`
 #[tokio::test]
 async fn test_anvil_storage_comparison() -> eyre::Result<()> {
+    tracing_subscriber::fmt::init();
+
     let anvil = spawn_anvil().await?;
 
-    println!("🚀 Starting Anvil storage comparison test");
+    debug!("🚀 Starting Anvil storage comparison test");
 
     // Generate validators from mnemonic with sequential derivation paths
     let validators = generate_validators_from_mnemonic(5)?;
-    println!("✅ Generated {} validators from mnemonic", validators.len());
+    debug!("✅ Generated {} validators from mnemonic", validators.len());
     for (i, validator) in validators.iter().enumerate() {
-        println!("   Validator {} key: {}", i, validator.validatorKey);
+        debug!("   Validator {} key: {}", i, validator.validatorKey);
     }
 
     let expected_storage = generate_storage_data(validators.clone(), TEST_OWNER_ADDRESS)?;
-    println!(
+    debug!(
         "✅ Generated {} expected storage slots",
         expected_storage.len()
     );
@@ -93,7 +96,7 @@ async fn test_anvil_storage_comparison() -> eyre::Result<()> {
     let rpc_url = anvil.rpc_url().clone();
     let contract_address =
         deploy_and_register_validators(&validators, TEST_OWNER_ADDRESS, &rpc_url).await?;
-    println!(
+    debug!(
         "✅ Contract deployed and validators registered at: {:#x}",
         contract_address
     );
@@ -104,7 +107,7 @@ async fn test_anvil_storage_comparison() -> eyre::Result<()> {
     let zero_slot = provider
         .get_storage_at(contract_address, U256::ZERO)
         .await?;
-    println!("✅ Storage at slot 0: {}", zero_slot);
+    debug!("✅ Storage at slot 0: {}", zero_slot);
 
     for (slot, expected_value) in expected_storage.iter() {
         let actual_value = provider
@@ -118,9 +121,9 @@ async fn test_anvil_storage_comparison() -> eyre::Result<()> {
         );
     }
 
-    println!("🎉 Anvil integration test completed successfully!");
-    println!("   Contract deployed and all storage slots match expected values.");
-    println!(
+    debug!("🎉 Anvil integration test completed successfully!");
+    debug!("   Contract deployed and all storage slots match expected values.");
+    debug!(
         "   Expected {} storage slots verified.",
         expected_storage.len()
     );
@@ -144,7 +147,7 @@ async fn deploy_and_register_validators(
     let deployed_contract = ValidatorManager::deploy(deployer_provider.clone()).await?;
     let contract_address = *deployed_contract.address();
 
-    println!(
+    debug!(
         "✅ Deployed ValidatorManager contract at: {:#x}",
         contract_address
     );
@@ -156,7 +159,7 @@ async fn deploy_and_register_validators(
     // assert bytecode matches
     assert_eq!(code, ValidatorManager::DEPLOYED_BYTECODE);
 
-    println!("✅ Contract verified to have bytecode");
+    debug!("✅ Contract verified to have bytecode");
 
     let owner_contract = ValidatorManager::new(contract_address, deployer_provider.clone());
     for (i, validator) in validators.iter().enumerate() {
@@ -194,7 +197,7 @@ impl Drop for AnvilInstance {
     fn drop(&mut self) {
         if let Err(err) = self.process.kill() {
             if err.kind() != ErrorKind::InvalidInput {
-                eprintln!("warning: failed to kill anvil process: {err}");
+                tracing::error!("warning: failed to kill anvil process: {err}");
             }
         }
         let _ = self.process.wait();

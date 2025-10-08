@@ -5,6 +5,7 @@ use chrono::NaiveDate;
 use color_eyre::eyre::Result;
 use k256::ecdsa::SigningKey;
 use std::{collections::BTreeMap, str::FromStr};
+use tracing::debug;
 
 use crate::validator_manager::contract::GENESIS_VALIDATOR_MANAGER_ACCOUNT;
 use crate::validator_manager::{contract::ValidatorManager, generate_storage_data, Validator};
@@ -31,9 +32,9 @@ pub(crate) fn generate_genesis(public_keys_file: &str, genesis_output_file: &str
     let signers = make_signers();
     let signer_addresses: Vec<Address> = signers.iter().map(|signer| signer.address()).collect();
 
-    println!("Using signer addresses:");
+    debug!("Using signer addresses:");
     for (i, (signer, addr)) in signers.iter().zip(signer_addresses.iter()).enumerate() {
-        println!(
+        debug!(
             "Signer {i}: {addr} ({})",
             B256::from_slice(&signer.credential().to_bytes())
         );
@@ -110,7 +111,7 @@ pub(crate) fn generate_genesis(public_keys_file: &str, genesis_output_file: &str
     // Write genesis to file
     let genesis_json = serde_json::to_string_pretty(&genesis)?;
     std::fs::write(genesis_output_file, genesis_json)?;
-    println!("Genesis configuration written to {genesis_output_file}");
+    debug!("Genesis configuration written to {genesis_output_file}");
 
     Ok(())
 }

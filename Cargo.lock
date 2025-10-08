@@ -4475,7 +4475,6 @@ dependencies = [
  "alloy-signer-local",
  "alloy-sol-types",
  "alloy-transport-http",
- "anyhow",
  "async-trait",
  "chrono",
  "clap",

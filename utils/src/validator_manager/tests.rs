@@ -10,6 +10,7 @@ use alloy_network::EthereumWallet;
 use alloy_primitives::{address, keccak256, Address, U256};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_signer_local::PrivateKeySigner;
+use color_eyre::eyre;
 use ethers_signers::coins_bip39::English;
 use ethers_signers::{LocalWallet, MnemonicBuilder};
 use reqwest::Url;
@@ -25,7 +26,7 @@ const TEST_OWNER_ADDRESS: Address = address!("0x15d34AAf54267DB7D7c367839AAf71A0
 const TEST_OWNER_PRIVATE_KEY: &str =
     "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a";
 
-fn generate_validators_from_mnemonic(count: usize) -> anyhow::Result<Vec<Validator>> {
+fn generate_validators_from_mnemonic(count: usize) -> eyre::Result<Vec<Validator>> {
     let mnemonic = "test test test test test test test test test test test junk";
     let mut derived = Vec::with_capacity(count);
 
@@ -70,7 +71,7 @@ fn generate_validators_from_mnemonic(count: usize) -> anyhow::Result<Vec<Validat
 /// 1. Start Anvil: `anvil --host 0.0.0.0 --port 8545`
 /// 2. Run: `cargo test anvil_integration_tests::test_anvil_storage_comparison -- --ignored`
 #[tokio::test]
-async fn test_anvil_storage_comparison() -> anyhow::Result<()> {
+async fn test_anvil_storage_comparison() -> eyre::Result<()> {
     let anvil = spawn_anvil().await?;
 
     println!("🚀 Starting Anvil storage comparison test");
@@ -130,7 +131,7 @@ async fn deploy_and_register_validators(
     validators: &[Validator],
     owner: Address,
     rpc_endpoint: &Url,
-) -> anyhow::Result<Address> {
+) -> eyre::Result<Address> {
     let deployer_key = PrivateKeySigner::from_str(TEST_OWNER_PRIVATE_KEY)?;
     debug_assert_eq!(deployer_key.address(), owner);
     let deployer_wallet = EthereumWallet::from(deployer_key);
@@ -166,7 +167,7 @@ async fn deploy_and_register_validators(
 
         let receipt = pending_tx.get_receipt().await?;
         if !receipt.status() {
-            return Err(anyhow::anyhow!(
+            return Err(eyre::anyhow!(
                 "Failed to register validator {}: {:#x}",
                 i,
                 validator.validatorKey
@@ -200,7 +201,7 @@ impl Drop for AnvilInstance {
     }
 }
 
-async fn spawn_anvil() -> anyhow::Result<AnvilInstance> {
+async fn spawn_anvil() -> eyre::Result<AnvilInstance> {
     let temp_dir = TempDir::new()?;
     let port = reserve_port()?;
 
@@ -245,7 +246,7 @@ async fn spawn_anvil() -> anyhow::Result<AnvilInstance> {
     unreachable!("wait loop should return or error out")
 }
 
-fn reserve_port() -> anyhow::Result<u16> {
+fn reserve_port() -> eyre::Result<u16> {
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
     let port = listener.local_addr()?.port();
     drop(listener);

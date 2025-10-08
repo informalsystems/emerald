@@ -123,16 +123,19 @@ impl Spammer {
             let mut txs_sent_in_interval = 0u64;
             let interval_start = Instant::now();
 
-            // Send up to max_rate transactions per one-second interval.
+            // Prepare batch of transactions for this interval.
+            let mut batch_params = Vec::new();
+            let mut batch_sizes = Vec::new();
+
             while txs_sent_in_interval < self.max_rate {
-                // Check exit conditions before sending each transaction.
+                // Check exit conditions before creating each transaction.
                 if (self.max_num_txs > 0 && txs_sent_total >= self.max_num_txs)
                     || (self.max_time > 0 && start_time.elapsed().as_secs() >= self.max_time)
                 {
                     break;
                 }
 
-                // Create one transaction and sing it.
+                // Create one transaction and sign it.
                 let signed_tx = if self.blobs {
                     make_signed_eip4844_tx(&self.signer, nonce).await?
                 } else {
@@ -141,19 +144,28 @@ impl Spammer {
                 let tx_bytes = signed_tx.encoded_2718();
                 let tx_bytes_len = tx_bytes.len() as u64;
 
-                // Send transaction to Ethereum RPC endpoint.
+                // Add to batch.
                 let payload = hex::encode(tx_bytes);
-                let result = self
-                    .client
-                    .rpc_request("eth_sendRawTransaction", json!([payload]))
-                    .await
-                    .map(|_: String| tx_bytes_len);
+                batch_params.push(json!([payload]));
+                batch_sizes.push(tx_bytes_len);
 
-                // Report result and update counters.
-                result_sender.send(result).await?;
                 txs_sent_in_interval += 1;
                 nonce += 1;
                 txs_sent_total += 1;
+            }
+
+            // Send all transactions in a single batch RPC call.
+            if !batch_params.is_empty() {
+                let results = self
+                    .client
+                    .rpc_batch_request("eth_sendRawTransaction", batch_params)
+                    .await?;
+
+                // Report individual results.
+                for (result, tx_bytes_len) in results.into_iter().zip(batch_sizes.into_iter()) {
+                    let mapped_result = result.map(|_| tx_bytes_len);
+                    result_sender.send(mapped_result).await?;
+                }
             }
 
             // Give time to the in-flight results to be received.
@@ -324,6 +336,46 @@ impl RpcClient {
         } else {
             serde_json::from_value(body.result).map_err(Into::into)
         }
+    }
+
+    pub async fn rpc_batch_request(
+        &self,
+        method: &str,
+        params_list: Vec<serde_json::Value>,
+    ) -> Result<Vec<Result<String>>> {
+        let batch: Vec<_> = params_list
+            .iter()
+            .enumerate()
+            .map(|(i, params)| {
+                json!({
+                    "jsonrpc": "2.0",
+                    "method": method,
+                    "params": params,
+                    "id": i + 1
+                })
+            })
+            .collect();
+
+        let request = self
+            .client
+            .post(self.url.clone())
+            .timeout(Duration::from_secs(5))
+            .header(CONTENT_TYPE, "application/json")
+            .json(&batch);
+
+        let responses: Vec<JsonResponseBody> =
+            request.send().await?.error_for_status()?.json().await?;
+
+        Ok(responses
+            .into_iter()
+            .map(|body| {
+                if let Some(JsonError { code, message }) = body.error {
+                    Err(eyre::eyre!("Server Error {}: {}", code, message))
+                } else {
+                    serde_json::from_value(body.result).map_err(Into::into)
+                }
+            })
+            .collect())
     }
 }
 

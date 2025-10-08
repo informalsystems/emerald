@@ -181,7 +181,7 @@ async fn deploy_and_register_validators(
 struct AnvilInstance {
     process: Child,
     rpc_url: Url,
-    work_dir: TempDir,
+    _work_dir: TempDir,
 }
 
 impl AnvilInstance {
@@ -231,7 +231,7 @@ async fn spawn_anvil() -> eyre::Result<AnvilInstance> {
                 return Ok(AnvilInstance {
                     process,
                     rpc_url,
-                    work_dir: temp_dir,
+                    _work_dir: temp_dir,
                 })
             }
             Err(err) if attempt + 1 == MAX_ATTEMPTS => {

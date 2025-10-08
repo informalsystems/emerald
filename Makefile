@@ -2,8 +2,9 @@ all: clean
 	cargo build
 	cargo run --bin malachitebft-eth-utils genesis
 	docker compose up -d
-	./scripts/add_peers.sh 
-	cargo run --bin malachitebft-eth-app -- testnet --nodes 3 --home nodes --config .testnet/config
+	./scripts/add_peers.sh
+	./scripts/generate_testnet_config.sh 3
+	cargo run --bin malachitebft-eth-app -- testnet --home nodes --testnet-config ${HOME}/.testnet/testnet_config.toml
 	echo 👉 Grafana dashboard is available at http://localhost:3000
 	bash scripts/spawn.bash --nodes 3 --home nodes
 

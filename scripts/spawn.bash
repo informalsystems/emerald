@@ -16,6 +16,7 @@ while [[ "$#" -gt 0 ]]; do
         --home) NODES_HOME="$2"; shift ;;
         --app) APP_BINARY="$2"; shift ;;
         --no-reset) NO_RESET=1; shift ;;
+        --no-delay) NO_DELAY=1; shift ;;
         *) echo "Unknown parameter passed: $1"; help; exit 1 ;;
     esac
     shift
@@ -43,8 +44,8 @@ export RUST_BACKTRACE=full
 
 # Create nodes and logs directories, run nodes
 for NODE in $(seq 0 $((NODES_COUNT - 1))); do
-    # Add delay for the last node
-    if [[ $NODE -eq $((NODES_COUNT - 1)) ]]; then
+    # Add delay for the last node (unless --no-delay is set)
+    if [[ $NODE -eq $((NODES_COUNT - 1)) ]] && [[ -z "$NO_DELAY" ]]; then
         echo "[Node $NODE] Waiting 30 seconds before starting the last node..."
         sleep 30
         echo "[Node $NODE] 🛸 Starting the last node..."

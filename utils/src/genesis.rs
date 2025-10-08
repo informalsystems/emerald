@@ -26,9 +26,7 @@ pub(crate) fn make_signers() -> Vec<LocalSigner<SigningKey>> {
     (0..3).map(make_signer).collect()
 }
 
-pub(crate) fn generate_genesis(public_keys_file: &str, output: &str) -> Result<()> {
-    let genesis_file = output;
-
+pub(crate) fn generate_genesis(public_keys_file: &str, genesis_output_file: &str) -> Result<()> {
     // Create signers and get their addresses
     let signers = make_signers();
     let signer_addresses: Vec<Address> = signers.iter().map(|signer| signer.address()).collect();
@@ -109,8 +107,8 @@ pub(crate) fn generate_genesis(public_keys_file: &str, output: &str) -> Result<(
 
     // Write genesis to file
     let genesis_json = serde_json::to_string_pretty(&genesis)?;
-    std::fs::write(genesis_file, genesis_json)?;
-    println!("Genesis configuration written to {genesis_file}");
+    std::fs::write(genesis_output_file, genesis_json)?;
+    println!("Genesis configuration written to {genesis_output_file}");
 
     Ok(())
 }

@@ -1,10 +1,10 @@
 [profile.default]
-src = "solidity/src"
-out = "solidity/out"
-cache_path = "solidity/cache"
-libs = [ "solidity/lib" ]
+root = "solidity"
+src = "src"
+libs = [ "lib" ]
 remappings = [
-  "@openzeppelin/contracts/=solidity/lib/openzeppelin-contracts/contracts/",
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "forge-std/=lib/forge-std/src/",
 ]
 
 # Enable optimizations

@@ -16,3 +16,5 @@ example/broadcast/**/dry-run/
 example/docs/
 .env
 .example.env
+
+foundry-backend/

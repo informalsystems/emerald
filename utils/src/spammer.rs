@@ -1,5 +1,6 @@
+use crate::dex_templates::{RoundRobinSelector, TxTemplate};
 use crate::make_signers;
-use crate::tx::{make_signed_eip1559_tx, make_signed_eip4844_tx};
+use crate::tx::{make_signed_eip1559_tx, make_signed_eip4844_tx, make_signed_tx_from_template};
 use alloy_network::eip2718::Encodable2718;
 use alloy_primitives::Address;
 use alloy_rpc_types_txpool::TxpoolStatus;
@@ -13,7 +14,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::time::{self, sleep, Duration, Instant};
 
@@ -34,6 +35,9 @@ pub struct Spammer {
     max_rate: u64,
     /// Whether to send EIP-4844 blob transactions.
     blobs: bool,
+    /// Optional transaction templates for round-robin spamming.
+    /// Wrapped in Arc<Mutex<>> to allow shared mutable access across tasks.
+    templates: Option<Arc<Mutex<RoundRobinSelector>>>,
 }
 
 impl Spammer {
@@ -44,6 +48,7 @@ impl Spammer {
         max_time: u64,
         max_rate: u64,
         blobs: bool,
+        templates: Option<Vec<TxTemplate>>,
     ) -> Result<Self> {
         let signers = make_signers();
         Ok(Self {
@@ -54,6 +59,7 @@ impl Spammer {
             max_time,
             max_rate,
             blobs,
+            templates: templates.map(|t| Arc::new(Mutex::new(RoundRobinSelector::new(t)))),
         })
     }
 
@@ -132,8 +138,15 @@ impl Spammer {
                     break;
                 }
 
-                // Create one transaction and sing it.
-                let signed_tx = if self.blobs {
+                // Create one transaction and sign it.
+                let signed_tx = if let Some(ref templates) = self.templates {
+                    // Use template-based transaction generation
+                    let template = {
+                        let mut selector = templates.lock().unwrap();
+                        selector.next().clone()
+                    };
+                    make_signed_tx_from_template(&self.signer, &template, nonce).await?
+                } else if self.blobs {
                     make_signed_eip4844_tx(&self.signer, nonce).await?
                 } else {
                     make_signed_eip1559_tx(&self.signer, nonce).await?

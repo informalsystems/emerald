@@ -1,0 +1,40 @@
+# Simple Transaction Templates
+#
+# This file contains basic EIP-1559 transaction templates for general testing.
+# Use this for simple value transfers and basic contract interactions.
+
+transactions:
+  # Simple ETH transfer
+  - type: eip1559
+    to: "0x0000000000000000000000000000000000000005"
+    value: "0.001"
+    gas_limit: 21000
+    max_fee_per_gas: "2"
+    max_priority_fee_per_gas: "1"
+    input: ""
+
+  # Transfer with slightly higher value
+  - type: eip1559
+    to: "0x0000000000000000000000000000000000000006"
+    value: "0.01"
+    gas_limit: 21000
+    max_fee_per_gas: "3"
+    max_priority_fee_per_gas: "1.5"
+    input: ""
+
+  # Contract interaction with calldata
+  - type: eip1559
+    to: "0x0000000000000000000000000000000000000007"
+    value: "0.0"
+    gas_limit: 100000
+    max_fee_per_gas: "5"
+    max_priority_fee_per_gas: "2"
+    input: "0x095ea7b3000000000000000000000000000000000000000000000000000000000000dead"
+
+# Usage Example:
+#
+#   cargo run --bin malachitebft-eth-utils -- spam \
+#     --config utils/examples/simple_transactions.yaml \
+#     --rate 50 \
+#     --num-txs 500 \
+#     --rpc-url 127.0.0.1:8545

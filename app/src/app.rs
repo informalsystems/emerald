@@ -121,11 +121,7 @@ pub async fn run(
                 // let val_set = state.get_validator_set().clone();
 
                 // Get latest state from local store
-                let start_height_from_store = state
-                    .store
-                    .max_decided_value_height()
-                    .await
-                    .map(|height| height.increment());
+                let start_height_from_store = state.store.max_decided_value_height().await;
 
                 match start_height_from_store {
                     Some(s) => {
@@ -140,7 +136,13 @@ pub async fn run(
                                 let payload_status = engine
                                     .send_forkchoice_updated(latest_block_candidate.block_hash)
                                     .await?;
-
+                                let genesis_validator_set = read_validators_from_contract(
+                                    engine.eth.url().as_ref(),
+                                    &latest_block_candidate.block_hash,
+                                )
+                                .await?;
+                                debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
+                                state.set_validator_set(genesis_validator_set);
                                 match payload_status.status {
                                     // PayloadStatusEnum::Valid => Ok(),
                                     PayloadStatusEnum::Syncing => {
@@ -210,13 +212,19 @@ pub async fn run(
                         .await?;
                         debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
                         state.set_validator_set(genesis_validator_set);
+                        state.current_height = start_height
                     }
                 }
+
+                info!(
+                    "Starth height is : {start_height} and in state it is {}",
+                    state.current_height
+                );
 
                 // We can simply respond by telling the engine to start consensus
                 // at the current height, which is initially 1
                 if reply
-                    .send((start_height, state.get_validator_set().clone()))
+                    .send((start_height.increment(), state.get_validator_set().clone()))
                     .is_err()
                 {
                     error!("Failed to send ConsensusReady reply");

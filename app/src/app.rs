@@ -91,15 +91,14 @@ pub async fn get_latest_block_candidate(
 
     let execution_payload: ExecutionPayloadV3 =
         ExecutionPayloadV3::from_ssz_bytes(&block_data).unwrap();
-    let latest_block = Some(ExecutionBlock {
+    let latest_block = ExecutionBlock {
         block_hash: execution_payload.payload_inner.payload_inner.block_hash,
         block_number: execution_payload.payload_inner.payload_inner.block_number,
         parent_hash: execution_payload.payload_inner.payload_inner.parent_hash,
         timestamp: execution_payload.payload_inner.payload_inner.timestamp,
         prev_randao: execution_payload.payload_inner.payload_inner.prev_randao,
-    })
-    .expect("there should not be an error here");
-    return Some(latest_block);
+    };
+    Some(latest_block)
 }
 pub async fn run(
     state: &mut State,

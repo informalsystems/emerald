@@ -76,7 +76,7 @@ pub async fn read_validators_from_contract(
     ))
 }
 
-pub async fn get_lates_block_candidate(
+pub async fn get_latest_block_candidate(
     state: &mut State,
     height: Height,
 ) -> Option<ExecutionBlock> {
@@ -89,7 +89,8 @@ pub async fn get_lates_block_candidate(
         .expect("certificate should have associated block data");
     debug!("🎁 block size: {:?}, height: {}", block_data.len(), height);
 
-    let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_data).unwrap();
+    let execution_payload: ExecutionPayloadV3 =
+        ExecutionPayloadV3::from_ssz_bytes(&block_data).unwrap();
     let latest_block = Some(ExecutionBlock {
         block_hash: execution_payload.payload_inner.payload_inner.block_hash,
         block_number: execution_payload.payload_inner.payload_inner.block_number,
@@ -117,7 +118,7 @@ pub async fn run(
                 engine.check_capabilities().await?;
 
                 let start_height: Height;
-                let val_set = state.get_validator_set().clone();
+                // let val_set = state.get_validator_set().clone();
 
                 // Get latest state from local store
                 let start_height_from_store = state
@@ -127,91 +128,97 @@ pub async fn run(
                     .map(|height| height.increment());
 
                 match start_height_from_store {
-                    Some(s) => start_height = s,
+                    Some(s) => {
+                        start_height = s;
+                        // If there was somethign stored in the store for height, we should be able to retrieve
+                        // block data as well.
+                        let latest_block_candidate_from_store =
+                            get_latest_block_candidate(state, start_height).await;
+
+                        match latest_block_candidate_from_store {
+                            Some(latest_block_candidate) => {
+                                let payload_status = engine
+                                    .send_forkchoice_updated(latest_block_candidate.block_hash)
+                                    .await?;
+
+                                match payload_status.status {
+                                    // PayloadStatusEnum::Valid => Ok(),
+                                    PayloadStatusEnum::Syncing => {
+                                        // From the Engine API spec:
+                                        // 8. Client software MUST respond to this method call in the
+                                        //    following way:
+                                        //   * {payloadStatus: {status: SYNCING, latestValidHash: null,
+                                        //   * validationError: null}, payloadId: null} if
+                                        //     forkchoiceState.headBlockHash references an unknown
+                                        //     payload or a payload that can't be validated because
+                                        //     requisite data for the validation is missing
+                                        debug!(
+                                            "reth is syncing but all good to proceed withconsensus"
+                                        )
+                                    }
+                                    PayloadStatusEnum::Invalid { validation_error } => {
+                                        // From the Engine API spec:
+                                        // 8. Client software MUST respond to this method call in the
+                                        //    following way:
+                                        //   * {payloadStatus: {status: SYNCING, latestValidHash: null,
+                                        //   * validationError: null}, payloadId: null} if
+                                        //     forkchoiceState.headBlockHash references an unknown
+                                        //     payload or a payload that can't be validated because
+                                        //     requisite data for the validation is missing
+                                        debug!("error in payload {validation_error}")
+                                        // TODO What to do here
+                                    }
+
+                                    PayloadStatusEnum::Accepted => {
+                                        debug!("payload accepted")
+                                        // TODO Same as invalid
+                                    }
+
+                                    PayloadStatusEnum::Valid => {
+                                        debug!("payload valid")
+                                    }
+                                }
+
+                                // TODO @Jasmina - check if state is initialized , if not set state.latest_height
+                                // TODO @Jasmina latest_block should be in shim layer store at this point. And we do not need to retrieve it from
+                                // consensus.
+                                state.current_height = start_height;
+                                state.latest_block = Some(latest_block_candidate);
+                                info!("latest_block latest_block_cand")
+                            }
+                            None => {
+                                error!("THIS MEANS WE HAVE START height UT LOST STATE ")
+                            }
+                        }
+                    }
                     None => {
                         // There was no decided value in the store, so start frm default hegiht
                         start_height = Height::default();
+                        // TODO Unify this with code above @Jasmina
+                        // Get the genesis block from the execution engine
+                        let genesis_block = engine
+                            .eth
+                            .get_block_by_number("earliest")
+                            .await?
+                            .expect("Genesis block must exist");
+                        debug!("👉 genesis_block: {:?}", genesis_block);
+                        state.latest_block = Some(genesis_block);
+                        let genesis_validator_set = read_validators_from_contract(
+                            engine.eth.url().as_ref(),
+                            &genesis_block.block_hash,
+                        )
+                        .await?;
+                        debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
+                        state.set_validator_set(genesis_validator_set);
                     }
                 }
-
-                // If there was somethign stored in the store for height, we should be able to retrieve
-                // block data as well.
-                let latest_block_candidate_from_store =
-                    get_lates_block_candidate(state, start_height).await;
-
-                match latest_block_candidate_from_store {
-                    Some(latest_block_candidate) => {
-                        let payload_status = engine
-                            .send_forkchoice_updated(latest_block_candidate.block_hash)
-                            .await?;
-
-                        match payload_status.status {
-                            // PayloadStatusEnum::Valid => Ok(),
-                            PayloadStatusEnum::Syncing => {
-                                // From the Engine API spec:
-                                // 8. Client software MUST respond to this method call in the
-                                //    following way:
-                                //   * {payloadStatus: {status: SYNCING, latestValidHash: null,
-                                //   * validationError: null}, payloadId: null} if
-                                //     forkchoiceState.headBlockHash references an unknown
-                                //     payload or a payload that can't be validated because
-                                //     requisite data for the validation is missing
-                                debug!("reth is syncing but all good to proceed withconsensus")
-                            }
-                            PayloadStatusEnum::Invalid { validation_error } => {
-                                // From the Engine API spec:
-                                // 8. Client software MUST respond to this method call in the
-                                //    following way:
-                                //   * {payloadStatus: {status: SYNCING, latestValidHash: null,
-                                //   * validationError: null}, payloadId: null} if
-                                //     forkchoiceState.headBlockHash references an unknown
-                                //     payload or a payload that can't be validated because
-                                //     requisite data for the validation is missing
-                                debug!("error in payload {validation_error}")
-                                // TODO What to do here
-                            }
-
-                            PayloadStatusEnum::Accepted => {
-                                debug!("payload accepted")
-                                // TODO Same as invalid
-                            }
-
-                            PayloadStatusEnum::Valid => {
-                                debug!("payload valid")
-                            }
-                        }
-
-                        // TODO @Jasmina - check if state is initialized , if not set state.latest_height
-                        // TODO @Jasmina latest_block should be in shim layer store at this point. And we do not need to retrieve it from
-                        // consensus.
-                        state.current_height = start_height;
-                        state.latest_block = Some(latest_block_candidate);
-                        info!("latest_block latest_block_cand")
-                    }
-                    None => {}
-                }
-
-                // TODO Unify this with code above @Jasmina
-                // Get the genesis block from the execution engine
-                let genesis_block = engine
-                    .eth
-                    .get_block_by_number("earliest")
-                    .await?
-                    .expect("Genesis block must exist");
-                debug!("👉 genesis_block: {:?}", genesis_block);
-                state.latest_block = Some(genesis_block);
-
-                let genesis_validator_set = read_validators_from_contract(
-                    engine.eth.url().as_ref(),
-                    &genesis_block.block_hash,
-                )
-                .await?;
-                debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
-                state.set_validator_set(genesis_validator_set);
 
                 // We can simply respond by telling the engine to start consensus
                 // at the current height, which is initially 1
-                if reply.send((start_height, val_set)).is_err() {
+                if reply
+                    .send((start_height, state.get_validator_set().clone()))
+                    .is_err()
+                {
                     error!("Failed to send ConsensusReady reply");
                 }
             }

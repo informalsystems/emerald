@@ -83,7 +83,7 @@ function exit_and_cleanup {
 function wait_for_reth {
     NODE_PORT=$1
     echo "Waiting for reth node at port $NODE_PORT to reach height 1..."
-    echo "trying 10 times"
+    echo "trying 50 times"
     for i in $(seq 1 10); do
         BLOCK_NUMBER=$(cast block-number --rpc-url 127.0.0.1:$NODE_PORT)
         if [[ $BLOCK_NUMBER -ge 1 ]]; then

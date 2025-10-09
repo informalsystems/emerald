@@ -22,7 +22,6 @@ pub enum ElNodeType {
     Custom,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MalakethConfig {
     /// A custom human-readable name for this node

@@ -268,7 +268,7 @@ pub async fn run(
 
                 // let latest_block = state.latest_block.expect("Head block hash is not set");
                 let execution_payload = engine.generate_block(&state.latest_block).await?;
-                match (state.latest_block) {
+                match state.latest_block {
                     Some(_) => {}
                     None => {
                         state.latest_block = Some(ExecutionBlock {

@@ -11,8 +11,10 @@ pub use malachitebft_config::{
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum ElNodeType {
     /// No pruning - keeps all historical data
+    #[default]
     Archive,
     /// Standard pruning - keeps recent data based on distance
     Full,
@@ -20,11 +22,6 @@ pub enum ElNodeType {
     Custom,
 }
 
-impl Default for ElNodeType {
-    fn default() -> Self {
-        ElNodeType::Archive
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MalakethConfig {

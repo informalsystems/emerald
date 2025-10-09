@@ -48,8 +48,8 @@ jobs:
       - name: Run malaketh
         run: |
           cargo build
-          ./scripts/generate_testnet_config.sh 3
-          cargo run --bin malachitebft-eth-app -- testnet --home nodes --testnet-config ${HOME}/.testnet/testnet_config.toml
+          ./scripts/generate_testnet_config.sh --nodes 3 --testnet-config-dir .testnet
+          cargo run --bin malachitebft-eth-app -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
           ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin malachitebft-eth-app show-pubkey {} > nodes/validator_public_keys.txt
           cargo run --bin malachitebft-eth-utils genesis --public-keys-file ./nodes/validator_public_keys.txt
           docker compose up -d

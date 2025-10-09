@@ -2,6 +2,7 @@ use alloy_provider::ProviderBuilder;
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre};
 use ed25519_consensus::VerificationKey;
+
 use ssz::{Decode, Encode};
 use tracing::{debug, error, info};
 

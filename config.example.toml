@@ -1,0 +1,14 @@
+# This is an example configuration for Malaketh. It is meant to be
+# used as a reference.
+
+# Moniker prefix used when creating the Malachite configuration file
+moniker = "test-0"
+
+# RPC endpoint for Etherium
+execution_authrpc_address = "http://localhost:8545"
+
+# RPC endpoint for Engine
+engine_authrpc_address = "http://localhost:8551"
+
+# Path of the JWT token file
+jwt_token_path = "./assets/jwtsecret"

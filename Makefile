@@ -1,10 +1,11 @@
 all: clean build
-	cargo run --bin malachitebft-eth-app -- testnet --nodes 3 --home nodes --config .testnet/config
+	./scripts/generate_testnet_config.sh --nodes 3 --testnet-config-dir .testnet
+	cargo run --bin malachitebft-eth-app -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin malachitebft-eth-app show-pubkey {} > nodes/validator_public_keys.txt
 	cargo run --bin malachitebft-eth-utils genesis --public-keys-file ./nodes/validator_public_keys.txt
 	docker compose up -d
 	./scripts/add_peers.sh
-	echo 👉 Grafana dashboard is available at http://localhost:3000
+	@echo 👉 Grafana dashboard is available at http://localhost:3000
 	bash scripts/spawn.bash --nodes 3 --home nodes
 
 build:

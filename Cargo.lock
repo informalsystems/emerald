@@ -4373,6 +4373,7 @@ dependencies = [
  "sha3",
  "thiserror 2.0.12",
  "tokio",
+ "toml",
  "tracing",
  "url",
 ]

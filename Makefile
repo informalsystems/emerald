@@ -10,8 +10,7 @@ all: clean build
 
 build:
 	cargo build
-	cd ./solidity &&
-	forge build
+	cd ./solidity && forge build
 
 stop:
 	docker compose down

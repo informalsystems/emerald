@@ -14,6 +14,7 @@ malachitebft-core-types.workspace = true
 malachitebft-metrics.workspace = true
 malachitebft-config.workspace = true
 malachitebft-app.workspace = true
+malachitebft-signing-ed25519 = { workspace = true, features = ["serde"] }
 
 axum = { workspace = true }
 bytesize = { workspace = true }
@@ -21,6 +22,7 @@ clap = { workspace = true, features = ["derive", "env"] }
 color-eyre = { workspace = true }
 config = { workspace = true }
 directories = { workspace = true }
+hex = "0.4"
 itertools = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 thiserror = { workspace = true }

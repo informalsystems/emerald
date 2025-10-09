@@ -1,4 +1,4 @@
-name: Test
+name: Malaketh CI
 
 on:
   merge_group:
@@ -25,8 +25,8 @@ env:
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
-  unit:
-    name: Unit Tests
+  malaketh:
+    name: Malaketh Block Production
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -46,10 +46,12 @@ jobs:
       - name: Run Forge build
         working-directory: ./solidity
         run: forge build
-      - name: Run tests
+      - name: Run malaketh
         run: |
-          cargo nextest run \
-            --workspace \
-            --all-features \
-            --no-fail-fast \
-            --failure-output final
+          cargo build
+          cargo run --bin malachitebft-eth-app -- testnet --nodes 3 --home nodes --config .testnet/config
+          ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin malachitebft-eth-app show-pubkey {} > nodes/validator_public_keys.txt
+          cargo run --bin malachitebft-eth-utils genesis --public-keys-file ./nodes/validator_public_keys.txt
+          docker compose up -d
+          ./scripts/add_peers.sh
+          bash scripts/spawn.bash --nodes 3 --home nodes --no-wait

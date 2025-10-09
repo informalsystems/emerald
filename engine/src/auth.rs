@@ -52,7 +52,7 @@ mod tests {
     #[test]
     fn test_roundtrip() {
         let secret = JwtSecret::random();
-        let auth = Auth::new(secret.clone());
+        let auth = Auth::new(secret);
         let claims = auth.generate_claims_at_timestamp();
         let token = auth.generate_token_with_claims(&claims).unwrap();
 

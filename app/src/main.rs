@@ -54,6 +54,7 @@ fn main() -> Result<()> {
         Commands::Start(cmd) => start(&args, cmd, logging),
         Commands::Init(cmd) => init(&args, cmd, logging),
         Commands::Testnet(cmd) => testnet(&args, cmd, logging),
+        Commands::ShowPubkey(cmd) => cmd.run(),
         _ => unimplemented!(),
     }
 }

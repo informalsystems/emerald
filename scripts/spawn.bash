@@ -59,7 +59,7 @@ for NODE in $(seq 0 $((NODES_COUNT - 1))); do
     mkdir -p "$NODES_HOME/$NODE/traces"
 
     echo "[Node $NODE] Spawning node..."
-    cargo run --bin $APP_BINARY -q -- start --home "$NODES_HOME/$NODE" > "$NODES_HOME/$NODE/logs/node.log" 2>&1 &
+    cargo run --bin $APP_BINARY -q -- start --home "$NODES_HOME/$NODE" --config ".testnet/config/$NODE"/config.toml > "$NODES_HOME/$NODE/logs/node.log" 2>&1 &
     echo $! > "$NODES_HOME/$NODE/node.pid"
     echo "[Node $NODE] Logs are available at: $NODES_HOME/$NODE/logs/node.log"
 done

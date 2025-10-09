@@ -1,5 +1,6 @@
 //! Distributed testnet command
 
+use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
@@ -87,7 +88,13 @@ pub struct DistributedTestnetCmd {
 
 impl DistributedTestnetCmd {
     /// Execute the testnet command
-    pub fn run<N>(&self, node: &N, home_dir: &Path, logging: LoggingConfig) -> Result<()>
+    pub fn run<N>(
+        &self,
+        node: &N,
+        home_dir: &Path,
+        malaketh_config_dir: &Path,
+        logging: LoggingConfig,
+    ) -> Result<()>
     where
         N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
     {
@@ -100,6 +107,7 @@ impl DistributedTestnetCmd {
             node,
             self.nodes,
             home_dir,
+            malaketh_config_dir,
             runtime,
             self.machines.clone(),
             self.enable_discovery,
@@ -127,6 +135,7 @@ fn distributed_testnet<N>(
     node: &N,
     nodes: usize,
     home_dir: &Path,
+    malaketh_config_dir: &Path,
     runtime: RuntimeConfig,
     machines: Vec<String>,
     enable_discovery: bool,
@@ -155,6 +164,27 @@ where
             .join((i % machines.len()).to_string())
             .join(i.to_string());
 
+        let node_malaketh_config_file = malaketh_config_dir
+            .join((i % machines.len()).to_string())
+            .join(i.to_string())
+            .join("config.toml");
+        let malaketh_config_content =
+            fs::read_to_string(&node_malaketh_config_file).map_err(|e| {
+                eyre!(
+                    "Failed to read {} file content. Details {e}",
+                    node_malaketh_config_file.display()
+                )
+            })?;
+        let malaketh_config = toml::from_str::<crate::config::MalakethConfig>(
+            &malaketh_config_content,
+        )
+        .map_err(|e| {
+            eyre!(
+                "Failed to parse TOML file {}. Details {e}",
+                node_malaketh_config_file.display()
+            )
+        })?;
+
         info!(
             id = %i,
             home = %node_home_dir.display(),
@@ -182,6 +212,7 @@ where
                 bootstrap_set_size,
                 transport,
                 logging,
+                malaketh_config,
             ),
         )?;
 
@@ -218,6 +249,7 @@ fn generate_distributed_config(
     bootstrap_set_size: usize,
     transport: TransportProtocol,
     logging: LoggingConfig,
+    malaketh_config: MalakethConfig,
 ) -> Config {
     let machine = machines[index % machines.len()].clone();
     let consensus_port = CONSENSUS_BASE_PORT + (index / machines.len());
@@ -225,7 +257,7 @@ fn generate_distributed_config(
     let metrics_port = METRICS_BASE_PORT + (index / machines.len());
 
     Config {
-        moniker: format!("test-{index}"),
+        moniker: malaketh_config.moniker,
         consensus: ConsensusConfig {
             timeouts: TimeoutConfig::default(),
             p2p: P2pConfig {

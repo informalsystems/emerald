@@ -1,5 +1,6 @@
 //! Testnet command
 
+use std::fs;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -105,7 +106,13 @@ pub struct TestnetCmd {
 
 impl TestnetCmd {
     /// Execute the testnet command
-    pub fn run<N>(&self, node: &N, home_dir: &Path, logging: LoggingConfig) -> Result<()>
+    pub fn run<N>(
+        &self,
+        node: &N,
+        home_dir: &Path,
+        malaketh_config_dir: &Path,
+        logging: LoggingConfig,
+    ) -> Result<()>
     where
         N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
     {
@@ -118,6 +125,7 @@ impl TestnetCmd {
             node,
             self.nodes,
             home_dir,
+            malaketh_config_dir,
             runtime,
             self.enable_discovery,
             self.bootstrap_protocol,
@@ -138,6 +146,7 @@ pub fn testnet<N>(
     node: &N,
     nodes: usize,
     home_dir: &Path,
+    malaketh_config_dir: &Path,
     runtime: RuntimeConfig,
     enable_discovery: bool,
     bootstrap_protocol: BootstrapProtocol,
@@ -163,15 +172,26 @@ where
         // Use home directory `home_dir/<index>`
         let node_home_dir = home_dir.join(i.to_string());
 
+        // Use malaketh config directory `malaketh_config_dir/<index>/config.toml`
+        let node_malaketh_config_dir = malaketh_config_dir.join(i.to_string());
+        let node_malaketh_config_file = node_malaketh_config_dir.join("config.toml");
+        let malaketh_config_content = fs::read_to_string(&node_malaketh_config_file)
+            .map_err(|e| Error::LoadFile(node_malaketh_config_file.to_path_buf(), e))?;
+        let malaketh_config =
+            toml::from_str::<crate::config::MalakethConfig>(&malaketh_config_content)
+                .map_err(Error::FromTOML)?;
+
         info!(
             id = %i,
             home = %node_home_dir.display(),
+            malaketh_config = %node_malaketh_config_dir.display(),
             "Generating configuration for node..."
         );
 
         // Set the destination folder
         let args = Args {
             home: Some(node_home_dir),
+            config: Some(node_malaketh_config_dir),
             ..Args::default()
         };
 
@@ -190,6 +210,7 @@ where
                 ephemeral_connection_timeout_ms,
                 transport,
                 logging,
+                malaketh_config,
             ),
         )?;
 

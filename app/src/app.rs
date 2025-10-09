@@ -1,6 +1,7 @@
+use alloy_provider::ProviderBuilder;
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre};
-use malachitebft_app_channel::app::metrics::prometheus::metrics::info;
+use ed25519_consensus::VerificationKey;
 use ssz::{Decode, Encode};
 use tracing::{debug, error, info};
 
@@ -13,12 +14,66 @@ use malachitebft_app_channel::app::types::sync::RawDecidedValue;
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
 use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
 
+use alloy_primitives::{address, Address};
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::{Block, BlockHash, Height, TestContext};
+use malachitebft_eth_types::{
+    Block, BlockHash, Height, MalakethContext, PublicKey, Validator, ValidatorSet,
+};
+
+const GENESIS_VALIDATOR_MANAGER_ACCOUNT: Address =
+    address!("0x0000000000000000000000000000000000002000");
+
+alloy_sol_types::sol!(
+    #[derive(Debug)]
+    #[sol(rpc)]
+    ValidatorManager,
+    "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
+);
 
 use crate::state::{decode_value, State};
+
+pub async fn read_validators_from_contract(
+    eth_url: &str,
+    block_hash: &BlockHash,
+) -> eyre::Result<ValidatorSet> {
+    let provider = ProviderBuilder::new().on_builtin(eth_url).await?;
+
+    let validator_manager_contract =
+        ValidatorManager::new(GENESIS_VALIDATOR_MANAGER_ACCOUNT, provider);
+
+    let genesis_validator_set_sol = validator_manager_contract
+        .getValidators()
+        .block((*block_hash).into())
+        .call()
+        .await?;
+
+    Ok(ValidatorSet::new(
+        genesis_validator_set_sol
+            .validators
+            .into_iter()
+            .map(
+                |ValidatorManager::ValidatorInfo {
+                     validatorKey,
+                     power,
+                 }| {
+                    let pub_key_bytes = validatorKey.to_be_bytes::<32>();
+                    let pub_key = PublicKey::new(
+                        VerificationKey::try_from(pub_key_bytes)
+                            .expect("Failed to convert validator key bytes to VerificationKey"),
+                    );
+                    Validator::new(
+                        pub_key,
+                        power
+                            .try_into()
+                            .expect("Failed to convert validator power to VotingPower"),
+                    )
+                },
+            )
+            .collect::<Vec<_>>(),
+    ))
+}
 
 pub async fn get_lates_block_candidate(
     state: &mut State,
@@ -44,10 +99,9 @@ pub async fn get_lates_block_candidate(
     .expect("there should not be an error here");
     return Some(latest_block);
 }
-
 pub async fn run(
     state: &mut State,
-    channels: &mut Channels<TestContext>,
+    channels: &mut Channels<MalakethContext>,
     engine: Engine,
 ) -> eyre::Result<()> {
     while let Some(msg) = channels.consensus.recv().await {
@@ -136,6 +190,24 @@ pub async fn run(
                     None => {}
                 }
 
+                // TODO Unify this with code above @Jasmina
+                // Get the genesis block from the execution engine
+                let genesis_block = engine
+                    .eth
+                    .get_block_by_number("earliest")
+                    .await?
+                    .expect("Genesis block must exist");
+                debug!("👉 genesis_block: {:?}", genesis_block);
+                state.latest_block = Some(genesis_block);
+
+                let genesis_validator_set = read_validators_from_contract(
+                    engine.eth.url().as_ref(),
+                    &genesis_block.block_hash,
+                )
+                .await?;
+                debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
+                state.set_validator_set(genesis_validator_set);
+
                 // We can simply respond by telling the engine to start consensus
                 // at the current height, which is initially 1
                 if reply.send((start_height, val_set)).is_err() {
@@ -161,7 +233,7 @@ pub async fn run(
 
                 // TODO: Add pending parts validation
                 // For now, send empty proposals list to consensus
-                let proposals: Vec<ProposedValue<TestContext>> = Vec::new();
+                let proposals: Vec<ProposedValue<MalakethContext>> = Vec::new();
                 info!(%height, %round, "Found {} undecided proposals", proposals.len());
 
                 if reply_value.send(proposals).is_err() {
@@ -210,7 +282,7 @@ pub async fn run(
                 debug!("🎁 block size: {:?}, height: {}", bytes.len(), height);
 
                 // Prepare block proposal.
-                let proposal: LocallyProposedValue<TestContext> =
+                let proposal: LocallyProposedValue<MalakethContext> =
                     state.propose_value(height, round, bytes.clone()).await?;
 
                 // When the node is not the proposer, store the block data,
@@ -368,13 +440,19 @@ pub async fn run(
                 state.latest_block = Some(ExecutionBlock {
                     block_hash: new_block_hash,
                     block_number: new_block_number,
-                    parent_hash: latest_valid_hash,
+                    parent_hash: latest_valid_hash, // FIXME: should be parent_block_hash ?
                     timestamp: new_block_timestamp,
                     prev_randao: new_block_prev_randao,
                 });
 
+                let new_validator_set =
+                    read_validators_from_contract(engine.eth.url().as_ref(), &latest_valid_hash)
+                        .await?;
+                debug!("🌈 Got validator set: {:?}", new_validator_set);
+                state.set_validator_set(new_validator_set);
+
                 // Pause briefly before starting next height, just to make following the logs easier
-                // tokio::time::sleep(Duration::from_millis(500)).await;
+                // tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
                 // And then we instruct consensus to start the next height
                 if reply

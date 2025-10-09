@@ -60,3 +60,8 @@ pub fn load_config(path: impl AsRef<Path>, prefix: Option<&str>) -> eyre::Result
         .try_deserialize()
         .map_err(Into::into)
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MalakethConfig {
+    pub moniker: String,
+}

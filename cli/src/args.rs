@@ -15,11 +15,13 @@ use malachitebft_config::{LogFormat, LogLevel};
 
 use crate::cmd::distributed_testnet::DistributedTestnetCmd;
 use crate::cmd::init::InitCmd;
+use crate::cmd::show_pubkey::ShowPubkeyCmd;
 use crate::cmd::start::StartCmd;
 use crate::cmd::testnet::TestnetCmd;
 use crate::error::Error;
 
 const APP_FOLDER: &str = ".malachite";
+const MALAKETH_FOLDER: &str = ".malaketh";
 const CONFIG_FILE: &str = "config.toml";
 const GENESIS_FILE: &str = "genesis.json";
 const PRIV_VALIDATOR_KEY_FILE: &str = "priv_validator_key.json";
@@ -39,6 +41,10 @@ pub struct Args {
     #[arg(long, global = true, value_name = "LOG_FORMAT")]
     pub log_format: Option<LogFormat>,
 
+    /// Malaketch configuration file (default: `~/.malaketh/config`)
+    #[arg(long, global = true, value_name = "CONFIG_FILE")]
+    pub config: Option<PathBuf>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -56,6 +62,9 @@ pub enum Commands {
 
     /// Generate distributed testnet configuration
     DistributedTestnet(DistributedTestnetCmd),
+
+    /// Extract Ed25519 public key from Tendermint private key file
+    ShowPubkey(ShowPubkeyCmd),
 }
 
 impl Default for Commands {
@@ -80,6 +89,25 @@ impl Args {
                 .home_dir()
                 .join(APP_FOLDER)),
         }
+    }
+
+    /// get_malaketch_config_dir returns the application configuration directory.
+    /// Typically, `$HOME/.malaketh/config`.
+    pub fn get_malaketch_config_dir(&self) -> Result<PathBuf, Error> {
+        match self.config {
+            Some(ref path) => Ok(path.clone()),
+            None => Ok(BaseDirs::new()
+                .ok_or(Error::DirPath)?
+                .home_dir()
+                .join(MALAKETH_FOLDER)
+                .join("config")),
+        }
+    }
+
+    /// get_malaketch_config_file returns the Malaketh configuration file path based on the
+    /// command-line arguments and the configuration folder.
+    pub fn get_malaketch_config_file(&self) -> Result<PathBuf, Error> {
+        Ok(self.get_malaketch_config_dir()?.join("config.toml"))
     }
 
     /// get_config_dir returns the configuration folder based on the home folder.

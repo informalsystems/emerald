@@ -1,5 +1,6 @@
 //! Init command
 
+use std::fs;
 use std::path::Path;
 
 use crate::config::Config;
@@ -62,12 +63,18 @@ impl InitCmd {
         node: &N,
         config_file: &Path,
         genesis_file: &Path,
+        malaketh_config_file: &Path,
         priv_validator_key_file: &Path,
         logging: LoggingConfig,
     ) -> Result<(), Error>
     where
         N: Node + CanMakePrivateKeyFile + CanGeneratePrivateKey + CanMakeGenesis,
     {
+        let malaketh_config_content = fs::read_to_string(malaketh_config_file)
+            .map_err(|e| Error::LoadFile(malaketh_config_file.to_path_buf(), e))?;
+        let malaketh_config =
+            toml::from_str::<crate::config::MalakethConfig>(&malaketh_config_content)
+                .map_err(Error::FromTOML)?;
         let config = &generate_config(
             0,
             1,
@@ -80,6 +87,7 @@ impl InitCmd {
             self.ephemeral_connection_timeout_ms,
             TransportProtocol::Tcp,
             logging,
+            malaketh_config,
         );
 
         init(

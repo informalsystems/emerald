@@ -17,8 +17,8 @@ use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, Propose
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::{
-    Address, Ed25519Provider, Genesis, Height, ProposalData, ProposalFin, ProposalInit,
-    ProposalPart, TestContext, ValidatorSet, Value,
+    Address, Ed25519Provider, Genesis, Height, MalakethContext, ProposalData, ProposalFin,
+    ProposalInit, ProposalPart, ValidatorSet, Value,
 };
 
 use crate::store::{DecidedValue, Store};
@@ -35,8 +35,7 @@ const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB
 /// Contains information about current height, round, proposals and blocks
 pub struct State {
     #[allow(dead_code)]
-    ctx: TestContext,
-    genesis: Genesis,
+    ctx: MalakethContext,
     signing_provider: Ed25519Provider,
     address: Address,
     pub store: Store,
@@ -50,6 +49,8 @@ pub struct State {
     pub current_proposer: Option<Address>,
 
     pub latest_block: Option<ExecutionBlock>,
+
+    validator_set: Option<ValidatorSet>,
 
     // For stats
     pub txs_count: u64,
@@ -85,15 +86,14 @@ fn seed_from_address(address: &Address) -> u64 {
 impl State {
     /// Creates a new State instance with the given validator address and starting height
     pub fn new(
-        genesis: Genesis,
-        ctx: TestContext,
+        _genesis: Genesis, // all genesis data is in EVM via genesis.json
+        ctx: MalakethContext,
         signing_provider: Ed25519Provider,
         address: Address,
         height: Height,
         store: Store,
     ) -> Self {
         Self {
-            genesis,
             ctx,
             signing_provider,
             current_height: height,
@@ -106,6 +106,7 @@ impl State {
             rng: StdRng::seed_from_u64(seed_from_address(&address)),
 
             latest_block: None,
+            validator_set: None,
 
             txs_count: 0,
             chain_bytes: 0,
@@ -127,7 +128,7 @@ impl State {
         &mut self,
         from: PeerId,
         part: StreamMessage<ProposalPart>,
-    ) -> eyre::Result<Option<ProposedValue<TestContext>>> {
+    ) -> eyre::Result<Option<ProposedValue<MalakethContext>>> {
         let sequence = part.sequence;
 
         // Check if we have a full proposal - for now we are assuming that the network layer will stop spam/DOS
@@ -205,7 +206,7 @@ impl State {
     /// and moving to the next height
     pub async fn commit(
         &mut self,
-        certificate: CommitCertificate<TestContext>,
+        certificate: CommitCertificate<MalakethContext>,
     ) -> eyre::Result<()> {
         info!(
             height = %certificate.height,
@@ -306,7 +307,7 @@ impl State {
         height: Height,
         round: Round,
         data: Bytes,
-    ) -> eyre::Result<LocallyProposedValue<TestContext>> {
+    ) -> eyre::Result<LocallyProposedValue<MalakethContext>> {
         assert_eq!(height, self.current_height);
         assert_eq!(round, self.current_round);
 
@@ -347,7 +348,7 @@ impl State {
     /// Updates internal sequence number and current proposal.
     pub fn stream_proposal(
         &mut self,
-        value: LocallyProposedValue<TestContext>,
+        value: LocallyProposedValue<MalakethContext>,
         data: Bytes,
         pol_round: Round,
     ) -> impl Iterator<Item = StreamMessage<ProposalPart>> {
@@ -370,7 +371,7 @@ impl State {
 
     fn make_proposal_parts(
         &self,
-        value: LocallyProposedValue<TestContext>,
+        value: LocallyProposedValue<MalakethContext>,
         data: Bytes,
         pol_round: Round,
     ) -> Vec<ProposalPart> {
@@ -410,7 +411,14 @@ impl State {
 
     /// Returns the set of validators.
     pub fn get_validator_set(&self) -> &ValidatorSet {
-        &self.genesis.validator_set
+        self.validator_set
+            .as_ref()
+            .expect("Validator set must be initialized before use")
+    }
+
+    /// Sets the validator set.
+    pub fn set_validator_set(&mut self, validator_set: ValidatorSet) {
+        self.validator_set = Some(validator_set);
     }
 
     /// Verifies the signature of the proposal.
@@ -461,7 +469,7 @@ impl State {
 /// Re-assemble a [`ProposedValue`] from its [`ProposalParts`].
 ///
 /// This is done by multiplying all the factors in the parts.
-fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<TestContext>, Bytes) {
+fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<MalakethContext>, Bytes) {
     // Get the init part to extract pol_round
     let init = parts
         .parts

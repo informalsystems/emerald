@@ -54,6 +54,7 @@ fn main() -> Result<()> {
         Commands::Start(cmd) => start(&args, cmd, logging),
         Commands::Init(cmd) => init(&args, cmd, logging),
         Commands::Testnet(cmd) => testnet(&args, cmd, logging),
+        Commands::ShowPubkey(cmd) => cmd.run(),
         _ => unimplemented!(),
     }
 }
@@ -106,6 +107,7 @@ fn init(args: &Args, cmd: &InitCmd, logging: config::LoggingConfig) -> Result<()
         &app,
         &args.get_config_file_path()?,
         &args.get_genesis_file_path()?,
+        &args.get_malaketch_config_file()?,
         &args.get_priv_validator_key_file_path()?,
         logging,
     )
@@ -122,6 +124,11 @@ fn testnet(args: &Args, cmd: &TestnetCmd, logging: config::LoggingConfig) -> Res
         start_height: Some(Height::new(1)), // We always start at height 1
     };
 
-    cmd.run(&app, &args.get_home_dir()?, logging)
-        .map_err(|error| eyre!("Failed to run testnet command {:?}", error))
+    cmd.run(
+        &app,
+        &args.get_home_dir()?,
+        &args.get_malaketch_config_dir()?,
+        logging,
+    )
+    .map_err(|error| eyre!("Failed to run testnet command {:?}", error))
 }

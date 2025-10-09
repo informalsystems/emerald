@@ -27,8 +27,13 @@ pub struct MalakethConfig {
     /// A custom human-readable name for this node
     pub moniker: String,
 
+    /// RPC endpoint of Ethereum execution client
     pub execution_authrpc_address: String,
+
+    /// RPC endpoint of Ethereum Engine API
     pub engine_authrpc_address: String,
+
+    /// Path of the JWT token file
     pub jwt_token_path: String,
 
     /// Maximum time to wait for execution client to sync before crashing

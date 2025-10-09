@@ -36,7 +36,6 @@ const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB
 pub struct State {
     #[allow(dead_code)]
     ctx: MalakethContext,
-    genesis: Genesis,
     signing_provider: Ed25519Provider,
     address: Address,
     store: Store,
@@ -50,6 +49,8 @@ pub struct State {
     pub current_proposer: Option<Address>,
 
     pub latest_block: Option<ExecutionBlock>,
+
+    validator_set: Option<ValidatorSet>,
 
     // For stats
     pub txs_count: u64,
@@ -85,7 +86,7 @@ fn seed_from_address(address: &Address) -> u64 {
 impl State {
     /// Creates a new State instance with the given validator address and starting height
     pub fn new(
-        genesis: Genesis,
+        _genesis: Genesis, // all genesis data is in EVM via genesis.json
         ctx: MalakethContext,
         signing_provider: Ed25519Provider,
         address: Address,
@@ -93,7 +94,6 @@ impl State {
         store: Store,
     ) -> Self {
         Self {
-            genesis,
             ctx,
             signing_provider,
             current_height: height,
@@ -106,6 +106,7 @@ impl State {
             rng: StdRng::seed_from_u64(seed_from_address(&address)),
 
             latest_block: None,
+            validator_set: None,
 
             txs_count: 0,
             chain_bytes: 0,
@@ -410,7 +411,14 @@ impl State {
 
     /// Returns the set of validators.
     pub fn get_validator_set(&self) -> &ValidatorSet {
-        &self.genesis.validator_set
+        self.validator_set
+            .as_ref()
+            .expect("Validator set must be initialized before use")
+    }
+
+    /// Sets the validator set.
+    pub fn set_validator_set(&mut self, validator_set: ValidatorSet) {
+        self.validator_set = Some(validator_set);
     }
 
     /// Verifies the signature of the proposal.

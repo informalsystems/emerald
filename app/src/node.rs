@@ -156,8 +156,13 @@ impl Node for App {
         let start_height = self.start_height.unwrap_or_default();
         let mut state = State::new(genesis, ctx, signing_provider, address, start_height, store);
 
-        let malaketh_config_content = fs::read_to_string(&self.malaketh_config_file)
-            .map_err(|e| eyre::eyre!("Failed to read malaketh config file `{}`: {e}", self.malaketh_config_file.display()))?;
+        let malaketh_config_content =
+            fs::read_to_string(&self.malaketh_config_file).map_err(|e| {
+                eyre::eyre!(
+                    "Failed to read malaketh config file `{}`: {e}",
+                    self.malaketh_config_file.display()
+                )
+            })?;
         let malaketh_config =
             toml::from_str::<crate::config::MalakethConfig>(&malaketh_config_content)
                 .map_err(|e| eyre::eyre!("Failed to parse malaketh config file: {e}"))?;

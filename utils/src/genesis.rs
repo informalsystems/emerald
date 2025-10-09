@@ -1,43 +1,43 @@
 use alloy_genesis::{ChainConfig, Genesis, GenesisAccount};
-use alloy_primitives::{Address, U256};
+use alloy_primitives::{Address, B256, U256};
 use alloy_signer_local::{coins_bip39::English, LocalSigner, MnemonicBuilder};
 use chrono::NaiveDate;
 use color_eyre::eyre::Result;
 use k256::ecdsa::SigningKey;
 use std::{collections::BTreeMap, str::FromStr};
+use tracing::debug;
 
-/// Test mnemonics for wallet generation
-const TEST_MNEMONICS: [&str; 3] = [
-    "test test test test test test test test test test test junk",
-    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-    "zero zero zero zero zero zero zero zero zero zero zero zoo",
-];
+use crate::validator_manager::contract::GENESIS_VALIDATOR_MANAGER_ACCOUNT;
+use crate::validator_manager::{contract::ValidatorManager, generate_storage_data, Validator};
+
+/// Test mnemonic for wallet generation
+const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
 /// Create a signer from a mnemonic.
-pub(crate) fn make_signer(mnemonic: &str) -> LocalSigner<SigningKey> {
+pub(crate) fn make_signer(index: u64) -> LocalSigner<SigningKey> {
     MnemonicBuilder::<English>::default()
-        .phrase(mnemonic)
+        .phrase(TEST_MNEMONIC)
+        .derivation_path(format!("m/44'/60'/0'/0/{index}"))
+        .expect("Failed to set derivation path")
         .build()
         .expect("Failed to create wallet")
 }
 
 pub(crate) fn make_signers() -> Vec<LocalSigner<SigningKey>> {
-    TEST_MNEMONICS
-        .iter()
-        .map(|&mnemonic| make_signer(mnemonic))
-        .collect()
+    (0..3).map(make_signer).collect()
 }
 
-pub(crate) fn generate_genesis() -> Result<()> {
-    let genesis_file = "./assets/genesis.json";
-
+pub(crate) fn generate_genesis(public_keys_file: &str, genesis_output_file: &str) -> Result<()> {
     // Create signers and get their addresses
     let signers = make_signers();
     let signer_addresses: Vec<Address> = signers.iter().map(|signer| signer.address()).collect();
 
-    println!("Using signer addresses:");
-    for (i, addr) in signer_addresses.iter().enumerate() {
-        println!("Signer {i}: {addr}");
+    debug!("Using signer addresses:");
+    for (i, (signer, addr)) in signers.iter().zip(signer_addresses.iter()).enumerate() {
+        debug!(
+            "Signer {i}: {addr} ({})",
+            B256::from_slice(&signer.credential().to_bytes())
+        );
     }
 
     // Create genesis configuration with pre-funded accounts
@@ -52,10 +52,30 @@ pub(crate) fn generate_genesis() -> Result<()> {
         );
     }
 
+    let initial_validators = std::fs::read_to_string(public_keys_file)?
+        .lines()
+        .map(|line| {
+            U256::from_str(line.trim()).map(|key| Validator::from_public_key(key, U256::from(100)))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let storage = generate_storage_data(initial_validators, signer_addresses[0])?;
+
+    alloc.insert(
+        GENESIS_VALIDATOR_MANAGER_ACCOUNT,
+        GenesisAccount {
+            code: Some(ValidatorManager::DEPLOYED_BYTECODE.clone()),
+            storage: Some(storage),
+            ..Default::default()
+        },
+    );
+
     // The Ethereum Prague-Electra (Pectra) upgrade was activated on the mainnet
     // on May 7, 2025, at epoch 364,032.
-    let date = NaiveDate::from_ymd_opt(2025, 5, 7).unwrap();
-    let datetime = date.and_hms_opt(0, 0, 0).unwrap();
+    let date = NaiveDate::from_ymd_opt(2025, 5, 7).expect("Failed to create date for May 7, 2025");
+    let datetime = date
+        .and_hms_opt(0, 0, 0)
+        .expect("Failed to create datetime with 00:00:00");
     let valid_pectra_timestamp = datetime.and_utc().timestamp() as u64;
 
     // Create genesis configuration
@@ -90,8 +110,8 @@ pub(crate) fn generate_genesis() -> Result<()> {
 
     // Write genesis to file
     let genesis_json = serde_json::to_string_pretty(&genesis)?;
-    std::fs::write(genesis_file, genesis_json)?;
-    println!("Genesis configuration written to {genesis_file}");
+    std::fs::write(genesis_output_file, genesis_json)?;
+    debug!("Genesis configuration written to {genesis_output_file}");
 
     Ok(())
 }

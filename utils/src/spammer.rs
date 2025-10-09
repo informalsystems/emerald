@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::time::{self, sleep, Duration, Instant};
+use tracing::debug;
 
 /// A transaction spammer that sends Ethereum transactions at a controlled rate.
 /// Tracks and reports statistics on sent transactions.
@@ -110,7 +111,7 @@ impl Spammer {
         // Fetch latest nonce for the sender address.
         let address = self.signer.address();
         let latest_nonce = self.get_latest_nonce(address).await?;
-        println!("Spamming {address} starting from nonce={latest_nonce}");
+        debug!("Spamming {address} starting from nonce={latest_nonce}");
 
         // Initialize nonce and counters.
         let mut nonce = latest_nonce;
@@ -202,7 +203,7 @@ impl Spammer {
                     }
 
                     let pool_status: TxpoolStatus = self.client.rpc_request("txpool_status", json!([])).await?;
-                    println!("{stats_last_second}; {pool_status:?}");
+                    debug!("{stats_last_second}; {pool_status:?}");
 
                     // Update total, then reset last second stats
                     stats_total.add(&stats_last_second);
@@ -214,7 +215,7 @@ impl Spammer {
                 }
             }
         }
-        println!("Total: {stats_total}");
+        debug!("Total: {stats_total}");
         Ok(())
     }
 }

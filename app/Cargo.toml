@@ -17,6 +17,12 @@ malachitebft-eth-engine.workspace = true
 malachitebft-app-channel.workspace = true
 malachitebft-proto.workspace = true
 
+ed25519-consensus = "2.1.0"
+
+alloy-provider = { version = "0.11.1" }
+alloy-primitives = { workspace = true }
+alloy-contract = { workspace = true }
+alloy-sol-types = { workspace = true, features = ["json"]}
 alloy-consensus = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
 alloy-rpc-types-engine = { workspace = true }

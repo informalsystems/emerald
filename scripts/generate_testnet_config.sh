@@ -1,65 +1,100 @@
 #!/usr/bin/env bash
 
-set -e
+set -euo pipefail
 
-if [ "$#" -lt 1 ]; then
-  echo "Usage: $0 <number of nodes>" >&2
-  exit 2
+usage() {
+    cat <<EOF >&2
+Usage: $0 --nodes <number> --testnet-config-dir <path>
+
+Required arguments:
+    --nodes                Number of nodes to include in the generated config
+    --testnet-config-dir   Directory where the testnet configuration should be written
+EOF
+    exit 2
+}
+
+nodes=""
+testnet_config_dir=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --nodes)
+            [[ $# -ge 2 ]] || usage
+            nodes="$2"
+            shift 2
+            ;;
+        --nodes=*)
+            nodes="${1#*=}"
+            shift
+            ;;
+        --testnet-config-dir)
+            [[ $# -ge 2 ]] || usage
+            testnet_config_dir="$2"
+            shift 2
+            ;;
+        --testnet-config-dir=*)
+            testnet_config_dir="${1#*=}"
+            shift
+            ;;
+        -h|--help)
+            usage
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            usage
+            ;;
+    esac
+done
+
+if [[ -z "$nodes" || -z "$testnet_config_dir" ]]; then
+    usage
 fi
 
-nodes=$1
+if ! [[ "$nodes" =~ ^[0-9]+$ ]] || (( nodes <= 0 )); then
+    echo "--nodes must be a positive integer" >&2
+    exit 2
+fi
 
-TESTNET_DIR="$HOME/.testnet"
+TESTNET_DIR="$testnet_config_dir"
 
-ENGINE_PORT_0=8545
-AUTH_PORT_0=8551
+readonly ENGINE_PORTS=(8545 18545 28545)
+readonly AUTH_PORTS=(8551 18551 28551)
 
-ENGINE_PORT_1=18545
-AUTH_PORT_1=18551
+if (( nodes > ${#ENGINE_PORTS[@]} )); then
+    echo "This script currently supports up to ${#ENGINE_PORTS[@]} nodes" >&2
+    exit 2
+fi
 
-ENGINE_PORT_2=28545
-AUTH_PORT_2=28551
+mkdir -p "$TESTNET_DIR"
+mkdir -p "$TESTNET_DIR/config"
 
-mkdir -p $TESTNET_DIR
-mkdir -p $TESTNET_DIR/config
-
-cat > $TESTNET_DIR/testnet_config.toml <<EOF
+cat > "$TESTNET_DIR/testnet_config.toml" <<EOF
 nodes = $nodes
 deterministic = true
 
 EOF
 
-echo -n "configuration_paths = [ " >> $TESTNET_DIR/testnet_config.toml
+printf 'configuration_paths = [ ' >> "$TESTNET_DIR/testnet_config.toml"
 
 for ((i = 0; i < nodes; i++)); do
-    echo -n "\"$TESTNET_DIR/config/$i/config.toml\" " >> $TESTNET_DIR/testnet_config.toml
-if [ $i -lt $((nodes - 1)) ]; then
-    echo -n ","  >> $TESTNET_DIR/testnet_config.toml
-else
-    echo -n "]" >> $TESTNET_DIR/testnet_config.toml
-fi
+    printf '"%s/config/%d/config.toml"' "$TESTNET_DIR" "$i" >> "$TESTNET_DIR/testnet_config.toml"
+    if (( i < nodes - 1 )); then
+        printf ', ' >> "$TESTNET_DIR/testnet_config.toml"
+    else
+        printf ' ]\n' >> "$TESTNET_DIR/testnet_config.toml"
+    fi
 done
 
-mkdir -p $TESTNET_DIR/config/0
-cat > $TESTNET_DIR/config/0/config.toml <<EOF
-moniker = "test-0"
-execution_authrpc_address = "http://localhost:$ENGINE_PORT_0"
-engine_authrpc_address = "http://localhost:$AUTH_PORT_0"
+for ((i = 0; i < nodes; i++)); do
+    mkdir -p "$TESTNET_DIR/config/$i"
+    cat > "$TESTNET_DIR/config/$i/config.toml" <<EOF
+moniker = "test-$i"
+execution_authrpc_address = "http://localhost:${ENGINE_PORTS[i]}"
+engine_authrpc_address = "http://localhost:${AUTH_PORTS[i]}"
 jwt_token_path = "./assets/jwtsecret"
 EOF
-
-mkdir -p $TESTNET_DIR/config/1
-cat > $TESTNET_DIR/config/1/config.toml <<EOF
-moniker = "test-1"
-execution_authrpc_address = "http://localhost:$ENGINE_PORT_1"
-engine_authrpc_address = "http://localhost:$AUTH_PORT_1"
-jwt_token_path = "./assets/jwtsecret"
-EOF
-
-mkdir -p $TESTNET_DIR/config/2
-cat > $TESTNET_DIR/config/2/config.toml <<EOF
-moniker = "test-2"
-execution_authrpc_address = "http://localhost:$ENGINE_PORT_2"
-engine_authrpc_address = "http://localhost:$AUTH_PORT_2"
-jwt_token_path = "./assets/jwtsecret"
-EOF
+done

@@ -185,8 +185,6 @@ impl Node for App {
             )
         };
 
-        let malaketh_config = self.load_malaketh_config()?;
-
         let app_handle = tokio::spawn(async move {
             if let Err(e) =
                 crate::app::run(&mut state, &mut channels, engine, malaketh_config).await

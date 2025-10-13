@@ -136,18 +136,25 @@ pub async fn run(
 
                 // TODO: Add pending parts validation
                 // Try to get undecided proposals from storage, or use empty vector
-                let proposals: Vec<ProposedValue<MalakethContext>> = state
+                let proposals: Vec<ProposedValue<MalakethContext>> = match state
                     .store
                     .get_undecided_proposal(height, round)
                     .await
-                    .ok()
-                    .flatten()
-                    .map(|proposal| vec![proposal])
-                    .unwrap_or_else(Vec::new);
+                {
+                    Ok(Some(proposal)) => {
+                        vec![proposal]
+                    }
+                    Ok(None) => {
+                        info!(%height, %round, "📭 Found 0 undecided proposals");
+                        Vec::new()
+                    }
+                    Err(e) => {
+                        error!(%height, %round, error = %e, "Failed to get undecided proposal from store");
+                        return Err(e.into());
+                    }
+                };
 
-                if proposals.is_empty() {
-                    info!(%height, %round, "📭 Found 0 undecided proposals");
-                } else {
+                if !proposals.is_empty() {
                     info!(%height, %round, "📬 Found {} undecided proposals", proposals.len());
                 }
 
@@ -441,7 +448,7 @@ pub async fn run(
                     validity: Validity::Valid,
                 };
 
-                // Store the synced value and block data concurrently
+                // Store the synced value and block data
                 if let Err(e) = state
                     .store
                     .store_undecided_proposal(proposed_value.clone())
@@ -474,15 +481,15 @@ pub async fn run(
 
                 let earliest_height_available = state.get_earliest_height().await;
                 // Check if requested height is beyond our current height
-                let raw_decided_value = if height >= state.current_height
-                    || height < earliest_height_available
+                let raw_decided_value = if (earliest_height_available..state.current_height)
+                    .contains(&height)
                 {
-                    info!(%height, current_height = %state.current_height, "Requested height is >= current height");
-                    None
-                } else {
                     let earliest_unpruned = state.get_earliest_unpruned_height().await;
                     get_decided_value_for_sync(&state.store, &engine, height, earliest_unpruned)
-                        .await
+                        .await?
+                } else {
+                    info!(%height, current_height = %state.current_height, "Requested height is >= current height");
+                    None
                 };
 
                 if reply.send(raw_decided_value).is_err() {

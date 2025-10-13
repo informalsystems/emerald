@@ -533,25 +533,12 @@ pub fn extract_block_header(
     ExecutionPayloadV3 {
         payload_inner: ExecutionPayloadV2 {
             payload_inner: ExecutionPayloadV1 {
-                parent_hash: payload.payload_inner.payload_inner.parent_hash,
-                fee_recipient: payload.payload_inner.payload_inner.fee_recipient,
-                state_root: payload.payload_inner.payload_inner.state_root,
-                receipts_root: payload.payload_inner.payload_inner.receipts_root,
-                logs_bloom: payload.payload_inner.payload_inner.logs_bloom,
-                prev_randao: payload.payload_inner.payload_inner.prev_randao,
-                block_number: payload.payload_inner.payload_inner.block_number,
-                gas_limit: payload.payload_inner.payload_inner.gas_limit,
-                gas_used: payload.payload_inner.payload_inner.gas_used,
-                timestamp: payload.payload_inner.payload_inner.timestamp,
-                extra_data: payload.payload_inner.payload_inner.extra_data.clone(),
-                base_fee_per_gas: payload.payload_inner.payload_inner.base_fee_per_gas,
-                block_hash: payload.payload_inner.payload_inner.block_hash,
                 transactions: vec![],
+                ..payload.payload_inner.payload_inner.clone()
             },
             withdrawals: vec![],
         },
-        blob_gas_used: payload.blob_gas_used,
-        excess_blob_gas: payload.excess_blob_gas,
+        ..payload.clone()
     }
 }
 
@@ -568,24 +555,11 @@ pub fn reconstruct_execution_payload(
     ExecutionPayloadV3 {
         payload_inner: ExecutionPayloadV2 {
             payload_inner: ExecutionPayloadV1 {
-                parent_hash: header.payload_inner.payload_inner.parent_hash,
-                fee_recipient: header.payload_inner.payload_inner.fee_recipient,
-                state_root: header.payload_inner.payload_inner.state_root,
-                receipts_root: header.payload_inner.payload_inner.receipts_root,
-                logs_bloom: header.payload_inner.payload_inner.logs_bloom,
-                prev_randao: header.payload_inner.payload_inner.prev_randao,
-                block_number: header.payload_inner.payload_inner.block_number,
-                gas_limit: header.payload_inner.payload_inner.gas_limit,
-                gas_used: header.payload_inner.payload_inner.gas_used,
-                timestamp: header.payload_inner.payload_inner.timestamp,
-                extra_data: header.payload_inner.payload_inner.extra_data,
-                base_fee_per_gas: header.payload_inner.payload_inner.base_fee_per_gas,
-                block_hash: header.payload_inner.payload_inner.block_hash,
                 transactions: body.transactions,
+                ..header.payload_inner.payload_inner
             },
             withdrawals: body.withdrawals.unwrap_or_default(),
         },
-        blob_gas_used: header.blob_gas_used,
-        excess_blob_gas: header.excess_blob_gas,
+        ..header
     }
 }

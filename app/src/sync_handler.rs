@@ -28,53 +28,53 @@ pub async fn validate_synced_payload(
     height: Height,
     round: Round,
 ) -> eyre::Result<Validity> {
-    let start_time = tokio::time::Instant::now();
-    let timeout = sync_timeout;
-    let mut retry_delay = sync_initial_delay;
+    let validation_future = async {
+        let mut retry_delay = sync_initial_delay;
 
-    loop {
-        let result = engine
-            .notify_new_block(execution_payload.clone(), versioned_hashes.to_vec())
-            .await;
+        loop {
+            let result = engine
+                .notify_new_block(execution_payload.clone(), versioned_hashes.to_vec())
+                .await;
 
-        match result {
-            Ok(payload_status) => {
-                if payload_status.status.is_valid() {
-                    return Ok(Validity::Valid);
-                }
-
-                if payload_status.status.is_syncing() {
-                    let elapsed = start_time.elapsed();
-                    if elapsed >= timeout {
-                        return Err(eyre!(
-                            "Execution client stuck in SYNCING for {:?} at height {}",
-                            elapsed,
-                            height
-                        ));
+            match result {
+                Ok(payload_status) => {
+                    if payload_status.status.is_valid() {
+                        return Ok(Validity::Valid);
                     }
 
-                    warn!(
-                        %height, %round,
-                        "⚠️  Execution client SYNCING, retrying in {:?} (elapsed: {:?}/{:?})",
-                        retry_delay, elapsed, timeout
-                    );
+                    if payload_status.status.is_syncing() {
+                        warn!(
+                            %height, %round,
+                            "⚠️  Execution client SYNCING, retrying in {:?}",
+                            retry_delay
+                        );
 
-                    tokio::time::sleep(retry_delay).await;
-                    retry_delay = std::cmp::min(retry_delay * 2, Duration::from_secs(2));
-                    continue;
+                        tokio::time::sleep(retry_delay).await;
+                        retry_delay = std::cmp::min(retry_delay * 2, Duration::from_secs(2));
+                        continue;
+                    }
+
+                    // INVALID or ACCEPTED - both are treated as invalid
+                    // INVALID: malicious block
+                    // ACCEPTED: Non-canonical payload - should not happen with instant finality
+                    error!(%height, %round, "🔴 Synced block validation failed: {}", payload_status.status);
+                    return Ok(Validity::Invalid);
                 }
-
-                // INVALID or ACCEPTED - both are treated as invalid
-                // INVALID: malicious block
-                // ACCEPTED: Non-canonical payload - should not happen with instant finality
-                error!(%height, %round, "🔴 Synced block validation failed: {}", payload_status.status);
-                return Ok(Validity::Invalid);
-            }
-            Err(e) => {
-                error!(%height, %round, "🔴 Payload validation RPC error: {}", e);
-                return Err(e);
+                Err(e) => {
+                    error!(%height, %round, "🔴 Payload validation RPC error: {}", e);
+                    return Err(e);
+                }
             }
         }
+    };
+
+    match tokio::time::timeout(sync_timeout, validation_future).await {
+        Ok(result) => result,
+        Err(_) => Err(eyre!(
+            "Execution client stuck in SYNCING for {:?} at height {}",
+            sync_timeout,
+            height
+        )),
     }
 }
 
@@ -85,66 +85,54 @@ pub async fn get_decided_value_for_sync(
     engine: &Engine,
     height: Height,
     earliest_unpruned_height: Height,
-) -> Option<RawDecidedValue<MalakethContext>> {
+) -> eyre::Result<Option<RawDecidedValue<MalakethContext>>> {
     if height >= earliest_unpruned_height {
         // Height is in our decided values table - get it directly
         info!(%height, earliest_unpruned_height = %earliest_unpruned_height, "Getting decided value from local storage");
-        let decided_value = store.get_decided_value(height).await.ok()??;
+        let decided_value = store.get_decided_value(height).await?.ok_or_else(|| {
+            eyre!("Decided value not found at height {height}, data integrity error")
+        })?;
 
-        let value_bytes = match ProtobufCodec.encode(&decided_value.value) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                error!(%height, error = %e, "Failed to encode decided value");
-                return None;
-            }
-        };
-
-        Some(RawDecidedValue {
+        Ok(Some(RawDecidedValue {
             certificate: decided_value.certificate,
-            value_bytes,
-        })
+            value_bytes: ProtobufCodec.encode(&decided_value.value).unwrap(),
+        }))
     } else {
         // Height has been pruned from decided values - try to reconstruct from header + EL
         info!(%height, earliest_unpruned_height = %earliest_unpruned_height, "Height pruned from storage, reconstructing from block header + EL");
 
-        // Get certificate and block header atomically
+        // Get certificate and block header, if not pruned
         let (certificate, header_bytes) = match store.get_certificate_and_header(height).await {
             Ok(Some((cert, header))) => (cert, header),
             Ok(None) => {
                 error!(%height, "Certificate or block header not found for pruned height");
-                return None;
+                return Ok(None);
             }
             Err(e) => {
                 error!(%height, error = %e, "Failed to get certificate and header");
-                return None;
+                return Ok(None);
             }
         };
 
         // Deserialize header
-        let header = match ExecutionPayloadV3::from_ssz_bytes(&header_bytes) {
-            Ok(h) => h,
-            Err(e) => {
-                error!(%height, error = ?e, "Failed to deserialize block header");
-                return None;
-            }
-        };
+        let header = ExecutionPayloadV3::from_ssz_bytes(&header_bytes).map_err(|e| {
+            eyre!(
+                "Failed to deserialize block header at height {}: {:?}",
+                height,
+                e
+            )
+        })?;
 
         let block_number = header.payload_inner.payload_inner.block_number;
 
         // Request payload body from EL
-        let bodies = match engine.get_payload_bodies_by_range(block_number, 1).await {
-            Ok(b) => b,
-            Err(e) => {
-                error!(%height, block_number, error = %e, "Failed to get payload body from EL");
-                return None;
-            }
-        };
+        let bodies = engine.get_payload_bodies_by_range(block_number, 1).await?;
 
         // Handle response according to spec
         if bodies.is_empty() {
             // Empty array means requested range is beyond latest known block
             error!(%height, block_number, "EL returned empty array - block beyond latest known");
-            return None;
+            return Ok(None);
         }
 
         let body = match bodies.first() {
@@ -152,11 +140,11 @@ pub async fn get_decided_value_for_sync(
             Some(None) => {
                 // Body is null - block unavailable (pruned or not downloaded by EL)
                 error!(%height, block_number, "EL returned null - block pruned or unavailable");
-                return None;
+                return Ok(None);
             }
             None => {
                 error!(%height, block_number, "EL returned unexpected empty response");
-                return None;
+                return Ok(None);
             }
         };
 
@@ -169,17 +157,9 @@ pub async fn get_decided_value_for_sync(
         // Create Value from payload bytes
         let value = Value::new(payload_bytes);
 
-        let value_bytes = match ProtobufCodec.encode(&value) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                error!(%height, error = %e, "Failed to encode decided value");
-                return None;
-            }
-        };
-
-        Some(RawDecidedValue {
+        Ok(Some(RawDecidedValue {
             certificate,
-            value_bytes,
-        })
+            value_bytes: ProtobufCodec.encode(&value).unwrap(),
+        }))
     }
 }

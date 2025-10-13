@@ -1,6 +1,4 @@
 use color_eyre::eyre::{eyre, Result};
-use malachitebft_eth_cli::error::Error;
-use std::fs;
 use tracing::{info, trace};
 
 use malachitebft_app_channel::app::node::Node;
@@ -70,15 +68,6 @@ fn start(args: &Args, cmd: &StartCmd, logging: config::LoggingConfig) -> Result<
         .map_err(|error| eyre!("Failed to load configuration file: {error}"))?;
 
     config.logging = logging;
-
-    let malaketh_config_file = &args.get_malaketch_config_file()?;
-    let malaketh_config_content = fs::read_to_string(malaketh_config_file)
-        .map_err(|e| Error::LoadFile(malaketh_config_file.to_path_buf(), e))?;
-    let malaketh_config = toml::from_str::<crate::config::MalakethConfig>(&malaketh_config_content)
-        .map_err(Error::FromTOML)?;
-
-    info!(file = %malaketh_config_file.display(), "Loaded Malaketh configuration");
-    info!(?malaketh_config, "Malaketh configuration");
 
     let rt = runtime::build_runtime(config.runtime)?;
 

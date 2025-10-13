@@ -488,7 +488,7 @@ pub async fn run(
                     get_decided_value_for_sync(&state.store, &engine, height, earliest_unpruned)
                         .await?
                 } else {
-                    info!(%height, current_height = %state.current_height, "Requested height is >= current height");
+                    info!(%height, current_height = %state.current_height, "Requested height is >= current height or < earliest_height_available.");
                     None
                 };
 

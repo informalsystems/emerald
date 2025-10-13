@@ -34,8 +34,11 @@ malachitebft-eth-cli    = { version = "0.0.1", path = "cli" }
 malachitebft-eth-engine = { version = "0.0.1", path = "engine" }
 malachitebft-eth-types  = { version = "0.0.1", path = "types" }
 
+alloy-primitives       = { version = "0.8.21", features = ["getrandom"] }
 alloy-consensus        = { version = "0.11.1", default-features = false }
 alloy-rpc-types        = { version = "0.11.1", features = ["eth"], default-features = false }
+alloy-contract         = { version = "0.11.1", default-features = false }
+alloy-sol-types        = { version = "0.8.15", features = ["json"], default-features = false }
 alloy-rpc-types-eth    = { version = "0.11.1", default-features = false }
 alloy-rpc-types-engine = { version = "0.11.1", features = ["ssz", "jwt", "serde"], default-features = false }
 
@@ -65,7 +68,7 @@ tokio              = "1.46.1"
 toml               = "0.8.23"
 tracing            = "0.1.41"
 tracing-appender   = "0.2.3"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "fmt"] }
 url                = "2"
 
 [workspace.dependencies.malachitebft-app]

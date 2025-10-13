@@ -23,6 +23,10 @@ impl EthereumRPC {
         })
     }
 
+    pub fn url(&self) -> &Url {
+        &self.url
+    }
+
     pub async fn rpc_request<D: DeserializeOwned>(
         &self,
         method: &str,

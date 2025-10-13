@@ -17,8 +17,8 @@ tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9.33"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing        = { workspace = true }
+tracing-subscriber = { workspace = true }
 async-trait = "0.1"
 hex = "0.4"
 clap = { version = "4.5", features = ["derive"] }
@@ -32,11 +32,14 @@ ethereum_serde_utils = "0.8"
 malachitebft-eth-types = { workspace = true }
 
 alloy-consensus        = { workspace = true }
+alloy-contract         = { workspace = true }
+alloy-provider         = "0.11.1"
 alloy-genesis          = "0.11.1"
 alloy-network          = "0.11.1"
-alloy-primitives       = { version = "0.8.21", features = ["getrandom"] }
+alloy-primitives       = { workspace = true }
 alloy-rlp              = "0.3"
 alloy-rpc-types        = { workspace = true }
+alloy-sol-types        = { workspace = true }
 alloy-rpc-types-engine = { workspace = true }
 alloy-rpc-types-txpool = "0.11.1"
 alloy-signer           = "0.11.1"
@@ -48,3 +51,7 @@ reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.2.0" 
 [dev-dependencies]
 reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", tag = "v1.2.0" }
 alloy-eips = "0.11.1"
+alloy-provider = "0.11.1"
+ethers-signers = "2"
+tempfile = "3"
+alloy-contract = "0.11.1"

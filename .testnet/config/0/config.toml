@@ -1,1 +1,4 @@
 moniker = "test-0"
+execution_authrpc_address = "http://localhost:8545"
+engine_authrpc_address = "http://localhost:8551"
+jwt_token_path = "./assets/jwtsecret"

@@ -234,17 +234,17 @@ mod tests {
         let mut selector = RoundRobinSelector::new(templates);
 
         // First iteration
-        if let TxTemplate::Eip1559(t) = selector.next() {
+        if let TxTemplate::Eip1559(t) = selector.next_template() {
             assert_eq!(t.to, "0x0000000000000000000000000000000000000001");
         }
 
         // Second iteration
-        if let TxTemplate::Eip1559(t) = selector.next() {
+        if let TxTemplate::Eip1559(t) = selector.next_template() {
             assert_eq!(t.to, "0x0000000000000000000000000000000000000002");
         }
 
         // Should wrap around
-        if let TxTemplate::Eip1559(t) = selector.next() {
+        if let TxTemplate::Eip1559(t) = selector.next_template() {
             assert_eq!(t.to, "0x0000000000000000000000000000000000000001");
         }
     }

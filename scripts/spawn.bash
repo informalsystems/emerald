@@ -15,9 +15,9 @@ while [[ "$#" -gt 0 ]]; do
         --nodes) NODES_COUNT="$2"; shift ;;
         --home) NODES_HOME="$2"; shift ;;
         --app) APP_BINARY="$2"; shift ;;
-        --no-reset) NO_RESET=1; shift ;;
-        --no-delay) NO_DELAY=1; shift ;;
-        --no-wait) NO_WAIT=1; shift ;;
+        --no-reset) NO_RESET=1 ;;
+        --no-delay) NO_DELAY=1 ;;
+        --no-wait) NO_WAIT=1 ;;
         *) echo "Unknown parameter passed: $1"; help; exit 1 ;;
     esac
     shift

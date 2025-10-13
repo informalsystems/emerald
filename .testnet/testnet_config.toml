@@ -1,4 +1,0 @@
-nodes = 3
-deterministic = true
-
-configuration_paths = [ ".testnet/config/0/config.toml", ".testnet/config/1/config.toml", ".testnet/config/2/config.toml" ]

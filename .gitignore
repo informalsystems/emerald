@@ -3,6 +3,7 @@
 /rethdata
 monitoring/data-grafana/
 monitoring/data-prometheus/
+utils/logs/
 
 # Foundry build artifacts
 example/cache/

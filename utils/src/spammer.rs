@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::time::{self, sleep, Duration, Instant};
+use tracing::{info, warn};
 
 /// A transaction spammer that sends Ethereum transactions at a controlled rate.
 /// Tracks and reports statistics on sent transactions.
@@ -156,11 +157,31 @@ impl Spammer {
 
                 // Send transaction to Ethereum RPC endpoint.
                 let payload = hex::encode(tx_bytes);
-                let result = self
+                let result_unpacked: Result<String> = self
                     .client
                     .rpc_request("eth_sendRawTransaction", json!([payload]))
-                    .await
-                    .map(|_: String| tx_bytes_len);
+                    .await;
+
+                // Log asynchronously without blocking the hot path
+                match &result_unpacked {
+                    Ok(tx_hash) => {
+                        // Use tokio::spawn to offload logging to a separate task
+                        let tx_hash = tx_hash.clone();
+                        let nonce_val = nonce;
+                        tokio::spawn(async move {
+                            info!(nonce = nonce_val, tx_hash = %tx_hash, "Sent tx with hash.");
+                        });
+                    }
+                    Err(e) => {
+                        let error_msg = e.to_string();
+                        let nonce_val = nonce;
+                        tokio::spawn(async move {
+                            warn!(nonce = nonce_val, error = %error_msg, "Failed to send tx with nonce.");
+                        });
+                    }
+                }
+
+                let result = result_unpacked.map(|_| tx_bytes_len);
 
                 // Report result and update counters.
                 result_sender.send(result).await?;

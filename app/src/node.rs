@@ -20,7 +20,7 @@ use malachitebft_app_channel::app::node::{
 };
 use malachitebft_app_channel::app::types::core::VotingPower;
 use malachitebft_app_channel::app::types::Keypair;
-use malachitebft_eth_cli::config::Config;
+use malachitebft_eth_cli::config::{Config, MalakethConfig};
 
 // Use the same types used for integration tests.
 // A real application would use its own types and context instead.
@@ -46,6 +46,22 @@ pub struct App {
     pub malaketh_config_file: PathBuf,
     pub private_key_file: PathBuf,
     pub start_height: Option<Height>,
+}
+
+impl App {
+    fn load_malaketh_config(&self) -> eyre::Result<MalakethConfig> {
+        let malaketh_config_content =
+            fs::read_to_string(&self.malaketh_config_file).map_err(|e| {
+                eyre::eyre!(
+                    "Failed to read malaketh config file `{}`: {e}",
+                    self.malaketh_config_file.display()
+                )
+            })?;
+        let malaketh_config =
+            toml::from_str::<crate::config::MalakethConfig>(&malaketh_config_content)
+                .map_err(|e| eyre::eyre!("Failed to parse malaketh config file: {e}"))?;
+        Ok(malaketh_config)
+    }
 }
 
 pub struct Handle {
@@ -145,7 +161,7 @@ impl Node for App {
 
         let tx_event = channels.events.clone();
 
-        let registry = SharedRegistry::global().with_moniker(&self.config.moniker);
+        let registry = SharedRegistry::global().with_moniker(&config.moniker);
         let metrics = DbMetrics::register(&registry);
 
         if config.metrics.enabled {
@@ -156,16 +172,7 @@ impl Node for App {
         let start_height = self.start_height.unwrap_or_default();
         let mut state = State::new(genesis, ctx, signing_provider, address, start_height, store);
 
-        let malaketh_config_content =
-            fs::read_to_string(&self.malaketh_config_file).map_err(|e| {
-                eyre::eyre!(
-                    "Failed to read malaketh config file `{}`: {e}",
-                    self.malaketh_config_file.display()
-                )
-            })?;
-        let malaketh_config =
-            toml::from_str::<crate::config::MalakethConfig>(&malaketh_config_content)
-                .map_err(|e| eyre::eyre!("Failed to parse malaketh config file: {e}"))?;
+        let malaketh_config = self.load_malaketh_config()?;
 
         let engine: Engine = {
             let engine_url = Url::parse(&malaketh_config.engine_authrpc_address)?;
@@ -179,7 +186,9 @@ impl Node for App {
         };
 
         let app_handle = tokio::spawn(async move {
-            if let Err(e) = crate::app::run(&mut state, &mut channels, engine).await {
+            if let Err(e) =
+                crate::app::run(&mut state, &mut channels, engine, malaketh_config).await
+            {
                 tracing::error!(%e, "Application error");
             }
         });

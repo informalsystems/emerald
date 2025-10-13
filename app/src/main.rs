@@ -1,5 +1,3 @@
-//! Example application using channels
-
 use color_eyre::eyre::{eyre, Result};
 use tracing::{info, trace};
 
@@ -17,6 +15,7 @@ mod node;
 mod state;
 mod store;
 mod streaming;
+mod sync_handler;
 
 use node::App;
 

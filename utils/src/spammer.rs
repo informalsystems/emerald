@@ -144,7 +144,7 @@ impl Spammer {
                     // Use template-based transaction generation
                     let template = {
                         let mut selector = templates.lock().unwrap();
-                        selector.next().clone()
+                        selector.next_template().clone()
                     };
                     make_signed_tx_from_template(&self.signer, &template, nonce).await?
                 } else if self.blobs {

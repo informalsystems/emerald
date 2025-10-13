@@ -141,7 +141,7 @@ impl RoundRobinSelector {
     }
 
     /// Get the next template in round-robin fashion
-    pub fn next(&mut self) -> &TxTemplate {
+    pub fn next_template(&mut self) -> &TxTemplate {
         let template = &self.templates[self.current_index];
         self.current_index = (self.current_index + 1) % self.templates.len();
         template

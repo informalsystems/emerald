@@ -141,18 +141,7 @@ impl State {
             raw_block_data.iter().len(),
             height
         );
-
-        // let execution_payload: ExecutionPayloadV3 =
-        //     ExecutionPayloadV3::from_ssz_bytes(&raw_block_data).unwrap();
-        // let latest_block = ExecutionBlock {
-        //     block_hash: execution_payload.payload_inner.payload_inner.block_hash,
-        //     block_number: execution_payload.payload_inner.payload_inner.block_number,
-        //     parent_hash: execution_payload.payload_inner.payload_inner.parent_hash,
-        //     timestamp: execution_payload.payload_inner.payload_inner.timestamp,
-        //     prev_randao: execution_payload.payload_inner.payload_inner.prev_randao,
-        // };
         Some(build_execution_block_from_bytes(raw_block_data))
-        // Some(latest_block)
     }
 
     /// Returns the earliest height available via EL

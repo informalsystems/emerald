@@ -6,7 +6,7 @@ all: clean build
 	docker compose up -d reth0 reth1 reth2 prometheus grafana
 	./scripts/add_peers.sh --nodes 3
 	@echo 👉 Grafana dashboard is available at http://localhost:3000
-
+	bash scripts/spawn.bash --nodes 3 --home nodes --no-delay
 
 sync: clean build
 	./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet

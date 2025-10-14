@@ -34,6 +34,11 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v5
 
+      - name: Set up Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - run: forge build
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 

@@ -54,4 +54,4 @@ jobs:
           cargo run --bin malachitebft-eth-utils genesis --public-keys-file ./nodes/validator_public_keys.txt
           docker compose up -d
           ./scripts/add_peers.sh
-          bash scripts/spawn.bash --nodes 3 --home nodes --no-wait
+          bash scripts/spawn.bash --nodes 3 --home nodes --no-delay --no-wait

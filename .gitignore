@@ -4,6 +4,7 @@
 monitoring/data-grafana/
 monitoring/data-prometheus/
 assets
+.testnet
 
 # Docs and env
 example/docs/

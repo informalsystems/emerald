@@ -2,23 +2,21 @@ use alloy_provider::ProviderBuilder;
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre};
 use ed25519_consensus::VerificationKey;
-
+use malachitebft_eth_cli::config::MalakethConfig;
 use ssz::{Decode, Encode};
+use std::time::Duration;
 use tracing::{debug, error, info};
 
 use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
 use malachitebft_app_channel::app::engine::host::Next;
 use malachitebft_app_channel::app::streaming::StreamContent;
-use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
-use malachitebft_app_channel::app::types::sync::RawDecidedValue;
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
 use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
 
 use alloy_primitives::{address, Address};
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
-use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::{
     Block, BlockHash, Height, MalakethContext, PublicKey, Validator, ValidatorSet,
 };
@@ -33,7 +31,76 @@ alloy_sol_types::sol!(
     "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
 );
 
-use crate::state::{decode_value, State};
+use crate::state::{decode_value, extract_block_header, State};
+use crate::sync_handler::{get_decided_value_for_sync, validate_synced_payload};
+
+pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
+    // TODO Unify this with code above @Jasmina
+    // Get the genesis block from the execution engine
+    let genesis_block = engine
+        .eth
+        .get_block_by_number("earliest")
+        .await?
+        .expect("Genesis block must exist");
+    debug!("👉 genesis_block: {:?}", genesis_block);
+    state.latest_block = Some(genesis_block);
+    let genesis_validator_set =
+        read_validators_from_contract(engine.eth.url().as_ref(), &genesis_block.block_hash).await?;
+    debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
+    state.set_validator_set(genesis_validator_set);
+    state.current_height = Height::default();
+    Ok(())
+}
+
+pub async fn initialize_state_from_existing_block(
+    state: &mut State,
+    engine: &Engine,
+    start_height: Height,
+) -> eyre::Result<()> {
+    // If there was somethign stored in the store for height, we should be able to retrieve
+    // block data as well.
+
+    let latest_block_candidate_from_store = state
+        .get_latest_block_candidate(start_height)
+        .await
+        .expect("we have not atomically stored the last block, database corrupted");
+
+    let payload_status = engine
+        .send_forkchoice_updated(latest_block_candidate_from_store.block_hash)
+        .await?;
+    let genesis_validator_set = read_validators_from_contract(
+        engine.eth.url().as_ref(),
+        &latest_block_candidate_from_store.block_hash,
+    )
+    .await?;
+    debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
+    state.set_validator_set(genesis_validator_set);
+    match payload_status.status {
+        PayloadStatusEnum::Valid | PayloadStatusEnum::Syncing => {
+            state.current_height = start_height;
+            state.latest_block = Some(latest_block_candidate_from_store);
+            // From the Engine API spec:
+            // 8. Client software MUST respond to this method call in the
+            //    following way:
+            //   * {payloadStatus: {status: SYNCING, latestValidHash: null,
+            //   * validationError: null}, payloadId: null} if
+            //     forkchoiceState.headBlockHash references an unknown
+            //     payload or a payload that can't be validated because
+            //     requisite data for the validation is missing
+            debug!("reth is syncing but all good to proceed withconsensus");
+            return Ok(());
+        }
+        PayloadStatusEnum::Invalid { validation_error } => {
+            return Err(eyre::eyre!(validation_error));
+        }
+
+        PayloadStatusEnum::Accepted => {
+            return Err(eyre::eyre!(
+                "execution engine returned ACCEPTED for payload, this should not happen"
+            ));
+        }
+    }
+}
 
 pub async fn read_validators_from_contract(
     eth_url: &str,
@@ -76,34 +143,11 @@ pub async fn read_validators_from_contract(
     ))
 }
 
-pub async fn get_latest_block_candidate(
-    state: &mut State,
-    height: Height,
-) -> Option<ExecutionBlock> {
-    let decided_value = state.get_decided_value(height).await?;
-    let certificate = decided_value.certificate;
-
-    let block_data = state
-        .get_block_data(certificate.height, certificate.round)
-        .await
-        .expect("certificate should have associated block data");
-    debug!("🎁 block size: {:?}, height: {}", block_data.len(), height);
-
-    let execution_payload: ExecutionPayloadV3 =
-        ExecutionPayloadV3::from_ssz_bytes(&block_data).unwrap();
-    let latest_block = ExecutionBlock {
-        block_hash: execution_payload.payload_inner.payload_inner.block_hash,
-        block_number: execution_payload.payload_inner.payload_inner.block_number,
-        parent_hash: execution_payload.payload_inner.payload_inner.parent_hash,
-        timestamp: execution_payload.payload_inner.payload_inner.timestamp,
-        prev_randao: execution_payload.payload_inner.payload_inner.prev_randao,
-    };
-    Some(latest_block)
-}
 pub async fn run(
     state: &mut State,
     channels: &mut Channels<MalakethContext>,
     engine: Engine,
+    malaketh_config: MalakethConfig,
 ) -> eyre::Result<()> {
     while let Some(msg) = channels.consensus.recv().await {
         match msg {
@@ -116,114 +160,30 @@ pub async fn run(
                 // Check compatibility with execution client
                 engine.check_capabilities().await?;
 
-                let start_height: Height;
-                // let val_set = state.get_validator_set().clone();
-
                 // Get latest state from local store
                 let start_height_from_store = state.store.max_decided_value_height().await;
 
                 match start_height_from_store {
                     Some(s) => {
-                        start_height = s;
-                        // If there was somethign stored in the store for height, we should be able to retrieve
-                        // block data as well.
-                        let latest_block_candidate_from_store =
-                            get_latest_block_candidate(state, start_height).await;
-
-                        match latest_block_candidate_from_store {
-                            Some(latest_block_candidate) => {
-                                let payload_status = engine
-                                    .send_forkchoice_updated(latest_block_candidate.block_hash)
-                                    .await?;
-                                let genesis_validator_set = read_validators_from_contract(
-                                    engine.eth.url().as_ref(),
-                                    &latest_block_candidate.block_hash,
-                                )
-                                .await?;
-                                debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
-                                state.set_validator_set(genesis_validator_set);
-                                match payload_status.status {
-                                    // PayloadStatusEnum::Valid => Ok(),
-                                    PayloadStatusEnum::Syncing => {
-                                        // From the Engine API spec:
-                                        // 8. Client software MUST respond to this method call in the
-                                        //    following way:
-                                        //   * {payloadStatus: {status: SYNCING, latestValidHash: null,
-                                        //   * validationError: null}, payloadId: null} if
-                                        //     forkchoiceState.headBlockHash references an unknown
-                                        //     payload or a payload that can't be validated because
-                                        //     requisite data for the validation is missing
-                                        debug!(
-                                            "reth is syncing but all good to proceed withconsensus"
-                                        )
-                                    }
-                                    PayloadStatusEnum::Invalid { validation_error } => {
-                                        // From the Engine API spec:
-                                        // 8. Client software MUST respond to this method call in the
-                                        //    following way:
-                                        //   * {payloadStatus: {status: SYNCING, latestValidHash: null,
-                                        //   * validationError: null}, payloadId: null} if
-                                        //     forkchoiceState.headBlockHash references an unknown
-                                        //     payload or a payload that can't be validated because
-                                        //     requisite data for the validation is missing
-                                        debug!("error in payload {validation_error}")
-                                        // TODO What to do here
-                                    }
-
-                                    PayloadStatusEnum::Accepted => {
-                                        debug!("payload accepted")
-                                        // TODO Same as invalid
-                                    }
-
-                                    PayloadStatusEnum::Valid => {
-                                        debug!("payload valid")
-                                    }
-                                }
-
-                                // TODO @Jasmina - check if state is initialized , if not set state.latest_height
-                                // TODO @Jasmina latest_block should be in shim layer store at this point. And we do not need to retrieve it from
-                                // consensus.
-                                state.current_height = start_height;
-                                state.latest_block = Some(latest_block_candidate);
-                                info!("latest_block latest_block_cand")
-                            }
-                            None => {
-                                error!("THIS MEANS WE HAVE START height UT LOST STATE ")
-                            }
-                        }
+                        initialize_state_from_existing_block(state, &engine, s).await?;
+                        // TODO ERROR HANDLING
+                        info!(
+                            "Starth height in state set to: {:?}; height in store is {s} ",
+                            state.current_height
+                        );
                     }
                     None => {
-                        // There was no decided value in the store, so start frm default hegiht
-                        start_height = Height::default();
-                        // TODO Unify this with code above @Jasmina
+                        info!("Starting from genesis");
                         // Get the genesis block from the execution engine
-                        let genesis_block = engine
-                            .eth
-                            .get_block_by_number("earliest")
-                            .await?
-                            .expect("Genesis block must exist");
-                        debug!("👉 genesis_block: {:?}", genesis_block);
-                        state.latest_block = Some(genesis_block);
-                        let genesis_validator_set = read_validators_from_contract(
-                            engine.eth.url().as_ref(),
-                            &genesis_block.block_hash,
-                        )
-                        .await?;
-                        debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
-                        state.set_validator_set(genesis_validator_set);
-                        state.current_height = start_height
+                        initialize_state_from_genesis(state, &engine).await?;
                     }
                 }
-
-                info!(
-                    "Starth height is : {start_height} and in state it is {}",
-                    state.current_height
-                );
+                let start_height = state.current_height.increment();
 
                 // We can simply respond by telling the engine to start consensus
                 // at the current height, which is initially 1
                 if reply
-                    .send((start_height.increment(), state.get_validator_set().clone()))
+                    .send((start_height, state.get_validator_set().clone()))
                     .is_err()
                 {
                     error!("Failed to send ConsensusReady reply");
@@ -247,9 +207,28 @@ pub async fn run(
                 state.current_proposer = Some(proposer);
 
                 // TODO: Add pending parts validation
-                // For now, send empty proposals list to consensus
-                let proposals: Vec<ProposedValue<MalakethContext>> = Vec::new();
-                info!(%height, %round, "Found {} undecided proposals", proposals.len());
+                // Try to get undecided proposals from storage, or use empty vector
+                let proposals: Vec<ProposedValue<MalakethContext>> = match state
+                    .store
+                    .get_undecided_proposal(height, round)
+                    .await
+                {
+                    Ok(Some(proposal)) => {
+                        vec![proposal]
+                    }
+                    Ok(None) => {
+                        info!(%height, %round, "📭 Found 0 undecided proposals");
+                        Vec::new()
+                    }
+                    Err(e) => {
+                        error!(%height, %round, error = %e, "Failed to get undecided proposal from store");
+                        return Err(e.into());
+                    }
+                };
+
+                if !proposals.is_empty() {
+                    info!(%height, %round, "📬 Found {} undecided proposals", proposals.len());
+                }
 
                 if reply_value.send(proposals).is_err() {
                     error!("Failed to send undecided proposals");
@@ -300,9 +279,11 @@ pub async fn run(
                 let proposal: LocallyProposedValue<MalakethContext> =
                     state.propose_value(height, round, bytes.clone()).await?;
 
-                // When the node is not the proposer, store the block data,
+                // Store the block data at the proposal's height/round,
                 // which will be passed to the execution client (EL) on commit.
-                state.store_undecided_proposal_data(bytes.clone()).await?;
+                state
+                    .store_undecided_proposal_data(height, round, bytes.clone())
+                    .await?;
 
                 // Send it to consensus
                 if reply.send(proposal.clone()).is_err() {
@@ -423,6 +404,10 @@ pub async fn run(
                     .len();
                 debug!("🦄 Block at height {height} contains {tx_count} transactions");
 
+                // Extract block header
+                let block_header = extract_block_header(&execution_payload);
+                let block_header_bytes = Bytes::from(block_header.as_ssz_bytes());
+
                 // Collect hashes from blob transactions
                 let block: Block = execution_payload.clone().try_into_block().unwrap();
                 let versioned_hashes: Vec<BlockHash> =
@@ -449,7 +434,7 @@ pub async fn run(
 
                 // When that happens, we store the decided value in our store
                 // TODO: we should return an error reply if commit fails
-                state.commit(certificate).await?;
+                state.commit(certificate, block_header_bytes).await?;
 
                 // Save the latest block
                 state.latest_block = Some(ExecutionBlock {
@@ -487,8 +472,6 @@ pub async fn run(
             // for the heights in between the one we are currently at (included) and the one
             // that they are at. When the engine receives such a value, it will forward to the application
             // to decode it from its wire format and send back the decoded value to consensus.
-            //
-            // TODO: store the received value somewhere here
             AppMsg::ProcessSyncedValue {
                 height,
                 round,
@@ -500,19 +483,79 @@ pub async fn run(
 
                 let value = decode_value(value_bytes);
 
-                // We send to consensus to see if it has been decided on
-                if reply
-                    .send(Some(ProposedValue {
-                        height,
-                        round,
-                        valid_round: Round::Nil,
-                        proposer,
-                        value,
-                        validity: Validity::Valid,
-                    }))
-                    .is_err()
+                // Extract execution payload from the synced value for validation
+                let block_bytes = value.extensions.clone();
+                let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_bytes).unwrap();
+                let new_block_hash = execution_payload.payload_inner.payload_inner.block_hash;
+
+                // Collect hashes from blob transactions
+                let block: Block = execution_payload.clone().try_into_block().unwrap();
+                let versioned_hashes: Vec<BlockHash> =
+                    block.body.blob_versioned_hashes_iter().copied().collect();
+
+                // Validate the synced block
+                let validity = validate_synced_payload(
+                    &engine,
+                    &execution_payload,
+                    &versioned_hashes,
+                    Duration::from_millis(malaketh_config.sync_timeout_ms),
+                    Duration::from_millis(malaketh_config.sync_initial_delay_ms),
+                    height,
+                    round,
+                )
+                .await?;
+
+                if validity == Validity::Invalid {
+                    // Reject invalid blocks - don't store or reply with them
+                    if reply
+                        .send(Some(ProposedValue {
+                            height,
+                            round,
+                            valid_round: Round::Nil,
+                            proposer,
+                            value,
+                            validity: Validity::Invalid,
+                        }))
+                        .is_err()
+                    {
+                        error!("Failed to send ProcessSyncedValue rejection reply");
+                    }
+                    continue;
+                }
+
+                debug!(
+                    "💡 Sync block validated at height {} with hash: {}",
+                    height, new_block_hash
+                );
+                let proposed_value = ProposedValue {
+                    height,
+                    round,
+                    valid_round: Round::Nil,
+                    proposer,
+                    value,
+                    validity: Validity::Valid,
+                };
+
+                // Store the synced value and block data
+                if let Err(e) = state
+                    .store
+                    .store_undecided_proposal(proposed_value.clone())
+                    .await
                 {
-                    error!("Failed to send ProcessSyncedValue reply");
+                    error!(%height, %round, error = %e, "Failed to store synced value");
+                }
+
+                if let Err(e) = state
+                    .store
+                    .store_undecided_block_data(height, round, block_bytes)
+                    .await
+                {
+                    error!(%height, %round, error = %e, "Failed to store synced block data");
+                }
+
+                // Send to consensus to see if it has been decided on
+                if reply.send(Some(proposed_value)).is_err() {
+                    error!(%height, %round, "Failed to send ProcessSyncedValue reply");
                 }
             }
 
@@ -523,12 +566,19 @@ pub async fn run(
             // and send it to consensus.
             AppMsg::GetDecidedValue { height, reply } => {
                 info!(%height, "🟢🟢 GetDecidedValue");
-                let decided_value = state.get_decided_value(height).await;
 
-                let raw_decided_value = decided_value.map(|decided_value| RawDecidedValue {
-                    certificate: decided_value.certificate,
-                    value_bytes: ProtobufCodec.encode(&decided_value.value).unwrap(),
-                });
+                let earliest_height_available = state.get_earliest_height().await;
+                // Check if requested height is beyond our current height
+                let raw_decided_value = if (earliest_height_available..state.current_height)
+                    .contains(&height)
+                {
+                    let earliest_unpruned = state.get_earliest_unpruned_height().await;
+                    get_decided_value_for_sync(&state.store, &engine, height, earliest_unpruned)
+                        .await?
+                } else {
+                    info!(%height, current_height = %state.current_height, "Requested height is >= current height or < earliest_height_available.");
+                    None
+                };
 
                 if reply.send(raw_decided_value).is_err() {
                     error!("Failed to send GetDecidedValue reply");

@@ -126,3 +126,9 @@ pub struct ExecutionBlock {
     #[serde(rename = "mixHash")]
     pub prev_randao: B256,
 }
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionPayloadBodyV1 {
+    pub transactions: Vec<Bytes>,
+    pub withdrawals: Option<Vec<Withdrawal>>,
+}

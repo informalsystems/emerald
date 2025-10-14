@@ -60,8 +60,8 @@ pub static NODE_CAPABILITIES: &[&str] = &[
     // ENGINE_FORKCHOICE_UPDATED_V1,
     // ENGINE_FORKCHOICE_UPDATED_V2,
     ENGINE_FORKCHOICE_UPDATED_V3,
-    // ENGINE_GET_PAYLOAD_BODIES_BY_HASH_V1,
-    // ENGINE_GET_PAYLOAD_BODIES_BY_RANGE_V1,
+    ENGINE_GET_PAYLOAD_BODIES_BY_HASH_V1,
+    ENGINE_GET_PAYLOAD_BODIES_BY_RANGE_V1,
     // ENGINE_GET_CLIENT_VERSION_V1,
     // ENGINE_GET_BLOBS_V1,
     // ENGINE_GET_BLOBS_V2,
@@ -224,5 +224,34 @@ impl EngineRPC {
         ]);
         self.rpc_request(ENGINE_NEW_PAYLOAD_V4, params, ENGINE_NEW_PAYLOAD_TIMEOUT)
             .await
+    }
+
+    pub async fn get_payload_bodies_by_hash(
+        &self,
+        block_hashes: Vec<BlockHash>,
+    ) -> eyre::Result<Vec<Option<crate::json_structures::ExecutionPayloadBodyV1>>> {
+        let params = json!([block_hashes]);
+        self.rpc_request(
+            ENGINE_GET_PAYLOAD_BODIES_BY_HASH_V1,
+            params,
+            ENGINE_GET_PAYLOAD_BODIES_TIMEOUT,
+        )
+        .await
+    }
+
+    pub async fn get_payload_bodies_by_range(
+        &self,
+        start: u64,
+        count: u64,
+    ) -> eyre::Result<Vec<Option<crate::json_structures::ExecutionPayloadBodyV1>>> {
+        let start_hex = format!("0x{start:x}");
+        let count_hex = format!("0x{count:x}");
+        let params = json!([start_hex, count_hex]);
+        self.rpc_request(
+            ENGINE_GET_PAYLOAD_BODIES_BY_RANGE_V1,
+            params,
+            ENGINE_GET_PAYLOAD_BODIES_TIMEOUT,
+        )
+        .await
     }
 }

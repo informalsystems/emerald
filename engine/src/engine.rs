@@ -23,7 +23,12 @@ impl Engine {
 
     pub async fn check_capabilities(&self) -> eyre::Result<()> {
         let cap = self.api.exchange_capabilities().await?;
-        if !cap.forkchoice_updated_v3 || !cap.get_payload_v3 || !cap.new_payload_v3 {
+        if !cap.forkchoice_updated_v3
+            || !cap.get_payload_v3
+            || !cap.new_payload_v3
+            || !cap.get_payload_bodies_by_hash_v1
+            || !cap.get_payload_bodies_by_range_v1
+        {
             return Err(eyre::eyre!("Engine does not support required methods"));
         }
         Ok(())
@@ -169,6 +174,30 @@ impl Engine {
                 parent_block_hash,
                 execution_requests,
             )
+            .await
+    }
+
+    /// Get execution payload bodies by their block hashes
+    pub async fn get_payload_bodies_by_hash(
+        &self,
+        block_hashes: Vec<BlockHash>,
+    ) -> eyre::Result<Vec<Option<crate::json_structures::ExecutionPayloadBodyV1>>> {
+        debug!("🟠 get_payload_bodies_by_hash: {:?}", block_hashes);
+        self.api.get_payload_bodies_by_hash(block_hashes).await
+    }
+
+    /// Get execution payload bodies by block number range
+    pub async fn get_payload_bodies_by_range(
+        &self,
+        start_block: u64,
+        count: u64,
+    ) -> eyre::Result<Vec<Option<crate::json_structures::ExecutionPayloadBodyV1>>> {
+        debug!(
+            "🟠 get_payload_bodies_by_range: start={}, count={}",
+            start_block, count
+        );
+        self.api
+            .get_payload_bodies_by_range(start_block, count)
             .await
     }
 

@@ -10,7 +10,6 @@ use rand::{seq::IteratorRandom, Rng, SeedableRng};
 use crate::config::*;
 use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, Node};
 use malachitebft_core_types::{PrivateKey, PublicKey};
-
 const MIN_VOTING_POWER: u64 = 1;
 const MAX_VOTING_POWER: u64 = 1;
 

@@ -93,17 +93,17 @@ function check_reth_progress {
 # Function to spawn a node
 function spawn_node {
     NODE=$1
-    if [[ -z "$NO_RESET" ]]; then
-        echo "[Node $NODE] Resetting the database..."
-        rm -rf "$NODES_HOME/$NODE/db"
-        mkdir -p "$NODES_HOME/$NODE/db"
-        rm -rf "$NODES_HOME/$NODE/wal"
-        mkdir -p "$NODES_HOME/$NODE/wal"
-    fi
-    rm -rf "$NODES_HOME/$NODE/logs"
-    mkdir -p "$NODES_HOME/$NODE/logs"
-    rm -rf "$NODES_HOME/$NODE/traces"
-    mkdir -p "$NODES_HOME/$NODE/traces"
+    # if [[ -z "$NO_RESET" ]]; then
+    #     echo "[Node $NODE] Resetting the database..."
+    #     rm -rf "$NODES_HOME/$NODE/db"
+    #     mkdir -p "$NODES_HOME/$NODE/db"
+    #     rm -rf "$NODES_HOME/$NODE/wal"
+    #     mkdir -p "$NODES_HOME/$NODE/wal"
+    # fi
+    # rm -rf "$NODES_HOME/$NODE/logs"
+    # mkdir -p "$NODES_HOME/$NODE/logs"
+    # rm -rf "$NODES_HOME/$NODE/traces"
+    # mkdir -p "$NODES_HOME/$NODE/traces"
     echo "[Node $NODE] Spawning node..."
     cargo run --bin $APP_BINARY -q -- start --home "$NODES_HOME/$NODE" --config ".testnet/config/$NODE"/config.toml > "$NODES_HOME/$NODE/logs/node.log" 2>&1 &
     echo $! > "$NODES_HOME/$NODE/node.pid"

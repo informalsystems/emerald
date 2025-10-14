@@ -87,14 +87,13 @@ fn seed_from_address(address: &Address) -> u64 {
 fn build_execution_block_from_bytes(raw_block_data: Bytes) -> ExecutionBlock {
     let execution_payload: ExecutionPayloadV3 =
         ExecutionPayloadV3::from_ssz_bytes(&raw_block_data).unwrap();
-    let latest_block = ExecutionBlock {
+    ExecutionBlock {
         block_hash: execution_payload.payload_inner.payload_inner.block_hash,
         block_number: execution_payload.payload_inner.payload_inner.block_number,
         parent_hash: execution_payload.payload_inner.payload_inner.parent_hash,
         timestamp: execution_payload.payload_inner.payload_inner.timestamp,
         prev_randao: execution_payload.payload_inner.payload_inner.prev_randao,
-    };
-    latest_block
+    }
 }
 
 impl State {
@@ -129,9 +128,7 @@ impl State {
     }
 
     pub async fn get_latest_block_candidate(&self, height: Height) -> Option<ExecutionBlock> {
-        let Some(decided_value) = self.store.get_decided_value(height).await.ok().flatten() else {
-            return None;
-        };
+        let decided_value = self.store.get_decided_value(height).await.ok().flatten()?;
 
         let certificate = decided_value.certificate;
 

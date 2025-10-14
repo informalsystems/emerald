@@ -88,17 +88,13 @@ pub async fn initialize_state_from_existing_block(
             //     payload or a payload that can't be validated because
             //     requisite data for the validation is missing
             debug!("reth is syncing but all good to proceed withconsensus");
-            return Ok(());
+            Ok(())
         }
-        PayloadStatusEnum::Invalid { validation_error } => {
-            return Err(eyre::eyre!(validation_error));
-        }
+        PayloadStatusEnum::Invalid { validation_error } => Err(eyre::eyre!(validation_error)),
 
-        PayloadStatusEnum::Accepted => {
-            return Err(eyre::eyre!(
-                "execution engine returned ACCEPTED for payload, this should not happen"
-            ));
-        }
+        PayloadStatusEnum::Accepted => Err(eyre::eyre!(
+            "execution engine returned ACCEPTED for payload, this should not happen"
+        )),
     }
 }
 

@@ -1,4 +1,4 @@
-name: Publish Docker image
+name: Docker
 run-name: Deploy to GHCR by @${{ github.actor }}
 
 # Workflow practices adapted from https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images
@@ -20,8 +20,8 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push:
-    name: Build and publish Docker image
+  docker-build-and-push:
+    name: Build and Publish
     runs-on: ubuntu-latest
     permissions:
       contents: read

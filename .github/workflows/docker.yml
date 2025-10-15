@@ -80,11 +80,3 @@ jobs:
           labels: ${{ steps.docker-meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Generate artifact attestation
-        if: env.PUSH_IMAGE == 'true'
-        uses: actions/attest-build-provenance@v3
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.docker-push.outputs.digest }}
-          push-to-registry: true

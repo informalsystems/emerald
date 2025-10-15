@@ -6,11 +6,12 @@ use alloy_rpc_types_txpool::TxpoolStatus;
 use alloy_signer_local::LocalSigner;
 use color_eyre::eyre::{self, Result};
 use core::fmt;
+use jsonrpsee_core::client::ClientT;
+use jsonrpsee_core::params::{ArrayParams, BatchRequestBuilder};
+use jsonrpsee_http_client::{HttpClient, HttpClientBuilder};
 use k256::ecdsa::SigningKey;
-use reqwest::header::CONTENT_TYPE;
-use reqwest::{Client, Url};
+use reqwest::Url;
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -49,7 +50,7 @@ impl Spammer {
         let signers = make_signers();
         Ok(Self {
             id: signer_index.to_string(),
-            client: RpcClient::new(url),
+            client: RpcClient::new(url)?,
             signer: signers[signer_index].clone(),
             max_num_txs,
             max_time,
@@ -94,7 +95,10 @@ impl Spammer {
     async fn get_latest_nonce(&self, address: Address) -> Result<u64> {
         let response: String = self
             .client
-            .rpc_request("eth_getTransactionCount", json!([address, "latest"]))
+            .rpc_request(
+                "eth_getTransactionCount",
+                vec![json!(address), json!("latest")],
+            )
             .await?;
         // Convert hex string to integer.
         let hex_str = response.as_str().strip_prefix("0x").unwrap();
@@ -145,7 +149,7 @@ impl Spammer {
 
                 // Add to batch.
                 let payload = hex::encode(tx_bytes);
-                batch_entries.push((json!([payload]), tx_bytes_len));
+                batch_entries.push((vec![json!(payload)], tx_bytes_len));
 
                 nonce += 1;
                 txs_sent_total += 1;
@@ -223,7 +227,7 @@ impl Spammer {
                         sleep(Duration::from_secs(1) - elapsed).await;
                     }
 
-                    let pool_status: TxpoolStatus = self.client.rpc_request("txpool_status", json!([])).await?;
+                    let pool_status: TxpoolStatus = self.client.rpc_request("txpool_status", vec![]).await?;
                     debug!("{stats_last_second}; {pool_status:?}");
 
                     // Update total, then reset last second stats
@@ -312,134 +316,50 @@ impl fmt::Display for Stats {
 }
 
 struct RpcClient {
-    client: Client,
-    url: Url,
+    client: HttpClient,
 }
 
 impl RpcClient {
-    pub fn new(url: Url) -> Self {
-        let client = Client::new();
-        Self { client, url }
+    pub fn new(url: Url) -> Result<Self> {
+        let client = HttpClientBuilder::default()
+            .request_timeout(Duration::from_secs(5))
+            .build(url)?;
+        Ok(Self { client })
     }
 
     pub async fn rpc_request<D: DeserializeOwned>(
         &self,
         method: &str,
-        params: serde_json::Value,
+        params: Vec<serde_json::Value>,
     ) -> Result<D> {
-        let body = json!({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-            "id": 1
-        });
-        let request = self
-            .client
-            .post(self.url.clone())
-            .timeout(Duration::from_secs(1))
-            .header(CONTENT_TYPE, "application/json")
-            .json(&body);
-        let body: JsonResponseBody = request.send().await?.error_for_status()?.json().await?;
-
-        if let Some(JsonError { code, message }) = body.error {
-            Err(eyre::eyre!("Server Error {}: {}", code, message))
-        } else {
-            serde_json::from_value(body.result).map_err(Into::into)
+        let mut array_params = ArrayParams::new();
+        for item in params {
+            array_params.insert(item)?;
         }
+        let result = self.client.request(method, array_params).await?;
+        Ok(result)
     }
 
     pub async fn rpc_batch_request(
         &self,
         method: &str,
-        params_list: Vec<serde_json::Value>,
+        params_list: Vec<Vec<serde_json::Value>>,
     ) -> Result<Vec<Result<String>>> {
-        let expected_len = params_list.len();
-        let batch: Vec<_> = params_list
-            .into_iter()
-            .enumerate()
-            .map(|(i, params)| {
-                json!({
-                    "jsonrpc": "2.0",
-                    "method": method,
-                    "params": params,
-                    "id": i + 1
-                })
-            })
-            .collect();
+        let mut batch = BatchRequestBuilder::new();
 
-        let request = self
-            .client
-            .post(self.url.clone())
-            .timeout(Duration::from_secs(5))
-            .header(CONTENT_TYPE, "application/json")
-            .json(&batch);
-
-        let responses: Vec<JsonResponseBody> =
-            request.send().await?.error_for_status()?.json().await?;
-
-        if responses.len() != expected_len {
-            return Err(eyre::eyre!(
-                "Batch response count {} does not match request count {}",
-                responses.len(),
-                expected_len
-            ));
+        for params in &params_list {
+            let mut array_params = ArrayParams::new();
+            for item in params {
+                array_params.insert(item)?;
+            }
+            batch.insert(method, array_params)?;
         }
 
-        let mut ordered_results: Vec<Option<Result<String>>> =
-            (0..expected_len).map(|_| None).collect();
+        let batch_response = self.client.batch_request(batch).await?;
 
-        for response in responses {
-            let JsonResponseBody {
-                error, result, id, ..
-            } = response;
-
-            let response_id = match id {
-                serde_json::Value::Number(num) => num
-                    .as_u64()
-                    .ok_or_else(|| eyre::eyre!("Response id is not a non-negative integer"))?,
-                _ => return Err(eyre::eyre!("Response id is not numeric")),
-            } as usize;
-
-            if response_id == 0 || response_id > expected_len {
-                return Err(eyre::eyre!("Unexpected response id {}", response_id));
-            }
-
-            let entry = if let Some(JsonError { code, message }) = error {
-                Err(eyre::eyre!("Server Error {}: {}", code, message))
-            } else {
-                serde_json::from_value(result).map_err(Into::into)
-            };
-
-            let slot = &mut ordered_results[response_id - 1];
-            if slot.is_some() {
-                return Err(eyre::eyre!("Duplicate response id {}", response_id));
-            }
-            *slot = Some(entry);
-        }
-
-        ordered_results
+        Ok(batch_response
             .into_iter()
-            .enumerate()
-            .map(|(idx, entry)| {
-                entry.ok_or_else(|| eyre::eyre!("Missing response for request {}", idx + 1))
-            })
-            .collect()
+            .map(|r| r.map_err(|e| eyre::eyre!("RPC error: {e:?}")))
+            .collect())
     }
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct JsonResponseBody {
-    pub jsonrpc: String,
-    #[serde(default)]
-    pub error: Option<JsonError>,
-    #[serde(default)]
-    pub result: serde_json::Value,
-    pub id: serde_json::Value,
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct JsonError {
-    pub code: i64,
-    pub message: String,
 }

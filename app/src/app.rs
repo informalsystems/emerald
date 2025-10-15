@@ -68,13 +68,13 @@ pub async fn initialize_state_from_existing_block(
     let payload_status = engine
         .send_forkchoice_updated(latest_block_candidate_from_store.block_hash)
         .await?;
-    let genesis_validator_set = read_validators_from_contract(
+    let block_validator_set = read_validators_from_contract(
         engine.eth.url().as_ref(),
         &latest_block_candidate_from_store.block_hash,
     )
     .await?;
-    debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
-    state.set_validator_set(genesis_validator_set);
+    debug!("🌈 Got block validator set: {:?}", block_validator_set);
+    state.set_validator_set(block_validator_set);
     match payload_status.status {
         PayloadStatusEnum::Valid | PayloadStatusEnum::Syncing => {
             state.current_height = start_height;
@@ -248,23 +248,23 @@ pub async fn run(
                 // We need to ask the execution engine for a new value to
                 // propose. Then we send it back to consensus.
 
-                // let latest_block = state.latest_block.expect("Head block hash is not set");
-                let execution_payload = engine.generate_block(&state.latest_block).await?;
-                match state.latest_block {
-                    Some(_) => {}
-                    None => {
-                        state.latest_block = Some(ExecutionBlock {
-                            block_hash: execution_payload.payload_inner.payload_inner.block_hash,
-                            block_number: execution_payload
-                                .payload_inner
-                                .payload_inner
-                                .block_number,
-                            parent_hash: execution_payload.payload_inner.payload_inner.parent_hash,
-                            timestamp: execution_payload.payload_inner.payload_inner.timestamp,
-                            prev_randao: execution_payload.payload_inner.payload_inner.prev_randao,
-                        });
-                    }
-                }
+                let latest_block = state.latest_block.expect("Head block hash is not set");
+                let execution_payload = engine.generate_block(&Some(latest_block)).await?;
+                // match state.latest_block {
+                //     Some(_) => {}
+                //     None => {
+                //         state.latest_block = Some(ExecutionBlock {
+                //             block_hash: execution_payload.payload_inner.payload_inner.block_hash,
+                //             block_number: execution_payload
+                //                 .payload_inner
+                //                 .payload_inner
+                //                 .block_number,
+                //             parent_hash: execution_payload.payload_inner.payload_inner.parent_hash,
+                //             timestamp: execution_payload.payload_inner.payload_inner.timestamp,
+                //             prev_randao: execution_payload.payload_inner.payload_inner.prev_randao,
+                //         });
+                //     }
+                // }
                 debug!("🌈 Got execution payload: {:?}", execution_payload);
 
                 // Store block in state and propagate to peers.
@@ -357,7 +357,7 @@ pub async fn run(
                 let block_bytes = state
                     .get_block_data(height, round)
                     .await
-                    .expect("certificate should have associated block data");
+                    .expect("app: certificate should have associated block data");
                 debug!("🎁 block size: {:?}, height: {}", block_bytes.len(), height);
 
                 // Decode bytes into execution payload (a block)
@@ -393,7 +393,7 @@ pub async fn run(
                     state.chain_bytes as f64 / elapsed_time.as_secs_f64(),
                 );
 
-                let tx_count = execution_payload
+                let tx_count: usize = execution_payload
                     .payload_inner
                     .payload_inner
                     .transactions
@@ -431,12 +431,12 @@ pub async fn run(
                 // When that happens, we store the decided value in our store
                 // TODO: we should return an error reply if commit fails
                 state.commit(certificate, block_header_bytes).await?;
-
+                let old_hash = state.latest_block.unwrap().block_hash;
                 // Save the latest block
                 state.latest_block = Some(ExecutionBlock {
                     block_hash: new_block_hash,
                     block_number: new_block_number,
-                    parent_hash: latest_valid_hash, // FIXME: should be parent_block_hash ?
+                    parent_hash: old_hash, // FIXME: should be parent_block_hash ?
                     timestamp: new_block_timestamp,
                     prev_randao: new_block_prev_randao,
                 });

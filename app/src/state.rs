@@ -135,7 +135,7 @@ impl State {
         let raw_block_data = self
             .get_block_data(certificate.height, certificate.round)
             .await
-            .expect("certificate should have associated block data");
+            .expect("state: certificate should have associated block data");
         debug!(
             "🎁 block size: {:?}, height: {}",
             raw_block_data.iter().len(),

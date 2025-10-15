@@ -2,11 +2,24 @@
 
 # Script to manually add peers (their enodes) to each node
 
-for PORT in 8545 18545 28545; do
+NODES_COUNT=0
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --nodes) NODES_COUNT="$2"; shift ;;
+        *) echo "Unknown parameter: $1"; exit 1 ;;
+    esac
+    shift
+done
+
+PORT=8545
+PORT_INCREMENT=10000
+
+for _ in {0..NODES_COUNT-1}; do
     echo "Waiting for Reth node on port ${PORT} to be ready..."
-    until cast rpc --rpc-url 127.0.0.1:${PORT} net_listening > /dev/null 2>&1; do
+    until cast rpc --rpc-url "127.0.0.1:${PORT}" net_listening > /dev/null 2>&1; do
         sleep 1
     done
+    PORT=$((PORT + PORT_INCREMENT))
 done
 
 RETH0_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' reth0)
@@ -34,3 +47,29 @@ cast rpc --rpc-url 127.0.0.1:28545 admin_addTrustedPeer "${RETH0_ENODE}"
 cast rpc --rpc-url 127.0.0.1:28545 admin_addTrustedPeer "${RETH1_ENODE}"
 cast rpc --rpc-url 127.0.0.1:28545 admin_addPeer "${RETH0_ENODE}"
 cast rpc --rpc-url 127.0.0.1:28545 admin_addPeer "${RETH1_ENODE}"
+
+# If 4 nodes, add reth3
+if [ "$NODES_COUNT" -eq 4 ]; then
+    RETH3_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' reth3)
+    RETH3_ENODE=$(cast rpc --rpc-url 127.0.0.1:38545 admin_nodeInfo | jq -r .enode | sed "s/127\.0\.0\.1/${RETH3_IP}/" )
+
+    echo "RETH3_ENODE: ${RETH3_ENODE}"
+
+    # Add reth3 to all other nodes
+    cast rpc --rpc-url 127.0.0.1:8545 admin_addTrustedPeer "${RETH3_ENODE}"
+    cast rpc --rpc-url 127.0.0.1:8545 admin_addPeer "${RETH3_ENODE}"
+
+    cast rpc --rpc-url 127.0.0.1:18545 admin_addTrustedPeer "${RETH3_ENODE}"
+    cast rpc --rpc-url 127.0.0.1:18545 admin_addPeer "${RETH3_ENODE}"
+
+    cast rpc --rpc-url 127.0.0.1:28545 admin_addTrustedPeer "${RETH3_ENODE}"
+    cast rpc --rpc-url 127.0.0.1:28545 admin_addPeer "${RETH3_ENODE}"
+
+    # Add all nodes to reth3
+    cast rpc --rpc-url 127.0.0.1:38545 admin_addTrustedPeer "${RETH0_ENODE}"
+    cast rpc --rpc-url 127.0.0.1:38545 admin_addTrustedPeer "${RETH1_ENODE}"
+    cast rpc --rpc-url 127.0.0.1:38545 admin_addTrustedPeer "${RETH2_ENODE}"
+    cast rpc --rpc-url 127.0.0.1:38545 admin_addPeer "${RETH0_ENODE}"
+    cast rpc --rpc-url 127.0.0.1:38545 admin_addPeer "${RETH1_ENODE}"
+    cast rpc --rpc-url 127.0.0.1:38545 admin_addPeer "${RETH2_ENODE}"
+fi

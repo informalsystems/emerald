@@ -34,7 +34,7 @@ clean: clean-prometheus
 	rm -rf ./assets/genesis.json
 	rm -rf ./nodes
 	rm -rf ./monitoring/data-grafana
-	docker volume rm --force malaketh-layered-private_reth{0,1,2,3} || true
+	docker volume rm --force malaketh-layered-private_reth{0,1,2,3}
 
 clean-prometheus: stop
 	rm -rf ./monitoring/data-prometheus

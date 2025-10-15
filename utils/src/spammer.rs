@@ -343,11 +343,11 @@ impl RpcClient {
     pub async fn rpc_batch_request(
         &self,
         method: &str,
-        params_list: Vec<Vec<serde_json::Value>>,
+        batch_params: Vec<Vec<serde_json::Value>>,
     ) -> Result<Vec<Result<String>>> {
         let mut batch = BatchRequestBuilder::new();
 
-        for params in &params_list {
+        for params in &batch_params {
             let mut array_params = ArrayParams::new();
             for item in params {
                 array_params.insert(item)?;

@@ -6,11 +6,12 @@ use alloy_rpc_types_txpool::TxpoolStatus;
 use alloy_signer_local::LocalSigner;
 use color_eyre::eyre::{self, Result};
 use core::fmt;
+use jsonrpsee_core::client::ClientT;
+use jsonrpsee_core::params::{ArrayParams, BatchRequestBuilder};
+use jsonrpsee_http_client::{HttpClient, HttpClientBuilder};
 use k256::ecdsa::SigningKey;
-use reqwest::header::CONTENT_TYPE;
-use reqwest::{Client, Url};
+use reqwest::Url;
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -49,7 +50,7 @@ impl Spammer {
         let signers = make_signers();
         Ok(Self {
             id: signer_index.to_string(),
-            client: RpcClient::new(url),
+            client: RpcClient::new(url)?,
             signer: signers[signer_index].clone(),
             max_num_txs,
             max_time,
@@ -94,7 +95,10 @@ impl Spammer {
     async fn get_latest_nonce(&self, address: Address) -> Result<u64> {
         let response: String = self
             .client
-            .rpc_request("eth_getTransactionCount", json!([address, "latest"]))
+            .rpc_request(
+                "eth_getTransactionCount",
+                vec![json!(address), json!("latest")],
+            )
             .await?;
         // Convert hex string to integer.
         let hex_str = response.as_str().strip_prefix("0x").unwrap();
@@ -121,19 +125,20 @@ impl Spammer {
         loop {
             // Wait for next one-second tick.
             let _ = interval.tick().await;
-            let mut txs_sent_in_interval = 0u64;
             let interval_start = Instant::now();
 
-            // Send up to max_rate transactions per one-second interval.
-            while txs_sent_in_interval < self.max_rate {
-                // Check exit conditions before sending each transaction.
+            // Prepare batch of transactions for this interval.
+            let mut batch_entries = Vec::with_capacity(self.max_rate as usize);
+
+            for _ in 0..self.max_rate {
+                // Check exit conditions before creating each transaction.
                 if (self.max_num_txs > 0 && txs_sent_total >= self.max_num_txs)
                     || (self.max_time > 0 && start_time.elapsed().as_secs() >= self.max_time)
                 {
                     break;
                 }
 
-                // Create one transaction and sing it.
+                // Create one transaction and sign it.
                 let signed_tx = if self.blobs {
                     make_signed_eip4844_tx(&self.signer, nonce).await?
                 } else {
@@ -142,19 +147,39 @@ impl Spammer {
                 let tx_bytes = signed_tx.encoded_2718();
                 let tx_bytes_len = tx_bytes.len() as u64;
 
-                // Send transaction to Ethereum RPC endpoint.
+                // Add to batch.
                 let payload = hex::encode(tx_bytes);
-                let result = self
-                    .client
-                    .rpc_request("eth_sendRawTransaction", json!([payload]))
-                    .await
-                    .map(|_: String| tx_bytes_len);
+                batch_entries.push((vec![json!(payload)], tx_bytes_len));
 
-                // Report result and update counters.
-                result_sender.send(result).await?;
-                txs_sent_in_interval += 1;
                 nonce += 1;
                 txs_sent_total += 1;
+            }
+
+            // Send all transactions in a single batch RPC call.
+            if !batch_entries.is_empty() {
+                let params: Vec<_> = batch_entries
+                    .iter()
+                    .map(|(params, _)| params.clone())
+                    .collect();
+
+                let results = self
+                    .client
+                    .rpc_batch_request("eth_sendRawTransaction", params)
+                    .await?;
+
+                if results.len() != batch_entries.len() {
+                    return Err(eyre::eyre!(
+                        "Batch response count {} does not match request count {}",
+                        results.len(),
+                        batch_entries.len()
+                    ));
+                }
+
+                // Report individual results.
+                for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
+                    let mapped_result = result.map(|_| tx_bytes_len);
+                    result_sender.send(mapped_result).await?;
+                }
             }
 
             // Give time to the in-flight results to be received.
@@ -202,7 +227,7 @@ impl Spammer {
                         sleep(Duration::from_secs(1) - elapsed).await;
                     }
 
-                    let pool_status: TxpoolStatus = self.client.rpc_request("txpool_status", json!([])).await?;
+                    let pool_status: TxpoolStatus = self.client.rpc_request("txpool_status", vec![]).await?;
                     debug!("{stats_last_second}; {pool_status:?}");
 
                     // Update total, then reset last second stats
@@ -291,56 +316,50 @@ impl fmt::Display for Stats {
 }
 
 struct RpcClient {
-    client: Client,
-    url: Url,
+    client: HttpClient,
 }
 
 impl RpcClient {
-    pub fn new(url: Url) -> Self {
-        let client = Client::new();
-        Self { client, url }
+    pub fn new(url: Url) -> Result<Self> {
+        let client = HttpClientBuilder::default()
+            .request_timeout(Duration::from_secs(5))
+            .build(url)?;
+        Ok(Self { client })
     }
 
     pub async fn rpc_request<D: DeserializeOwned>(
         &self,
         method: &str,
-        params: serde_json::Value,
+        params: Vec<serde_json::Value>,
     ) -> Result<D> {
-        let body = json!({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-            "id": 1
-        });
-        let request = self
-            .client
-            .post(self.url.clone())
-            .timeout(Duration::from_secs(1))
-            .header(CONTENT_TYPE, "application/json")
-            .json(&body);
-        let body: JsonResponseBody = request.send().await?.error_for_status()?.json().await?;
-
-        if let Some(JsonError { code, message }) = body.error {
-            Err(eyre::eyre!("Server Error {}: {}", code, message))
-        } else {
-            serde_json::from_value(body.result).map_err(Into::into)
+        let mut array_params = ArrayParams::new();
+        for item in params {
+            array_params.insert(item)?;
         }
+        let result = self.client.request(method, array_params).await?;
+        Ok(result)
     }
-}
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct JsonResponseBody {
-    pub jsonrpc: String,
-    #[serde(default)]
-    pub error: Option<JsonError>,
-    #[serde(default)]
-    pub result: serde_json::Value,
-    pub id: serde_json::Value,
-}
+    pub async fn rpc_batch_request(
+        &self,
+        method: &str,
+        batch_params: Vec<Vec<serde_json::Value>>,
+    ) -> Result<Vec<Result<String>>> {
+        let mut batch = BatchRequestBuilder::new();
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct JsonError {
-    pub code: i64,
-    pub message: String,
+        for params in &batch_params {
+            let mut array_params = ArrayParams::new();
+            for item in params {
+                array_params.insert(item)?;
+            }
+            batch.insert(method, array_params)?;
+        }
+
+        let batch_response = self.client.batch_request(batch).await?;
+
+        Ok(batch_response
+            .into_iter()
+            .map(|r| r.map_err(|e| eyre::eyre!("RPC error: {e:?}")))
+            .collect())
+    }
 }

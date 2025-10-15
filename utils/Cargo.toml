@@ -45,6 +45,9 @@ alloy-signer           = "0.11.1"
 alloy-signer-local     = { version = "0.11.1", features = ["keystore", "mnemonic"]}
 alloy-transport-http   = { version = "0.11.1", features = ["jwt-auth"] }
 
+jsonrpsee-core = { version = "0.25.0" }
+jsonrpsee-http-client = { version = "0.25.0" }
+
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.2.0" }
 
 [dev-dependencies]

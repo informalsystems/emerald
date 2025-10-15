@@ -121,14 +121,12 @@ impl Spammer {
         loop {
             // Wait for next one-second tick.
             let _ = interval.tick().await;
-            let mut txs_sent_in_interval = 0u64;
             let interval_start = Instant::now();
 
             // Prepare batch of transactions for this interval.
-            let mut batch_params = Vec::new();
-            let mut batch_sizes = Vec::new();
+            let mut batch_entries = Vec::with_capacity(self.max_rate as usize);
 
-            while txs_sent_in_interval < self.max_rate {
+            for _ in 0..self.max_rate {
                 // Check exit conditions before creating each transaction.
                 if (self.max_num_txs > 0 && txs_sent_total >= self.max_num_txs)
                     || (self.max_time > 0 && start_time.elapsed().as_secs() >= self.max_time)
@@ -147,23 +145,34 @@ impl Spammer {
 
                 // Add to batch.
                 let payload = hex::encode(tx_bytes);
-                batch_params.push(json!([payload]));
-                batch_sizes.push(tx_bytes_len);
+                batch_entries.push((json!([payload]), tx_bytes_len));
 
-                txs_sent_in_interval += 1;
                 nonce += 1;
                 txs_sent_total += 1;
             }
 
             // Send all transactions in a single batch RPC call.
-            if !batch_params.is_empty() {
+            if !batch_entries.is_empty() {
+                let params: Vec<_> = batch_entries
+                    .iter()
+                    .map(|(params, _)| params.clone())
+                    .collect();
+
                 let results = self
                     .client
-                    .rpc_batch_request("eth_sendRawTransaction", batch_params)
+                    .rpc_batch_request("eth_sendRawTransaction", params)
                     .await?;
 
+                if results.len() != batch_entries.len() {
+                    return Err(eyre::eyre!(
+                        "Batch response count {} does not match request count {}",
+                        results.len(),
+                        batch_entries.len()
+                    ));
+                }
+
                 // Report individual results.
-                for (result, tx_bytes_len) in results.into_iter().zip(batch_sizes.into_iter()) {
+                for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
                     let mapped_result = result.map(|_| tx_bytes_len);
                     result_sender.send(mapped_result).await?;
                 }
@@ -344,8 +353,9 @@ impl RpcClient {
         method: &str,
         params_list: Vec<serde_json::Value>,
     ) -> Result<Vec<Result<String>>> {
+        let expected_len = params_list.len();
         let batch: Vec<_> = params_list
-            .iter()
+            .into_iter()
             .enumerate()
             .map(|(i, params)| {
                 json!({
@@ -367,16 +377,53 @@ impl RpcClient {
         let responses: Vec<JsonResponseBody> =
             request.send().await?.error_for_status()?.json().await?;
 
-        Ok(responses
+        if responses.len() != expected_len {
+            return Err(eyre::eyre!(
+                "Batch response count {} does not match request count {}",
+                responses.len(),
+                expected_len
+            ));
+        }
+
+        let mut ordered_results: Vec<Option<Result<String>>> =
+            (0..expected_len).map(|_| None).collect();
+
+        for response in responses {
+            let JsonResponseBody {
+                error, result, id, ..
+            } = response;
+
+            let response_id = match id {
+                serde_json::Value::Number(num) => num
+                    .as_u64()
+                    .ok_or_else(|| eyre::eyre!("Response id is not a non-negative integer"))?,
+                _ => return Err(eyre::eyre!("Response id is not numeric")),
+            } as usize;
+
+            if response_id == 0 || response_id > expected_len {
+                return Err(eyre::eyre!("Unexpected response id {}", response_id));
+            }
+
+            let entry = if let Some(JsonError { code, message }) = error {
+                Err(eyre::eyre!("Server Error {}: {}", code, message))
+            } else {
+                serde_json::from_value(result).map_err(Into::into)
+            };
+
+            let slot = &mut ordered_results[response_id - 1];
+            if slot.is_some() {
+                return Err(eyre::eyre!("Duplicate response id {}", response_id));
+            }
+            *slot = Some(entry);
+        }
+
+        ordered_results
             .into_iter()
-            .map(|body| {
-                if let Some(JsonError { code, message }) = body.error {
-                    Err(eyre::eyre!("Server Error {}: {}", code, message))
-                } else {
-                    serde_json::from_value(body.result).map_err(Into::into)
-                }
+            .enumerate()
+            .map(|(idx, entry)| {
+                entry.ok_or_else(|| eyre::eyre!("Missing response for request {}", idx + 1))
             })
-            .collect())
+            .collect()
     }
 }
 

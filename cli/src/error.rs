@@ -35,4 +35,7 @@ pub enum Error {
 
     #[error("Error decoding .toml file. Details: {0}")]
     FromTOML(toml::de::Error),
+
+    #[error("Missing configuration path for node {0}")]
+    MissingPath(usize),
 }

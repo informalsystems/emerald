@@ -82,6 +82,9 @@ const DECIDED_BLOCK_DATA_TABLE: redb::TableDefinition<HeightKey, Vec<u8>> =
 const UNDECIDED_BLOCK_DATA_TABLE: redb::TableDefinition<UndecidedValueKey, Vec<u8>> =
     redb::TableDefinition::new("undecided_block_data");
 
+const DECIDED_BLOCK_HEADERS_TABLE: redb::TableDefinition<HeightKey, Vec<u8>> =
+    redb::TableDefinition::new("decided_block_headers");
+
 struct Db {
     db: redb::Database,
     metrics: DbMetrics,
@@ -132,7 +135,11 @@ impl Db {
         Ok(decided_value)
     }
 
-    fn insert_decided_value(&self, decided_value: DecidedValue) -> Result<(), StoreError> {
+    fn insert_decided_value(
+        &self,
+        decided_value: DecidedValue,
+        block_header_bytes: Bytes,
+    ) -> Result<(), StoreError> {
         let start = Instant::now();
         let mut write_bytes = 0;
 
@@ -151,6 +158,12 @@ impl Db {
             let encoded_certificate = encode_certificate(&decided_value.certificate)?;
             write_bytes += encoded_certificate.len() as u64;
             certificates.insert(height, encoded_certificate)?;
+        }
+
+        {
+            let mut headers = tx.open_table(DECIDED_BLOCK_HEADERS_TABLE)?;
+            write_bytes += block_header_bytes.len() as u64;
+            headers.insert(height, block_header_bytes.to_vec())?;
         }
 
         tx.commit()?;
@@ -284,13 +297,11 @@ impl Db {
             }
 
             let mut decided = tx.open_table(DECIDED_VALUES_TABLE)?;
-            let mut certificates = tx.open_table(CERTIFICATES_TABLE)?;
             let mut decided_block_data = tx.open_table(DECIDED_BLOCK_DATA_TABLE)?;
 
             let keys = self.height_range(&decided, ..retain_height)?;
             for key in &keys {
                 decided.remove(key)?;
-                certificates.remove(key)?;
                 decided_block_data.remove(key)?;
             }
 
@@ -305,6 +316,20 @@ impl Db {
     }
 
     fn min_decided_value_height(&self) -> Option<Height> {
+        let start = Instant::now();
+
+        let tx = self.db.begin_read().unwrap();
+        let table = tx.open_table(CERTIFICATES_TABLE).unwrap();
+        let (key, value) = table.first().ok()??;
+
+        self.metrics.observe_read_time(start.elapsed());
+        self.metrics.add_read_bytes(value.value().len() as u64);
+        self.metrics.add_key_read_bytes(size_of::<Height>() as u64);
+
+        Some(key.value())
+    }
+
+    fn min_unpruned_decided_value_height(&self) -> Option<Height> {
         let start = Instant::now();
 
         let tx = self.db.begin_read().unwrap();
@@ -334,6 +359,7 @@ impl Db {
         let _ = tx.open_table(UNDECIDED_PROPOSALS_TABLE)?;
         let _ = tx.open_table(DECIDED_BLOCK_DATA_TABLE)?;
         let _ = tx.open_table(UNDECIDED_BLOCK_DATA_TABLE)?;
+        let _ = tx.open_table(DECIDED_BLOCK_HEADERS_TABLE)?;
 
         tx.commit()?;
 
@@ -417,6 +443,40 @@ impl Db {
 
         Ok(())
     }
+
+    fn get_certificate_and_header(
+        &self,
+        height: Height,
+    ) -> Result<Option<(CommitCertificate<MalakethContext>, Bytes)>, StoreError> {
+        let start = Instant::now();
+        let mut read_bytes = 0;
+
+        let tx = self.db.begin_read()?;
+
+        let certificate = {
+            let table = tx.open_table(CERTIFICATES_TABLE)?;
+            table.get(&height)?.and_then(|v| {
+                let bytes = v.value();
+                read_bytes += bytes.len() as u64;
+                decode_certificate(&bytes).ok()
+            })
+        };
+
+        let header = {
+            let table = tx.open_table(DECIDED_BLOCK_HEADERS_TABLE)?;
+            table.get(&height)?.map(|v| {
+                let bytes = v.value();
+                read_bytes += bytes.len() as u64;
+                Bytes::copy_from_slice(&bytes)
+            })
+        };
+
+        self.metrics.observe_read_time(start.elapsed());
+        self.metrics.add_read_bytes(read_bytes);
+        self.metrics.add_key_read_bytes(size_of::<Height>() as u64);
+
+        Ok(certificate.zip(header))
+    }
 }
 
 #[derive(Clone)]
@@ -435,6 +495,14 @@ impl Store {
     pub async fn min_decided_value_height(&self) -> Option<Height> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.min_decided_value_height())
+            .await
+            .ok()
+            .flatten()
+    }
+
+    pub async fn min_unpruned_decided_value_height(&self) -> Option<Height> {
+        let db = Arc::clone(&self.db);
+        tokio::task::spawn_blocking(move || db.min_unpruned_decided_value_height())
             .await
             .ok()
             .flatten()
@@ -461,6 +529,7 @@ impl Store {
         &self,
         certificate: &CommitCertificate<MalakethContext>,
         value: Value,
+        block_header_bytes: Bytes,
     ) -> Result<(), StoreError> {
         let decided_value = DecidedValue {
             value,
@@ -468,7 +537,10 @@ impl Store {
         };
 
         let db = Arc::clone(&self.db);
-        tokio::task::spawn_blocking(move || db.insert_decided_value(decided_value)).await?
+        tokio::task::spawn_blocking(move || {
+            db.insert_decided_value(decided_value, block_header_bytes)
+        })
+        .await?
     }
 
     pub async fn store_undecided_proposal(
@@ -519,5 +591,13 @@ impl Store {
     ) -> Result<(), StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.insert_decided_block_data(height, data)).await?
+    }
+
+    pub async fn get_certificate_and_header(
+        &self,
+        height: Height,
+    ) -> Result<Option<(CommitCertificate<MalakethContext>, Bytes)>, StoreError> {
+        let db = Arc::clone(&self.db);
+        tokio::task::spawn_blocking(move || db.get_certificate_and_header(height)).await?
     }
 }

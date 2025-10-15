@@ -9,6 +9,54 @@ pub use malachitebft_config::{
     Selector, TestConfig, TimeoutConfig, TransportProtocol, ValuePayload, ValueSyncConfig,
 };
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[derive(Default)]
+pub enum ElNodeType {
+    /// No pruning - keeps all historical data
+    #[default]
+    Archive,
+    /// Standard pruning - keeps recent data based on distance
+    Full,
+    /// Custom pruning configuration
+    Custom,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MalakethConfig {
+    /// A custom human-readable name for this node
+    pub moniker: String,
+
+    /// RPC endpoint of Ethereum execution client
+    pub execution_authrpc_address: String,
+
+    /// RPC endpoint of Ethereum Engine API
+    pub engine_authrpc_address: String,
+
+    /// Path of the JWT token file
+    pub jwt_token_path: String,
+
+    /// Maximum time to wait for execution client to sync before crashing
+    #[serde(default = "default_sync_timeout")]
+    pub sync_timeout_ms: u64,
+
+    /// Initial retry delay for execution client sync validation
+    #[serde(default = "default_sync_initial_delay")]
+    pub sync_initial_delay_ms: u64,
+
+    /// Type of execution layer node (archive, full, or custom)
+    #[serde(default)]
+    pub el_node_type: ElNodeType,
+}
+
+fn default_sync_timeout() -> u64 {
+    10000
+}
+
+fn default_sync_initial_delay() -> u64 {
+    100
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     /// A custom human-readable name for this node
@@ -59,9 +107,4 @@ pub fn load_config(path: impl AsRef<Path>, prefix: Option<&str>) -> eyre::Result
         .build()?
         .try_deserialize()
         .map_err(Into::into)
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MalakethConfig {
-    pub moniker: String,
 }

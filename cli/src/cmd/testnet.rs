@@ -2,10 +2,13 @@
 
 use std::fs;
 use std::path::Path;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use clap::Parser;
 use color_eyre::{eyre::eyre, Result};
+use directories::BaseDirs;
+use serde::Deserialize;
 use tracing::info;
 
 use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, Node};
@@ -14,6 +17,8 @@ use malachitebft_config::*;
 use crate::args::Args;
 use crate::error::Error;
 use crate::file::{save_config, save_genesis, save_priv_validator_key};
+
+const TESTNET_FOLDER: &str = ".malachite_testnet";
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeFlavour {
@@ -45,13 +50,8 @@ impl FromStr for RuntimeFlavour {
 
 #[derive(Parser, Debug, Clone, PartialEq)]
 pub struct TestnetCmd {
-    /// Number of validator nodes in the testnet
-    #[clap(short, long)]
-    pub nodes: usize,
-
-    /// Generate deterministic private keys for reproducibility
-    #[clap(short, long)]
-    pub deterministic: bool,
+    #[clap(long)]
+    pub testnet_config: Option<PathBuf>,
 
     /// The flavor of Tokio runtime to use.
     /// Possible values:
@@ -106,13 +106,7 @@ pub struct TestnetCmd {
 
 impl TestnetCmd {
     /// Execute the testnet command
-    pub fn run<N>(
-        &self,
-        node: &N,
-        home_dir: &Path,
-        malaketh_config_dir: &Path,
-        logging: LoggingConfig,
-    ) -> Result<()>
+    pub fn run<N>(&self, node: &N, home_dir: &Path, logging: LoggingConfig) -> Result<()>
     where
         N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
     {
@@ -121,11 +115,23 @@ impl TestnetCmd {
             RuntimeFlavour::MultiThreaded(n) => RuntimeConfig::MultiThreaded { worker_threads: n },
         };
 
+        let testnet_config_file = self.testnet_config.as_ref().map_or_else(
+            || {
+                BaseDirs::new()
+                    .ok_or(eyre!("missing base directory"))
+                    .map(|base_dir| base_dir.home_dir().join(TESTNET_FOLDER))
+            },
+            |p| Ok(p.clone()),
+        )?;
+        let testnet_config_content = fs::read_to_string(testnet_config_file.clone())
+            .map_err(|e| Error::LoadFile(testnet_config_file.to_path_buf(), e))?;
+        let testnet_config =
+            toml::from_str::<TestnetConfig>(&testnet_config_content).map_err(Error::FromTOML)?;
+
         testnet(
             node,
-            self.nodes,
             home_dir,
-            malaketh_config_dir,
+            &testnet_config,
             runtime,
             self.enable_discovery,
             self.bootstrap_protocol,
@@ -135,7 +141,6 @@ impl TestnetCmd {
             self.ephemeral_connection_timeout_ms,
             self.transport,
             logging,
-            self.deterministic,
         )
         .map_err(|e| eyre!("Failed to generate testnet configuration: {:?}", e))
     }
@@ -144,9 +149,8 @@ impl TestnetCmd {
 #[allow(clippy::too_many_arguments)]
 pub fn testnet<N>(
     node: &N,
-    nodes: usize,
     home_dir: &Path,
-    malaketh_config_dir: &Path,
+    testnet_config: &TestnetConfig,
     runtime: RuntimeConfig,
     enable_discovery: bool,
     bootstrap_protocol: BootstrapProtocol,
@@ -156,11 +160,12 @@ pub fn testnet<N>(
     ephemeral_connection_timeout_ms: u64,
     transport: TransportProtocol,
     logging: LoggingConfig,
-    deterministic: bool,
 ) -> std::result::Result<(), Error>
 where
     N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
 {
+    let nodes = testnet_config.nodes;
+    let deterministic = testnet_config.deterministic;
     let private_keys = crate::new::generate_private_keys(node, nodes, deterministic);
     let public_keys = private_keys
         .iter()
@@ -173,9 +178,11 @@ where
         let node_home_dir = home_dir.join(i.to_string());
 
         // Use malaketh config directory `malaketh_config_dir/<index>/config.toml`
-        let node_malaketh_config_dir = malaketh_config_dir.join(i.to_string());
-        let node_malaketh_config_file = node_malaketh_config_dir.join("config.toml");
-        let malaketh_config_content = fs::read_to_string(&node_malaketh_config_file)
+        let node_malaketh_config_file = testnet_config
+            .configuration_paths
+            .get(i)
+            .ok_or(Error::MissingPath(i))?;
+        let malaketh_config_content = fs::read_to_string(node_malaketh_config_file)
             .map_err(|e| Error::LoadFile(node_malaketh_config_file.to_path_buf(), e))?;
         let malaketh_config =
             toml::from_str::<crate::config::MalakethConfig>(&malaketh_config_content)
@@ -184,14 +191,14 @@ where
         info!(
             id = %i,
             home = %node_home_dir.display(),
-            malaketh_config = %node_malaketh_config_dir.display(),
+            malaketh_config = %node_malaketh_config_file.display(),
             "Generating configuration for node..."
         );
 
         // Set the destination folder
         let args = Args {
             home: Some(node_home_dir),
-            config: Some(node_malaketh_config_dir),
+            config: Some(node_malaketh_config_file.clone()),
             ..Args::default()
         };
 
@@ -227,4 +234,11 @@ where
     }
 
     Ok(())
+}
+
+#[derive(Deserialize)]
+pub struct TestnetConfig {
+    pub nodes: usize,
+    pub deterministic: bool,
+    pub configuration_paths: Vec<PathBuf>,
 }

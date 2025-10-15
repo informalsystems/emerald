@@ -21,7 +21,7 @@ use malachitebft_eth_types::{
     ProposalInit, ProposalPart, ValidatorSet, Value,
 };
 
-use crate::store::{DecidedValue, Store};
+use crate::store::Store;
 use crate::streaming::{PartStreamsMap, ProposalParts};
 
 /// Size of randomly generated blocks in bytes
@@ -38,7 +38,7 @@ pub struct State {
     ctx: MalakethContext,
     signing_provider: Ed25519Provider,
     address: Address,
-    store: Store,
+    pub store: Store,
     stream_nonce: u32,
     streams_map: PartStreamsMap,
     #[allow(dead_code)]
@@ -114,10 +114,18 @@ impl State {
         }
     }
 
-    /// Returns the earliest height available in the state
+    /// Returns the earliest height available via EL
     pub async fn get_earliest_height(&self) -> Height {
         self.store
             .min_decided_value_height()
+            .await
+            .unwrap_or_default()
+    }
+
+    /// Returns the earliest height available in the state
+    pub async fn get_earliest_unpruned_height(&self) -> Height {
+        self.store
+            .min_unpruned_decided_value_height()
             .await
             .unwrap_or_default()
     }
@@ -176,21 +184,22 @@ impl State {
 
         // Store the proposal and its data
         self.store.store_undecided_proposal(value.clone()).await?;
-        self.store_undecided_proposal_data(data).await?;
+        self.store_undecided_proposal_data(value.height, value.round, data)
+            .await?;
 
         Ok(Some(value))
     }
 
-    pub async fn store_undecided_proposal_data(&mut self, data: Bytes) -> eyre::Result<()> {
+    pub async fn store_undecided_proposal_data(
+        &mut self,
+        height: Height,
+        round: Round,
+        data: Bytes,
+    ) -> eyre::Result<()> {
         self.store
-            .store_undecided_block_data(self.current_height, self.current_round, data)
+            .store_undecided_block_data(height, round, data)
             .await
             .map_err(|e| eyre::Report::new(e))
-    }
-
-    /// Retrieves a decided block at the given height
-    pub async fn get_decided_value(&self, height: Height) -> Option<DecidedValue> {
-        self.store.get_decided_value(height).await.ok().flatten()
     }
 
     /// Retrieves a decided block data at the given height
@@ -207,6 +216,7 @@ impl State {
     pub async fn commit(
         &mut self,
         certificate: CommitCertificate<MalakethContext>,
+        block_header_bytes: Bytes,
     ) -> eyre::Result<()> {
         info!(
             height = %certificate.height,
@@ -234,7 +244,7 @@ impl State {
         };
 
         self.store
-            .store_decided_value(&certificate, proposal.value)
+            .store_decided_value(&certificate, proposal.value, block_header_bytes)
             .await?;
 
         // Store block data for decided value
@@ -509,4 +519,47 @@ fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<MalakethCon
 /// Decodes a Value from its byte representation using ProtobufCodec
 pub fn decode_value(bytes: Bytes) -> Value {
     ProtobufCodec.decode(bytes).unwrap()
+}
+
+/// Extracts a block header from an ExecutionPayloadV3 by removing transactions and withdrawals.
+///
+/// Returns an ExecutionPayloadV3 with empty transactions and withdrawals vectors,
+/// containing only the block header fields.
+pub fn extract_block_header(
+    payload: &alloy_rpc_types_engine::ExecutionPayloadV3,
+) -> alloy_rpc_types_engine::ExecutionPayloadV3 {
+    use alloy_rpc_types_engine::{ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3};
+
+    ExecutionPayloadV3 {
+        payload_inner: ExecutionPayloadV2 {
+            payload_inner: ExecutionPayloadV1 {
+                transactions: vec![],
+                ..payload.payload_inner.payload_inner.clone()
+            },
+            withdrawals: vec![],
+        },
+        ..payload.clone()
+    }
+}
+
+/// Reconstructs a complete ExecutionPayloadV3 from a block header and payload body.
+///
+/// Takes a header (ExecutionPayloadV3 with empty transactions/withdrawals) and combines it
+/// with the transactions and withdrawals from an ExecutionPayloadBodyV1 to create a full payload.
+pub fn reconstruct_execution_payload(
+    header: alloy_rpc_types_engine::ExecutionPayloadV3,
+    body: malachitebft_eth_engine::json_structures::ExecutionPayloadBodyV1,
+) -> alloy_rpc_types_engine::ExecutionPayloadV3 {
+    use alloy_rpc_types_engine::{ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3};
+
+    ExecutionPayloadV3 {
+        payload_inner: ExecutionPayloadV2 {
+            payload_inner: ExecutionPayloadV1 {
+                transactions: body.transactions,
+                ..header.payload_inner.payload_inner
+            },
+            withdrawals: body.withdrawals.unwrap_or_default(),
+        },
+        ..header
+    }
 }

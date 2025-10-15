@@ -59,7 +59,6 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run Forge build
-        working-directory: ./solidity
         run: forge build
       - name: Run clippy
         uses: auguwu/clippy-action@1.4.0

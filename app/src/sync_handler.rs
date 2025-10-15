@@ -6,7 +6,7 @@ use ssz::{Decode, Encode};
 use std::time::Duration;
 use tracing::{error, info, warn};
 
-use alloy_rpc_types_engine::ExecutionPayloadV3;
+use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::sync::RawDecidedValue;
@@ -37,12 +37,11 @@ pub async fn validate_synced_payload(
                 .await;
 
             match result {
-                Ok(payload_status) => {
-                    if payload_status.status.is_valid() {
+                Ok(payload_status) => match payload_status.status {
+                    PayloadStatusEnum::Valid => {
                         return Ok(Validity::Valid);
                     }
-
-                    if payload_status.status.is_syncing() {
+                    PayloadStatusEnum::Syncing => {
                         warn!(
                             %height, %round,
                             "⚠️  Execution client SYNCING, retrying in {:?}",
@@ -53,13 +52,15 @@ pub async fn validate_synced_payload(
                         retry_delay = std::cmp::min(retry_delay * 2, Duration::from_secs(2));
                         continue;
                     }
-
-                    // INVALID or ACCEPTED - both are treated as invalid
-                    // INVALID: malicious block
-                    // ACCEPTED: Non-canonical payload - should not happen with instant finality
-                    error!(%height, %round, "🔴 Synced block validation failed: {}", payload_status.status);
-                    return Ok(Validity::Invalid);
-                }
+                    PayloadStatusEnum::Accepted => {
+                        warn!(%height, %round, "⚠️  Synced block ACCEPTED: {:?}", payload_status.status);
+                        return Ok(Validity::Invalid);
+                    }
+                    PayloadStatusEnum::Invalid { validation_error } => {
+                        error!(%height, %round, validation_error = ?validation_error, "🔴 Synced block INVALID");
+                        return Ok(Validity::Invalid);
+                    }
+                },
                 Err(e) => {
                     error!(%height, %round, "🔴 Payload validation RPC error: {}", e);
                     return Err(e);

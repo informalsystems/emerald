@@ -25,11 +25,11 @@ use crate::metrics::Metrics;
 use crate::store::Store;
 use crate::streaming::{PartStreamsMap, ProposalParts};
 
-/// Restored cumulative metrics from database for crash recovery
-pub struct RestoredMetrics {
+pub struct StateMetrics {
     pub txs_count: u64,
     pub chain_bytes: u64,
     pub elapsed_seconds: u64,
+    pub metrics: Metrics,
 }
 
 /// Size of randomly generated blocks in bytes
@@ -101,14 +101,13 @@ impl State {
         address: Address,
         height: Height,
         store: Store,
-        metrics: Metrics,
-        restored_metrics: RestoredMetrics,
+        state_metrics: StateMetrics,
     ) -> Self {
         // Calculate start_time by subtracting elapsed_seconds from now.
         // It represents the start time of measuring metrics, not the actual node start time.
         // This allows us to continue accumulating time correctly after a restart
         let start_time =
-            Instant::now() - std::time::Duration::from_secs(restored_metrics.elapsed_seconds);
+            Instant::now() - std::time::Duration::from_secs(state_metrics.elapsed_seconds);
 
         Self {
             ctx,
@@ -125,10 +124,10 @@ impl State {
             latest_block: None,
             validator_set: None,
 
-            txs_count: restored_metrics.txs_count,
-            chain_bytes: restored_metrics.chain_bytes,
+            txs_count: state_metrics.txs_count,
+            chain_bytes: state_metrics.chain_bytes,
             start_time,
-            metrics,
+            metrics: state_metrics.metrics,
         }
     }
 

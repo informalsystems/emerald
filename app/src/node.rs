@@ -34,7 +34,7 @@ use tokio::task::JoinHandle;
 use url::Url;
 
 use crate::metrics::Metrics;
-use crate::state::{RestoredMetrics, State};
+use crate::state::{State, StateMetrics};
 use crate::store::Store;
 
 /// Main application struct implementing the consensus node functionality
@@ -178,10 +178,11 @@ impl Node for App {
                 (0, 0, 0)
             });
 
-        let restored_metrics = RestoredMetrics {
+        let state_metrics = StateMetrics {
             txs_count,
             chain_bytes,
             elapsed_seconds,
+            metrics,
         };
 
         let mut state = State::new(
@@ -191,8 +192,7 @@ impl Node for App {
             address,
             start_height,
             store,
-            metrics,
-            restored_metrics,
+            state_metrics,
         );
 
         let malaketh_config = self.load_malaketh_config()?;

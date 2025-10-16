@@ -34,7 +34,7 @@ use tokio::task::JoinHandle;
 use url::Url;
 
 use crate::metrics::Metrics;
-use crate::state::State;
+use crate::state::{RestoredMetrics, State};
 use crate::store::Store;
 
 /// Main application struct implementing the consensus node functionality
@@ -173,7 +173,16 @@ impl Node for App {
 
         // Load cumulative metrics from database for crash recovery
         let (txs_count, chain_bytes, elapsed_seconds) =
-            store.load_cumulative_metrics().await?.unwrap_or((0, 0, 0));
+            store.load_cumulative_metrics().await?.unwrap_or_else(|| {
+                tracing::info!("📊 No metrics found in database, starting with default values");
+                (0, 0, 0)
+            });
+
+        let restored_metrics = RestoredMetrics {
+            txs_count,
+            chain_bytes,
+            elapsed_seconds,
+        };
 
         let mut state = State::new(
             genesis,
@@ -183,9 +192,7 @@ impl Node for App {
             start_height,
             store,
             metrics,
-            txs_count,
-            chain_bytes,
-            elapsed_seconds,
+            restored_metrics,
         );
 
         let malaketh_config = self.load_malaketh_config()?;

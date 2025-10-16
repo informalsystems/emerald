@@ -21,6 +21,7 @@ use malachitebft_eth_types::{
     ProposalInit, ProposalPart, ValidatorSet, Value,
 };
 
+use crate::metrics::Metrics;
 use crate::store::Store;
 use crate::streaming::{PartStreamsMap, ProposalParts};
 
@@ -56,6 +57,7 @@ pub struct State {
     pub txs_count: u64,
     pub chain_bytes: u64,
     pub start_time: Instant,
+    pub metrics: Metrics,
 }
 
 /// Represents errors that can occur during the verification of a proposal's signature.
@@ -92,7 +94,16 @@ impl State {
         address: Address,
         height: Height,
         store: Store,
+        metrics: Metrics,
+        txs_count: u64,
+        chain_bytes: u64,
+        elapsed_seconds: u64,
     ) -> Self {
+        // Calculate start_time by subtracting elapsed_seconds from now.
+        // It represents the start time of measuring metrics, not the actual node start time.
+        // This allows us to continue accumulating time correctly after a restart
+        let start_time = Instant::now() - std::time::Duration::from_secs(elapsed_seconds);
+
         Self {
             ctx,
             signing_provider,
@@ -108,9 +119,10 @@ impl State {
             latest_block: None,
             validator_set: None,
 
-            txs_count: 0,
-            chain_bytes: 0,
-            start_time: Instant::now(),
+            txs_count,
+            chain_bytes,
+            start_time,
+            metrics,
         }
     }
 

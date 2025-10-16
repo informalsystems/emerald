@@ -33,7 +33,7 @@ use malachitebft_eth_types::{
 use tokio::task::JoinHandle;
 use url::Url;
 
-use crate::metrics::DbMetrics;
+use crate::metrics::Metrics;
 use crate::state::State;
 use crate::store::Store;
 
@@ -162,15 +162,31 @@ impl Node for App {
         let tx_event = channels.events.clone();
 
         let registry = SharedRegistry::global().with_moniker(&config.moniker);
-        let metrics = DbMetrics::register(&registry);
+        let metrics = Metrics::register(&registry);
 
         if config.metrics.enabled {
             tokio::spawn(metrics::serve(config.metrics.listen_addr));
         }
 
-        let store = Store::open(self.get_home_dir().join("store.db"), metrics)?;
+        let store = Store::open(self.get_home_dir().join("store.db"), metrics.db.clone())?;
         let start_height = self.start_height.unwrap_or_default();
-        let mut state = State::new(genesis, ctx, signing_provider, address, start_height, store);
+
+        // Load cumulative metrics from database for crash recovery
+        let (txs_count, chain_bytes, elapsed_seconds) =
+            store.load_cumulative_metrics().await?.unwrap_or((0, 0, 0));
+
+        let mut state = State::new(
+            genesis,
+            ctx,
+            signing_provider,
+            address,
+            start_height,
+            store,
+            metrics,
+            txs_count,
+            chain_bytes,
+            elapsed_seconds,
+        );
 
         let malaketh_config = self.load_malaketh_config()?;
 

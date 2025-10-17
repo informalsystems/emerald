@@ -3,7 +3,7 @@ all: clean build
 	cargo run --bin malachitebft-eth-app -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin malachitebft-eth-app show-pubkey {} > nodes/validator_public_keys.txt
 	cargo run --bin malachitebft-eth-utils genesis --public-keys-file ./nodes/validator_public_keys.txt
-	docker compose up -d reth0 reth1 reth2 prometheus grafana
+	docker compose up -d reth0 reth1 reth2 prometheus grafana otterscan
 	./scripts/add_peers.sh --nodes 3
 	@echo 👉 Grafana dashboard is available at http://localhost:3000
 	bash scripts/spawn.bash --nodes 3 --home nodes --no-delay

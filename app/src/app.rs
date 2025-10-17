@@ -41,7 +41,7 @@ pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -
         .eth
         .get_block_by_number("earliest")
         .await?
-        .expect("Genesis block must exist");
+        .ok_or_eyre("Genesis block does not exist")?;
     debug!("👉 genesis_block: {:?}", genesis_block);
     state.latest_block = Some(genesis_block);
     let genesis_validator_set =
@@ -63,7 +63,7 @@ pub async fn initialize_state_from_existing_block(
     let latest_block_candidate_from_store = state
         .get_latest_block_candidate(start_height)
         .await
-        .expect("we have not atomically stored the last block, database corrupted");
+        .ok_or_eyre("we have not atomically stored the last block, database corrupted")?;
 
     let payload_status = engine
         .send_forkchoice_updated(latest_block_candidate_from_store.block_hash)
@@ -165,7 +165,7 @@ pub async fn run(
                         initialize_state_from_existing_block(state, &engine, s).await?;
                         // TODO ERROR HANDLING
                         info!(
-                            "Starth height in state set to: {:?}; height in store is {s} ",
+                            "Start height in state set to: {:?}; height in store is {s} ",
                             state.current_height
                         );
                     }
@@ -344,7 +344,7 @@ pub async fn run(
                 let block_bytes = state
                     .get_block_data(height, round)
                     .await
-                    .expect("app: certificate should have associated block data");
+                    .ok_or_eyre("app: certificate should have associated block data")?;
                 debug!("🎁 block size: {:?}, height: {}", block_bytes.len(), height);
 
                 // Decode bytes into execution payload (a block)
@@ -418,7 +418,10 @@ pub async fn run(
                 // When that happens, we store the decided value in our store
                 // TODO: we should return an error reply if commit fails
                 state.commit(certificate, block_header_bytes).await?;
-                let old_hash = state.latest_block.unwrap().block_hash;
+                let old_hash = state
+                    .latest_block
+                    .ok_or_eyre("missing latest block in state")?
+                    .block_hash;
                 // Save the latest block
                 state.latest_block = Some(ExecutionBlock {
                     block_hash: new_block_hash,

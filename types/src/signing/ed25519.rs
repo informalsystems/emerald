@@ -1,3 +1,4 @@
+use alloy_primitives::keccak256;
 use async_trait::async_trait;
 use bytes::Bytes;
 use malachitebft_core_types::{
@@ -12,10 +13,7 @@ impl Hashable for PublicKey {
     type Output = [u8; 32];
 
     fn hash(&self) -> [u8; 32] {
-        use sha3::{Digest, Keccak256};
-        let mut hasher = Keccak256::new();
-        hasher.update(self.as_bytes());
-        hasher.finalize().into()
+        keccak256(self.as_bytes()).into()
     }
 }
 

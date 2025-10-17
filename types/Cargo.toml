@@ -25,7 +25,6 @@ prost-types = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json = { workspace = true }
-sha3 = { workspace = true }
 signature = { workspace = true }
 
 alloy-consensus = { workspace = true }

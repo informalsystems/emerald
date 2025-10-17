@@ -196,8 +196,7 @@ impl Hashable for PublicKey {
     fn hash(&self) -> Self::Output {
         let uncompressed = self.to_uncompressed_bytes();
         // drop the leading 0x04 prefix before hashing
-        let hash = keccak256(&uncompressed[1..]);
-        hash.into()
+        keccak256(&uncompressed[1..]).into()
     }
 }
 

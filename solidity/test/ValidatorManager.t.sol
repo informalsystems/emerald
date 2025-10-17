@@ -21,6 +21,10 @@ contract ValidatorManagerTest is Test {
     address internal constant NON_OWNER = address(0xBEEF);
     address internal constant NEW_OWNER = address(0xCAFE);
 
+    uint256 internal constant DERIVED_PUBLIC_KEY_X = 0x8318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75;
+    uint256 internal constant DERIVED_PUBLIC_KEY_Y = 0x3547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5;
+    uint256 internal constant DERIVED_PRIVATE_KEY = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
+
     function aliceKey() internal pure returns (ValidatorManager.Secp256k1Key memory) {
         return ValidatorManager.Secp256k1Key({x: ALICE_KEY_X, y: ALICE_KEY_Y});
     }
@@ -314,5 +318,17 @@ contract ValidatorManagerTest is Test {
         ValidatorManager.Secp256k1Key[] memory keys = validatorManager.getValidatorKeys();
         assertEq(keys.length, 1);
         assertKeyEq(keys[0], coffeeKey());
+    }
+
+    function mnemonicDerivedKey() internal pure returns (ValidatorManager.Secp256k1Key memory) {
+        return ValidatorManager.Secp256k1Key({x: DERIVED_PUBLIC_KEY_X, y: DERIVED_PUBLIC_KEY_Y});
+    }
+
+    function testValidatorKeyIdMatchesAddressDerivedFromPrivateKey() public {
+        ValidatorManager.Secp256k1Key memory key = mnemonicDerivedKey();
+        bytes32 keyId = keccak256(abi.encodePacked(key.x, key.y));
+        address derived = address(uint160(uint256(keyId)));
+        address expected = vm.addr(DERIVED_PRIVATE_KEY);
+        assertEq(derived, expected);
     }
 }

@@ -66,7 +66,6 @@ pub fn generate_from_validator_set(
     // Slot 2: _validatorKeys._values (EnumerableSet internal storage)
     // Slot 3: _validatorKeys._positions
     // Slot 4: _validators mapping(bytes32 => ValidatorInfo)
-    // Slot 5: _totalPower
 
     let mut storage = BTreeMap::new();
 
@@ -82,13 +81,6 @@ pub fn generate_from_validator_set(
 
     set_validator_keys_set(&mut storage, validator_set, U256::from(2))?; // _validatorKeys base at slot 2
     set_validator_entries_mapping(&mut storage, validator_set, U256::from(4))?; // _validators mapping at slot 4
-
-    // _totalPower at slot 5
-    let total_power_slot = B256::from(U256::from(5u64).to_be_bytes::<32>());
-    storage.insert(
-        total_power_slot,
-        B256::from(U256::from(validator_set.total_power).to_be_bytes::<32>()),
-    );
 
     Ok(storage)
 }

@@ -58,8 +58,6 @@ pub struct ValidatorSet {
     pub validator_keys: HashSet<ValidatorKey>,
     /// Ordered list of validator keys reflecting registration order
     pub validator_order: Vec<ValidatorKey>,
-    /// Total power of all validators
-    pub total_power: u64,
 }
 
 impl ValidatorSet {
@@ -67,18 +65,13 @@ impl ValidatorSet {
     pub fn add_validator(&mut self, validator: Validator) {
         let key = validator.validator_key;
 
-        if let Some(existing) = self.validators.get(&key) {
-            self.total_power = self
-                .total_power
-                .saturating_sub(existing.power)
-                .saturating_add(validator.power);
+        if self.validators.contains_key(&key) {
+            self.validators.insert(key, validator);
         } else {
-            self.total_power = self.total_power.saturating_add(validator.power);
             self.validator_keys.insert(key);
             self.validator_order.push(key);
+            self.validators.insert(key, validator);
         }
-
-        self.validators.insert(key, validator);
     }
 
     /// Get the number of validators
@@ -92,5 +85,13 @@ impl ValidatorSet {
             .iter()
             .filter_map(|key| self.validators.get(key))
             .collect()
+    }
+
+    /// Compute the total voting power across all validators
+    pub fn total_power(&self) -> u64 {
+        self.validator_order
+            .iter()
+            .filter_map(|key| self.validators.get(key))
+            .fold(0u64, |acc, validator| acc.saturating_add(validator.power))
     }
 }

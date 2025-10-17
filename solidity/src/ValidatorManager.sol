@@ -26,7 +26,6 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     // State variables
     EnumerableSet.Bytes32Set private _validatorKeys;
     mapping(bytes32 => ValidatorInfo) private _validators;
-    uint64 private _totalPower;
 
     constructor() Ownable(_msgSender()) {}
 
@@ -139,7 +138,6 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         bytes32 keyId = _validatorKeyId(validator.validatorKey);
         _validators[keyId] = validator;
         _validatorKeys.add(keyId);
-        _totalPower += validator.power;
 
         emit ValidatorRegistered(validator.validatorKey, validator.power);
     }
@@ -174,9 +172,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      */
     function _unregister(Secp256k1Key memory validatorKey) internal validatorExists(validatorKey) {
         bytes32 keyId = _validatorKeyId(validatorKey);
-        ValidatorInfo memory existing = _validators[keyId];
 
-        _totalPower -= existing.power;
         delete _validators[keyId];
         _validatorKeys.remove(keyId);
 
@@ -199,7 +195,6 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         uint64 oldPower = _validators[keyId].power;
 
         _validators[keyId].power = newPower;
-        _totalPower = _totalPower - oldPower + newPower;
 
         emit ValidatorPowerUpdated(validatorKey, oldPower, newPower);
     }
@@ -268,7 +263,13 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @return The sum of all validator powers
      */
     function getTotalPower() external view returns (uint64) {
-        return _totalPower;
+        uint256 length = _validatorKeys.length();
+        uint64 total;
+        for (uint256 i = 0; i < length; i++) {
+            bytes32 keyId = _validatorKeys.at(i);
+            total += _validators[keyId].power;
+        }
+        return total;
     }
 
     /**

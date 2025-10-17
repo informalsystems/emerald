@@ -11,10 +11,10 @@ workspace = true
 
 [dependencies]
 malachitebft-core-types.workspace = true
+malachitebft-eth-types.workspace = true
 malachitebft-metrics.workspace = true
 malachitebft-config.workspace = true
 malachitebft-app.workspace = true
-malachitebft-signing-ed25519 = { workspace = true, features = ["serde"] }
 
 axum = { workspace = true }
 bytesize = { workspace = true }

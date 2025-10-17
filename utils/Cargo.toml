@@ -22,7 +22,7 @@ async-trait = "0.1"
 hex = "0.4"
 clap = { version = "4.5", features = ["derive"] }
 chrono = "0.4.41"
-k256 = "0.13"
+k256 = { workspace = true }
 jsonwebtoken = "9"
 thiserror = "2.0.11"
 reqwest = { version = "0.12.2", default-features = false, features = ["blocking", "json", "stream", "rustls-tls", "native-tls-vendored"] }
@@ -54,6 +54,7 @@ reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.2.0" 
 reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", tag = "v1.2.0" }
 alloy-eips = "0.11.1"
 alloy-provider = "0.11.1"
-ethers-signers = "2"
+alloy-signer-local = "0.11.1"
 tempfile = "3"
 alloy-contract = "0.11.1"
+alloy-node-bindings = "0.11.1"

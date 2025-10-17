@@ -31,6 +31,9 @@ signature = { workspace = true }
 alloy-consensus = { workspace = true }
 alloy-primitives = { version = "0.8.21", default-features = false }
 alloy-rpc-types-eth = { workspace = true }
+alloy-signer = { version = "0.11.1" }
+k256 = { workspace = true }
+thiserror = { workspace = true }
 
 [build-dependencies]
 prost-build = { workspace = true }

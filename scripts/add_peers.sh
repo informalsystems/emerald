@@ -22,13 +22,9 @@ for _ in {0..NODES_COUNT-1}; do
     PORT=$((PORT + PORT_INCREMENT))
 done
 
-RETH0_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' reth0)
-RETH1_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' reth1)
-RETH2_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' reth2)
-
-RETH0_ENODE=$(cast rpc --rpc-url 127.0.0.1:8545 admin_nodeInfo | jq -r .enode | sed "s/127\.0\.0\.1/${RETH0_IP}/")
-RETH1_ENODE=$(cast rpc --rpc-url 127.0.0.1:18545 admin_nodeInfo | jq -r .enode | sed "s/127\.0\.0\.1/${RETH1_IP}/" )
-RETH2_ENODE=$(cast rpc --rpc-url 127.0.0.1:28545 admin_nodeInfo | jq -r .enode | sed "s/127\.0\.0\.1/${RETH2_IP}/" )
+RETH0_ENODE=$(cast rpc --rpc-url 127.0.0.1:8545 admin_nodeInfo | jq -r .enode )
+RETH1_ENODE=$(cast rpc --rpc-url 127.0.0.1:18545 admin_nodeInfo | jq -r .enode )
+RETH2_ENODE=$(cast rpc --rpc-url 127.0.0.1:28545 admin_nodeInfo | jq -r .enode )
 
 echo "RETH0_ENODE: ${RETH0_ENODE}"
 cast rpc --rpc-url 127.0.0.1:8545 admin_addTrustedPeer "${RETH1_ENODE}"
@@ -50,8 +46,7 @@ cast rpc --rpc-url 127.0.0.1:28545 admin_addPeer "${RETH1_ENODE}"
 
 # If 4 nodes, add reth3
 if [ "$NODES_COUNT" -eq 4 ]; then
-    RETH3_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' reth3)
-    RETH3_ENODE=$(cast rpc --rpc-url 127.0.0.1:38545 admin_nodeInfo | jq -r .enode | sed "s/127\.0\.0\.1/${RETH3_IP}/" )
+    RETH3_ENODE=$(cast rpc --rpc-url 127.0.0.1:38545 admin_nodeInfo | jq -r .enode )
 
     echo "RETH3_ENODE: ${RETH3_ENODE}"
 

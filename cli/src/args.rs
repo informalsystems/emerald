@@ -62,7 +62,7 @@ pub enum Commands {
     /// Generate distributed testnet configuration
     DistributedTestnet(DistributedTestnetCmd),
 
-    /// Extract secp256k1 public key from Tendermint private key file
+    /// Extract secp256k1 public key from a file containing a Secp256k1 private key
     ShowPubkey(ShowPubkeyCmd),
 }
 

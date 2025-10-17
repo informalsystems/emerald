@@ -4,7 +4,7 @@ use clap::Args;
 use color_eyre::eyre::{ensure, Context, Result};
 use malachitebft_eth_types::{Secp256k1PrivateKey, Secp256k1PublicKey};
 
-/// Extract the validator's secp256k1 public key (without the 0x04 prefix) from a Tendermint-style private key file
+/// Extract the validator's secp256k1 public key (without the 0x04 prefix) from a file containing a Secp256k1 private key
 #[derive(Args, Clone, Debug)]
 pub struct ShowPubkeyCmd {
     /// Path to priv_validator_key.json file

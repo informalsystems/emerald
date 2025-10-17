@@ -1,6 +1,6 @@
 use alloy_provider::ProviderBuilder;
 use bytes::Bytes;
-use color_eyre::eyre::{self, eyre};
+use color_eyre::eyre::{self, eyre, OptionExt};
 use ed25519_consensus::VerificationKey;
 use malachitebft_eth_cli::config::MalakethConfig;
 use ssz::{Decode, Encode};

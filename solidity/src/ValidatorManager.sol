@@ -30,9 +30,11 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     constructor() Ownable(_msgSender()) {}
 
     // Events
-    event ValidatorRegistered(Secp256k1Key validatorKey, uint64 power);
-    event ValidatorUnregistered(Secp256k1Key validatorKey);
-    event ValidatorPowerUpdated(Secp256k1Key validatorKey, uint64 oldPower, uint64 newPower);
+    event ValidatorRegistered(bytes32 indexed validatorKeyId, Secp256k1Key validatorKey, uint64 power);
+    event ValidatorUnregistered(bytes32 indexed validatorKeyId, Secp256k1Key validatorKey);
+    event ValidatorPowerUpdated(
+        bytes32 indexed validatorKeyId, Secp256k1Key validatorKey, uint64 oldPower, uint64 newPower
+    );
 
     // Errors
     error ValidatorAlreadyExists();
@@ -139,7 +141,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         _validators[keyId] = validator;
         _validatorKeys.add(keyId);
 
-        emit ValidatorRegistered(validator.validatorKey, validator.power);
+        emit ValidatorRegistered(keyId, validator.validatorKey, validator.power);
     }
 
     /**
@@ -176,7 +178,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         delete _validators[keyId];
         _validatorKeys.remove(keyId);
 
-        emit ValidatorUnregistered(validatorKey);
+        emit ValidatorUnregistered(keyId, validatorKey);
     }
 
     /**
@@ -196,7 +198,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
 
         _validators[keyId].power = newPower;
 
-        emit ValidatorPowerUpdated(validatorKey, oldPower, newPower);
+        emit ValidatorPowerUpdated(keyId, validatorKey, oldPower, newPower);
     }
 
     /**

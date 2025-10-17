@@ -41,6 +41,10 @@ contract ValidatorManagerTest is Test {
         return ValidatorManager.Secp256k1Key({x: 0, y: 0});
     }
 
+    function validatorKeyId(ValidatorManager.Secp256k1Key memory key) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(key.x, key.y));
+    }
+
     function keysEqual(ValidatorManager.Secp256k1Key memory a, ValidatorManager.Secp256k1Key memory b)
         internal
         pure
@@ -56,17 +60,19 @@ contract ValidatorManagerTest is Test {
         require(keysEqual(actual, expected), "validator key mismatch");
     }
 
-    event ValidatorRegistered(ValidatorManager.Secp256k1Key validatorKey, uint64 power);
-    event ValidatorUnregistered(ValidatorManager.Secp256k1Key validatorKey);
-    event ValidatorPowerUpdated(ValidatorManager.Secp256k1Key validatorKey, uint64 oldPower, uint64 newPower);
+    event ValidatorRegistered(bytes32 indexed validatorKeyId, ValidatorManager.Secp256k1Key validatorKey, uint64 power);
+    event ValidatorUnregistered(bytes32 indexed validatorKeyId, ValidatorManager.Secp256k1Key validatorKey);
+    event ValidatorPowerUpdated(
+        bytes32 indexed validatorKeyId, ValidatorManager.Secp256k1Key validatorKey, uint64 oldPower, uint64 newPower
+    );
 
     function setUp() public {
         validatorManager = new ValidatorManager();
     }
 
     function testOwnerCanRegisterValidator() public {
-        vm.expectEmit(false, false, false, true);
-        emit ValidatorRegistered(aliceKey(), INITIAL_POWER);
+        vm.expectEmit(true, false, false, true);
+        emit ValidatorRegistered(validatorKeyId(aliceKey()), aliceKey(), INITIAL_POWER);
 
         validatorManager.register(aliceKey(), INITIAL_POWER);
 
@@ -83,11 +89,11 @@ contract ValidatorManagerTest is Test {
     }
 
     function testOwnerCanRegisterSetOfValidators() public {
-        vm.expectEmit(false, false, false, true);
-        emit ValidatorRegistered(aliceKey(), INITIAL_POWER);
+        vm.expectEmit(true, false, false, true);
+        emit ValidatorRegistered(validatorKeyId(aliceKey()), aliceKey(), INITIAL_POWER);
 
-        vm.expectEmit(false, false, false, true);
-        emit ValidatorRegistered(bobKey(), SECOND_POWER);
+        vm.expectEmit(true, false, false, true);
+        emit ValidatorRegistered(validatorKeyId(bobKey()), bobKey(), SECOND_POWER);
 
         ValidatorManager.ValidatorInfo[] memory addValidators = new ValidatorManager.ValidatorInfo[](2);
         addValidators[0] = ValidatorManager.ValidatorInfo({validatorKey: aliceKey(), power: INITIAL_POWER});
@@ -138,8 +144,8 @@ contract ValidatorManagerTest is Test {
     function testOwnerCanUpdatePower() public {
         validatorManager.register(aliceKey(), INITIAL_POWER);
 
-        vm.expectEmit(false, false, false, true);
-        emit ValidatorPowerUpdated(aliceKey(), INITIAL_POWER, UPDATED_POWER);
+        vm.expectEmit(true, false, false, true);
+        emit ValidatorPowerUpdated(validatorKeyId(aliceKey()), aliceKey(), INITIAL_POWER, UPDATED_POWER);
 
         validatorManager.updatePower(aliceKey(), UPDATED_POWER);
 
@@ -164,8 +170,8 @@ contract ValidatorManagerTest is Test {
     function testOwnerCanUnregisterValidator() public {
         validatorManager.register(aliceKey(), INITIAL_POWER);
 
-        vm.expectEmit(false, false, false, true);
-        emit ValidatorUnregistered(aliceKey());
+        vm.expectEmit(true, false, false, true);
+        emit ValidatorUnregistered(validatorKeyId(aliceKey()), aliceKey());
 
         validatorManager.unregister(aliceKey());
 
@@ -180,11 +186,11 @@ contract ValidatorManagerTest is Test {
         validatorManager.register(aliceKey(), INITIAL_POWER);
         validatorManager.register(bobKey(), SECOND_POWER);
 
-        vm.expectEmit(false, false, false, true);
-        emit ValidatorUnregistered(aliceKey());
+        vm.expectEmit(true, false, false, true);
+        emit ValidatorUnregistered(validatorKeyId(aliceKey()), aliceKey());
 
-        vm.expectEmit(false, false, false, true);
-        emit ValidatorUnregistered(bobKey());
+        vm.expectEmit(true, false, false, true);
+        emit ValidatorUnregistered(validatorKeyId(bobKey()), bobKey());
 
         ValidatorManager.Secp256k1Key[] memory keys = new ValidatorManager.Secp256k1Key[](2);
         keys[0] = aliceKey();
@@ -256,8 +262,8 @@ contract ValidatorManagerTest is Test {
         vm.prank(NON_OWNER);
         validatorManager.transferOwnership(address(0xBAD));
 
-        vm.expectEmit(false, false, false, true);
-        emit ValidatorRegistered(aliceKey(), INITIAL_POWER);
+        vm.expectEmit(true, false, false, true);
+        emit ValidatorRegistered(validatorKeyId(aliceKey()), aliceKey(), INITIAL_POWER);
         vm.prank(NEW_OWNER);
         validatorManager.register(aliceKey(), INITIAL_POWER);
 
@@ -281,14 +287,14 @@ contract ValidatorManagerTest is Test {
         validatorManager.register(aliceKey(), INITIAL_POWER);
         validatorManager.register(bobKey(), SECOND_POWER);
 
-        vm.expectEmit(false, false, false, true);
-        emit ValidatorRegistered(coffeeKey(), THIRD_POWER);
+        vm.expectEmit(true, false, false, true);
+        emit ValidatorRegistered(validatorKeyId(coffeeKey()), coffeeKey(), THIRD_POWER);
 
-        vm.expectEmit(false, false, false, true);
-        emit ValidatorUnregistered(aliceKey());
+        vm.expectEmit(true, false, false, true);
+        emit ValidatorUnregistered(validatorKeyId(aliceKey()), aliceKey());
 
-        vm.expectEmit(false, false, false, true);
-        emit ValidatorUnregistered(bobKey());
+        vm.expectEmit(true, false, false, true);
+        emit ValidatorUnregistered(validatorKeyId(bobKey()), bobKey());
 
         ValidatorManager.ValidatorInfo[] memory addValidators = new ValidatorManager.ValidatorInfo[](1);
         addValidators[0] = ValidatorManager.ValidatorInfo({validatorKey: coffeeKey(), power: THIRD_POWER});

@@ -10,3 +10,5 @@ assets
 example/docs/
 .env
 .example.env
+
+cache/

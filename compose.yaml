@@ -170,3 +170,10 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: Editor
       GF_AUTH_BASIC_ENABLED: false
       GF_NEWS_NEWS_FEED_ENABLED: false
+  otterscan:
+    image: otterscan/otterscan:develop
+    depends_on:
+      - reth0
+    network_mode: host
+    environment:
+      ERIGON_URL: "http://127.0.0.1:8545"

@@ -117,24 +117,8 @@ impl Engine {
                 };
             }
             None => {
-                // TODO @JASMINA THIS IS WRONG, we shluld return the genesis block as payload and not build a new payload on top of it.
-
-                // Get the latest block from the execution engine
-                // get gensesis block.
-                let genesis_block_eth = &self.eth.get_block_by_number("0x0").await?.unwrap();
-                debug!("👉 genesis_block: {:?}", genesis_block_eth);
-
-                let latest_block_eth = &self.eth.get_block_by_number("latest").await?.unwrap();
-                debug!("👉 latest_block: {:?}", latest_block_eth);
-
-                block_hash = genesis_block_eth.block_hash;
-                payload_attributes = PayloadAttributes {
-                    timestamp: genesis_block_eth.timestamp + 1,
-                    prev_randao: genesis_block_eth.prev_randao,
-                    suggested_fee_recipient: Address::repeat_byte(42).to_alloy_address(),
-                    withdrawals: Some(vec![]),
-                    parent_beacon_block_root: Some(block_hash),
-                }
+                // TODO once validated that this is never happening
+                panic!("lb should never be none")
             }
         }
 

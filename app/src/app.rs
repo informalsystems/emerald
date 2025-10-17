@@ -87,7 +87,8 @@ pub async fn initialize_state_from_existing_block(
             //     forkchoiceState.headBlockHash references an unknown
             //     payload or a payload that can't be validated because
             //     requisite data for the validation is missing
-            debug!("reth is syncing but all good to proceed withconsensus");
+            debug!("Payload is valid");
+            info!("latest block {:?}", state.latest_block);
             Ok(())
         }
         PayloadStatusEnum::Invalid { validation_error } => Err(eyre::eyre!(validation_error)),
@@ -250,21 +251,7 @@ pub async fn run(
 
                 let latest_block = state.latest_block.expect("Head block hash is not set");
                 let execution_payload = engine.generate_block(&Some(latest_block)).await?;
-                // match state.latest_block {
-                //     Some(_) => {}
-                //     None => {
-                //         state.latest_block = Some(ExecutionBlock {
-                //             block_hash: execution_payload.payload_inner.payload_inner.block_hash,
-                //             block_number: execution_payload
-                //                 .payload_inner
-                //                 .payload_inner
-                //                 .block_number,
-                //             parent_hash: execution_payload.payload_inner.payload_inner.parent_hash,
-                //             timestamp: execution_payload.payload_inner.payload_inner.timestamp,
-                //             prev_randao: execution_payload.payload_inner.payload_inner.prev_randao,
-                //         });
-                //     }
-                // }
+
                 debug!("🌈 Got execution payload: {:?}", execution_payload);
 
                 // Store block in state and propagate to peers.

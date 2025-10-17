@@ -22,10 +22,8 @@ use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::engine_rpc::EngineRPC;
 use malachitebft_eth_engine::ethereum_rpc::EthereumRPC;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::secp256k1::{PrivateKey, PublicKey};
-use malachitebft_eth_types::{
-    Address, Genesis, Height, MalakethContext, Secp256k1Provider, Validator, ValidatorSet,
-};
+use malachitebft_eth_types::secp256k1::{PrivateKey, PublicKey, Secp256k1Provider};
+use malachitebft_eth_types::{Address, Genesis, Height, MalakethContext, Validator, ValidatorSet};
 use rand::{CryptoRng, RngCore};
 use tokio::task::JoinHandle;
 use url::Url;

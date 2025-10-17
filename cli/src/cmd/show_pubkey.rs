@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::Args;
 use color_eyre::eyre::{ensure, Context, Result};
-use malachitebft_eth_types::{Secp256k1PrivateKey, Secp256k1PublicKey};
+use malachitebft_eth_types::secp256k1::{PrivateKey, PublicKey};
 
 /// Extract the validator's secp256k1 public key (without the 0x04 prefix) from a file containing a Secp256k1 private key
 #[derive(Args, Clone, Debug)]
@@ -19,11 +19,11 @@ impl ShowPubkeyCmd {
             .with_context(|| format!("Failed to read key file: {}", self.key_file.display()))?;
 
         // Deserialize directly into PrivateKey (which has Deserialize support)
-        let private_key: Secp256k1PrivateKey = serde_json::from_str(&contents)
+        let private_key: PrivateKey = serde_json::from_str(&contents)
             .with_context(|| format!("Failed to parse JSON from: {}", self.key_file.display()))?;
 
         // Get the public key and output as uncompressed hex so callers can register it.
-        let public_key: Secp256k1PublicKey = private_key.public_key();
+        let public_key: PublicKey = private_key.public_key();
         let uncompressed = public_key.to_uncompressed_bytes();
 
         ensure!(

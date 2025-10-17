@@ -9,9 +9,10 @@ use malachitebft_app_channel::app::types::core::{CommitCertificate, Round, Valid
 use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
+use malachitebft_eth_types::secp256k1::Secp256k1Provider;
 use malachitebft_eth_types::{
     Address, Genesis, Height, MalakethContext, ProposalData, ProposalFin, ProposalInit,
-    ProposalPart, Secp256k1Provider, ValidatorSet, Value,
+    ProposalPart, ValidatorSet, Value,
 };
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};

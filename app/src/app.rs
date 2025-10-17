@@ -13,9 +13,8 @@ use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
 use malachitebft_eth_cli::config::MalakethConfig;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
-use malachitebft_eth_types::{
-    Block, BlockHash, MalakethContext, Secp256k1PublicKey, Validator, ValidatorSet,
-};
+use malachitebft_eth_types::secp256k1::PublicKey;
+use malachitebft_eth_types::{Block, BlockHash, MalakethContext, Validator, ValidatorSet};
 use ssz::{Decode, Encode};
 use tracing::{debug, error, info};
 
@@ -60,7 +59,7 @@ pub async fn read_validators_from_contract(
                 uncompressed[1..33].copy_from_slice(&validatorKey.x.to_be_bytes::<32>());
                 uncompressed[33..].copy_from_slice(&validatorKey.y.to_be_bytes::<32>());
 
-                let pub_key = Secp256k1PublicKey::from_sec1_bytes(&uncompressed)?;
+                let pub_key = PublicKey::from_sec1_bytes(&uncompressed)?;
 
                 Ok(Validator::new(pub_key, power))
             },

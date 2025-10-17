@@ -11,12 +11,11 @@ use malachitebft_proto::{Error as ProtoError, Protobuf};
 use malachitebft_sync::{self as sync, PeerId};
 use prost::Message;
 
+use crate::secp256k1::Signature;
 use crate::{
     decode_votetype, encode_votetype, proto, Address, Height, MalakethContext, Proposal,
-    ProposalPart, Secp256k1Signature, Value, ValueId, Vote,
+    ProposalPart, Value, ValueId, Vote,
 };
-
-type Signature = Secp256k1Signature;
 
 #[derive(Copy, Clone, Debug)]
 pub struct ProtobufCodec;

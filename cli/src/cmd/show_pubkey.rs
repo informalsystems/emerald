@@ -1,10 +1,10 @@
-use malachitebft_signing_ed25519::PrivateKey;
 use std::path::PathBuf;
 
 use clap::Args;
-use color_eyre::eyre::{Context, Result};
+use color_eyre::eyre::{ensure, Context, Result};
+use malachitebft_eth_types::{Secp256k1PrivateKey, Secp256k1PublicKey};
 
-/// Extract and display Ed25519 public key from Tendermint private key file
+/// Extract the validator's secp256k1 public key (without the 0x04 prefix) from a Tendermint-style private key file
 #[derive(Args, Clone, Debug)]
 pub struct ShowPubkeyCmd {
     /// Path to priv_validator_key.json file
@@ -19,14 +19,25 @@ impl ShowPubkeyCmd {
             .with_context(|| format!("Failed to read key file: {}", self.key_file.display()))?;
 
         // Deserialize directly into PrivateKey (which has Deserialize support)
-        let private_key: PrivateKey = serde_json::from_str(&contents)
+        let private_key: Secp256k1PrivateKey = serde_json::from_str(&contents)
             .with_context(|| format!("Failed to parse JSON from: {}", self.key_file.display()))?;
 
-        // Get the public key
-        let public_key = private_key.public_key();
+        // Get the public key and output as uncompressed hex so callers can register it.
+        let public_key: Secp256k1PublicKey = private_key.public_key();
+        let uncompressed = public_key.to_uncompressed_bytes();
 
-        // Output as hex
-        println!("0x{}", hex::encode(public_key.as_bytes()));
+        ensure!(
+            uncompressed.len() == 65,
+            "expected uncompressed secp256k1 public key to be 65 bytes"
+        );
+        ensure!(
+            uncompressed[0] == 0x04,
+            "expected uncompressed secp256k1 public key to start with 0x04 prefix"
+        );
+
+        // Trim the leading 0x04 prefix so the caller receives the 64-byte (x || y) payload.
+        let trimmed = &uncompressed[1..];
+        println!("0x{}", hex::encode(trimmed));
 
         Ok(())
     }

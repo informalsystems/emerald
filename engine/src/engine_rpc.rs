@@ -1,7 +1,3 @@
-use color_eyre::eyre;
-use reqwest::{header::CONTENT_TYPE, Client, Url};
-use serde::de::DeserializeOwned;
-use serde_json::json;
 use std::collections::HashSet;
 use std::path::Path;
 use std::time::Duration;
@@ -10,8 +6,12 @@ use alloy_rpc_types_engine::{
     ExecutionPayloadEnvelopeV3, ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated,
     PayloadAttributes, PayloadId as AlloyPayloadId, PayloadStatus,
 };
-
+use color_eyre::eyre;
 use malachitebft_eth_types::{BlockHash, B256};
+use reqwest::header::CONTENT_TYPE;
+use reqwest::{Client, Url};
+use serde::de::DeserializeOwned;
+use serde_json::json;
 
 use crate::auth::Auth;
 use crate::json_structures::*;

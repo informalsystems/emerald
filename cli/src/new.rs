@@ -3,13 +3,14 @@
 use std::time::Duration;
 
 use itertools::Itertools;
-use rand::prelude::StdRng;
-use rand::rngs::OsRng;
-use rand::{seq::IteratorRandom, Rng, SeedableRng};
-
-use crate::config::*;
 use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, Node};
 use malachitebft_core_types::{PrivateKey, PublicKey};
+use rand::prelude::StdRng;
+use rand::rngs::OsRng;
+use rand::seq::IteratorRandom;
+use rand::{Rng, SeedableRng};
+
+use crate::config::*;
 const MIN_VOTING_POWER: u64 = 1;
 const MAX_VOTING_POWER: u64 = 1;
 

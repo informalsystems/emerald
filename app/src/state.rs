@@ -3,23 +3,21 @@
 
 use bytes::Bytes;
 use color_eyre::eyre;
+use malachitebft_app_channel::app::streaming::{StreamContent, StreamId, StreamMessage};
+use malachitebft_app_channel::app::types::codec::Codec;
+use malachitebft_app_channel::app::types::core::{CommitCertificate, Round, Validity};
+use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
+use malachitebft_eth_engine::json_structures::ExecutionBlock;
+use malachitebft_eth_types::codec::proto::ProtobufCodec;
+use malachitebft_eth_types::{
+    Address, Genesis, Height, MalakethContext, ProposalData, ProposalFin, ProposalInit,
+    ProposalPart, Secp256k1Provider, ValidatorSet, Value,
+};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sha3::Digest;
 use tokio::time::Instant;
 use tracing::{debug, error, info};
-
-use malachitebft_app_channel::app::streaming::{StreamContent, StreamId, StreamMessage};
-use malachitebft_app_channel::app::types::codec::Codec;
-use malachitebft_app_channel::app::types::core::{CommitCertificate, Round, Validity};
-use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
-
-use malachitebft_eth_engine::json_structures::ExecutionBlock;
-use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::{
-    Address, Ed25519Provider, Genesis, Height, MalakethContext, ProposalData, ProposalFin,
-    ProposalInit, ProposalPart, ValidatorSet, Value,
-};
 
 use crate::store::Store;
 use crate::streaming::{PartStreamsMap, ProposalParts};
@@ -36,7 +34,7 @@ const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB
 pub struct State {
     #[allow(dead_code)]
     ctx: MalakethContext,
-    signing_provider: Ed25519Provider,
+    signing_provider: Secp256k1Provider,
     address: Address,
     pub store: Store,
     stream_nonce: u32,
@@ -88,7 +86,7 @@ impl State {
     pub fn new(
         _genesis: Genesis, // all genesis data is in EVM via genesis.json
         ctx: MalakethContext,
-        signing_provider: Ed25519Provider,
+        signing_provider: Secp256k1Provider,
         address: Address,
         height: Height,
         store: Store,
@@ -463,7 +461,7 @@ impl State {
         let public_key = self
             .get_validator_set()
             .get_by_address(&parts.proposer)
-            .map(|v| v.public_key);
+            .map(|v| v.public_key.clone());
 
         let public_key = public_key.ok_or(SignatureVerificationError::ProposerNotFound)?;
 

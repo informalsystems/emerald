@@ -12,9 +12,9 @@ pub enum StorageError {
     #[error("Empty validator set")]
     EmptyValidatorSet,
 
-    #[error("Invalid power for validator {0}")]
-    InvalidPower(U256),
+    #[error("Invalid power for validator ({x:#x}, {y:#x})")]
+    InvalidPower { x: U256, y: U256 },
 
-    #[error("Duplicate validator {0}")]
-    DuplicateValidator(U256),
+    #[error("Duplicate validator ({x:#x}, {y:#x})")]
+    DuplicateValidator { x: U256, y: U256 },
 }

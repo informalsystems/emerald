@@ -1,14 +1,15 @@
-use color_eyre::eyre::{self, Ok};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tracing::debug;
 
 use alloy_rpc_types_engine::{
     ExecutionPayloadV3, ForkchoiceUpdated, PayloadAttributes, PayloadStatus, PayloadStatusEnum,
 };
-
+use color_eyre::eyre::{self, Ok};
 use malachitebft_eth_types::{Address, BlockHash, B256};
+use tracing::debug;
 
-use crate::{engine_rpc::EngineRPC, ethereum_rpc::EthereumRPC, json_structures::ExecutionBlock};
+use crate::engine_rpc::EngineRPC;
+use crate::ethereum_rpc::EthereumRPC;
+use crate::json_structures::ExecutionBlock;
 /// RPC client for Engine API.
 /// Spec: https://github.com/ethereum/execution-apis/tree/main/src/engine
 pub struct Engine {

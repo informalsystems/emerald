@@ -1,5 +1,6 @@
-use bytes::{Bytes, BytesMut};
 use core::fmt;
+
+use bytes::{Bytes, BytesMut};
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 use serde::{Deserialize, Serialize};
 

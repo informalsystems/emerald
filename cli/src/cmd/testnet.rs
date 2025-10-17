@@ -1,18 +1,17 @@
 //! Testnet command
 
 use std::fs;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use clap::Parser;
-use color_eyre::{eyre::eyre, Result};
+use color_eyre::eyre::eyre;
+use color_eyre::Result;
 use directories::BaseDirs;
-use serde::Deserialize;
-use tracing::info;
-
 use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, Node};
 use malachitebft_config::*;
+use serde::Deserialize;
+use tracing::info;
 
 use crate::args::Args;
 use crate::error::Error;

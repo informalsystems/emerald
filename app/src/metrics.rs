@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use malachitebft_app_channel::app::metrics;
-
 use metrics::prometheus::metrics::counter::Counter;
 use metrics::prometheus::metrics::gauge::Gauge;
 use metrics::prometheus::metrics::histogram::{exponential_buckets, Histogram};

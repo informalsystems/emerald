@@ -1,17 +1,12 @@
 use async_trait::async_trait;
 use bytes::Bytes;
 use malachitebft_core_types::{
-    SignedExtension, SignedProposal, SignedProposalPart, SignedVote, SigningProvider,
+    Context, SignedExtension, SignedProposal, SignedProposalPart, SignedVote, SigningProvider,
 };
+pub use malachitebft_signing_ed25519::{Ed25519, PrivateKey, PublicKey, Signature};
 
-use crate::{MalakethContext, Proposal, ProposalPart, Vote};
-
-pub use malachitebft_signing_ed25519::*;
-
-pub trait Hashable {
-    type Output;
-    fn hash(&self) -> Self::Output;
-}
+use super::Hashable;
+use crate::{Proposal, ProposalPart, Vote};
 
 impl Hashable for PublicKey {
     type Output = [u8; 32];
@@ -48,9 +43,18 @@ impl Ed25519Provider {
 }
 
 #[async_trait]
-impl SigningProvider<MalakethContext> for Ed25519Provider {
+impl<C> SigningProvider<C> for Ed25519Provider
+where
+    C: Context<
+        Vote = Vote,
+        Proposal = Proposal,
+        ProposalPart = ProposalPart,
+        Extension = Bytes,
+        SigningScheme = Ed25519,
+    >,
+{
     #[cfg_attr(coverage_nightly, coverage(off))]
-    async fn sign_vote(&self, vote: Vote) -> SignedVote<MalakethContext> {
+    async fn sign_vote(&self, vote: C::Vote) -> SignedVote<C> {
         let signature = self.sign(&vote.to_sign_bytes());
         SignedVote::new(vote, signature)
     }
@@ -58,7 +62,7 @@ impl SigningProvider<MalakethContext> for Ed25519Provider {
     #[cfg_attr(coverage_nightly, coverage(off))]
     async fn verify_signed_vote(
         &self,
-        vote: &Vote,
+        vote: &C::Vote,
         signature: &Signature,
         public_key: &PublicKey,
     ) -> bool {
@@ -66,7 +70,7 @@ impl SigningProvider<MalakethContext> for Ed25519Provider {
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
-    async fn sign_proposal(&self, proposal: Proposal) -> SignedProposal<MalakethContext> {
+    async fn sign_proposal(&self, proposal: C::Proposal) -> SignedProposal<C> {
         let signature = self.private_key.sign(&proposal.to_sign_bytes());
         SignedProposal::new(proposal, signature)
     }
@@ -74,7 +78,7 @@ impl SigningProvider<MalakethContext> for Ed25519Provider {
     #[cfg_attr(coverage_nightly, coverage(off))]
     async fn verify_signed_proposal(
         &self,
-        proposal: &Proposal,
+        proposal: &C::Proposal,
         signature: &Signature,
         public_key: &PublicKey,
     ) -> bool {
@@ -84,10 +88,7 @@ impl SigningProvider<MalakethContext> for Ed25519Provider {
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
-    async fn sign_proposal_part(
-        &self,
-        proposal_part: ProposalPart,
-    ) -> SignedProposalPart<MalakethContext> {
+    async fn sign_proposal_part(&self, proposal_part: C::ProposalPart) -> SignedProposalPart<C> {
         let signature = self.private_key.sign(&proposal_part.to_sign_bytes());
         SignedProposalPart::new(proposal_part, signature)
     }
@@ -95,7 +96,7 @@ impl SigningProvider<MalakethContext> for Ed25519Provider {
     #[cfg_attr(coverage_nightly, coverage(off))]
     async fn verify_signed_proposal_part(
         &self,
-        proposal_part: &ProposalPart,
+        proposal_part: &C::ProposalPart,
         signature: &Signature,
         public_key: &PublicKey,
     ) -> bool {
@@ -104,13 +105,13 @@ impl SigningProvider<MalakethContext> for Ed25519Provider {
             .is_ok()
     }
 
-    async fn sign_vote_extension(&self, _extension: Bytes) -> SignedExtension<MalakethContext> {
+    async fn sign_vote_extension(&self, _extension: C::Extension) -> SignedExtension<C> {
         unimplemented!()
     }
 
     async fn verify_signed_vote_extension(
         &self,
-        _extension: &Bytes,
+        _extension: &C::Extension,
         _signature: &Signature,
         _public_key: &PublicKey,
     ) -> bool {

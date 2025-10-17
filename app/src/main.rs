@@ -1,6 +1,4 @@
 use color_eyre::eyre::{eyre, Result};
-use tracing::{info, trace};
-
 use malachitebft_app_channel::app::node::Node;
 use malachitebft_eth_cli::args::{Args, Commands};
 use malachitebft_eth_cli::cmd::init::InitCmd;
@@ -8,6 +6,7 @@ use malachitebft_eth_cli::cmd::start::StartCmd;
 use malachitebft_eth_cli::cmd::testnet::TestnetCmd;
 use malachitebft_eth_cli::{config, logging, runtime};
 use malachitebft_eth_types::Height;
+use tracing::{info, trace};
 
 mod app;
 mod metrics;

@@ -1,10 +1,9 @@
+use malachitebft_config::{LogFormat, LogLevel};
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::FmtSubscriber;
-
-use malachitebft_config::{LogFormat, LogLevel};
 
 /// Initialize logging.
 ///

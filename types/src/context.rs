@@ -5,7 +5,7 @@ use crate::address::*;
 use crate::height::*;
 use crate::proposal::*;
 use crate::proposal_part::*;
-use crate::signing::*;
+use crate::signing::secp256k1::Secp256k1;
 use crate::validator_set::*;
 use crate::value::*;
 use crate::vote::*;
@@ -28,7 +28,7 @@ impl Context for MalakethContext {
     type Validator = Validator;
     type Value = Value;
     type Vote = Vote;
-    type SigningScheme = Ed25519;
+    type SigningScheme = Secp256k1;
     type Extension = Bytes;
 
     fn select_proposer<'a>(

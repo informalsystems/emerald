@@ -1,9 +1,8 @@
 use clap::Parser;
 use color_eyre::eyre;
-use tracing::info;
-
 use malachitebft_app::node::Node;
 use malachitebft_config::MetricsConfig;
+use tracing::info;
 
 use crate::metrics;
 

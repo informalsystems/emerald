@@ -1,6 +1,4 @@
 use bytes::Bytes;
-use prost::Message;
-
 use malachitebft_app::streaming::{StreamContent, StreamId, StreamMessage};
 use malachitebft_codec::Codec;
 use malachitebft_core_consensus::{LivenessMsg, ProposedValue, SignedConsensusMsg};
@@ -10,11 +8,15 @@ use malachitebft_core_types::{
     SignedVote, Validity,
 };
 use malachitebft_proto::{Error as ProtoError, Protobuf};
-use malachitebft_signing_ed25519::Signature;
 use malachitebft_sync::{self as sync, PeerId};
+use prost::Message;
 
-use crate::{decode_votetype, encode_votetype, proto};
-use crate::{Address, Height, MalakethContext, Proposal, ProposalPart, Value, ValueId, Vote};
+use crate::{
+    decode_votetype, encode_votetype, proto, Address, Height, MalakethContext, Proposal,
+    ProposalPart, Secp256k1Signature, Value, ValueId, Vote,
+};
+
+type Signature = Secp256k1Signature;
 
 #[derive(Copy, Clone, Debug)]
 pub struct ProtobufCodec;
@@ -421,9 +423,8 @@ pub fn encode_signature(signature: &Signature) -> proto::Signature {
 }
 
 pub fn decode_signature(signature: proto::Signature) -> Result<Signature, ProtoError> {
-    let bytes = <[u8; 64]>::try_from(signature.bytes.as_ref())
-        .map_err(|_| ProtoError::Other("Invalid signature length".to_string()))?;
-    Ok(Signature::from_bytes(bytes))
+    Signature::from_bytes(signature.bytes.as_ref())
+        .map_err(|err| ProtoError::Other(format!("Invalid signature: {err}")))
 }
 
 pub fn decode_vote(msg: proto::SignedMessage) -> Result<SignedVote<MalakethContext>, ProtoError> {

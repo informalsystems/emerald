@@ -4,7 +4,9 @@ use bytes::Bytes;
 use malachitebft_core_types::{Context, SignedExtension, SignedMessage};
 use malachitebft_signing::{Error as SigningError, SigningProvider, VerificationResult};
 use malachitebft_signing_ecdsa::K256Config;
-pub use malachitebft_signing_ecdsa::{PrivateKey as EcdsaPrivateKey, PublicKey as EcdsaPublicKey, Signature as EcdsaSignature, K256 as K256};
+pub use malachitebft_signing_ecdsa::{
+    PrivateKey as EcdsaPrivateKey, PublicKey as EcdsaPublicKey, Signature as EcdsaSignature, K256,
+};
 
 use super::Hashable;
 use crate::{Proposal, ProposalPart, Vote};

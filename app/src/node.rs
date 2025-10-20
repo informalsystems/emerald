@@ -22,7 +22,7 @@ use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::engine_rpc::EngineRPC;
 use malachitebft_eth_engine::ethereum_rpc::EthereumRPC;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::secp256k1::{PrivateKey, PublicKey, Secp256k1Provider};
+use malachitebft_eth_types::secp256k1::{K256Provider, PrivateKey, PublicKey};
 use malachitebft_eth_types::{Address, Genesis, Height, MalakethContext, Validator, ValidatorSet};
 use rand::{CryptoRng, RngCore};
 use tokio::task::JoinHandle;
@@ -85,7 +85,7 @@ impl Node for App {
     type Config = Config;
     type Genesis = Genesis;
     type PrivateKeyFile = PrivateKey;
-    type SigningProvider = Secp256k1Provider;
+    type SigningProvider = K256Provider;
     type NodeHandle = Handle;
 
     fn get_home_dir(&self) -> PathBuf {
@@ -97,7 +97,7 @@ impl Node for App {
     }
 
     fn get_signing_provider(&self, private_key: PrivateKey) -> Self::SigningProvider {
-        Secp256k1Provider::new(private_key)
+        K256Provider::new(private_key)
     }
 
     fn get_address(&self, pk: &PublicKey) -> Address {

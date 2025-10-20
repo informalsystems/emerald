@@ -14,7 +14,9 @@ malachitebft-core-types = { workspace = true }
 malachitebft-config = { workspace = true }
 malachitebft-core-consensus = { workspace = true }
 malachitebft-proto = { workspace = true }
+malachitebft-signing = { workspace = true }
 malachitebft-signing-ed25519 = { workspace = true, features = ["rand", "serde"] }
+malachitebft-signing-ecdsa = { workspace = true, features = ["rand", "serde"] }
 malachitebft-sync = { workspace = true }
 
 async-trait = { workspace = true }
@@ -29,10 +31,6 @@ signature = { workspace = true }
 
 alloy-consensus = { workspace = true }
 alloy-primitives = { version = "0.8.21", default-features = false }
-alloy-rpc-types-eth = { workspace = true }
-alloy-signer = { version = "0.11.1" }
-k256 = { workspace = true }
-thiserror = { workspace = true }
 
 [build-dependencies]
 prost-build = { workspace = true }

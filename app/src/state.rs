@@ -9,7 +9,7 @@ use malachitebft_app_channel::app::types::core::{CommitCertificate, Round, Valid
 use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::secp256k1::Secp256k1Provider;
+use malachitebft_eth_types::secp256k1::K256Provider;
 use malachitebft_eth_types::{
     Address, Genesis, Height, MalakethContext, ProposalData, ProposalFin, ProposalInit,
     ProposalPart, ValidatorSet, Value,
@@ -35,7 +35,7 @@ const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB
 pub struct State {
     #[allow(dead_code)]
     ctx: MalakethContext,
-    signing_provider: Secp256k1Provider,
+    signing_provider: K256Provider,
     address: Address,
     pub store: Store,
     stream_nonce: u32,
@@ -87,7 +87,7 @@ impl State {
     pub fn new(
         _genesis: Genesis, // all genesis data is in EVM via genesis.json
         ctx: MalakethContext,
-        signing_provider: Secp256k1Provider,
+        signing_provider: K256Provider,
         address: Address,
         height: Height,
         store: Store,

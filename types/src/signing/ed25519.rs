@@ -1,10 +1,9 @@
 use alloy_primitives::keccak256;
 use async_trait::async_trait;
 use bytes::Bytes;
-use malachitebft_core_types::{
-    Context, SignedExtension, SignedProposal, SignedProposalPart, SignedVote, SigningProvider,
-};
-pub use malachitebft_signing_ed25519::{Ed25519, PrivateKey, PublicKey, Signature};
+use malachitebft_core_types::{Context, SignedExtension, SignedMessage};
+use malachitebft_signing::{Error as SigningError, SigningProvider, VerificationResult};
+use malachitebft_signing_ed25519::{Ed25519, PrivateKey, PublicKey, Signature};
 
 use super::Hashable;
 use crate::{Proposal, ProposalPart, Vote};
@@ -52,9 +51,9 @@ where
     >,
 {
     #[cfg_attr(coverage_nightly, coverage(off))]
-    async fn sign_vote(&self, vote: C::Vote) -> SignedVote<C> {
+    async fn sign_vote(&self, vote: C::Vote) -> Result<SignedMessage<C, C::Vote>, SigningError> {
         let signature = self.sign(&vote.to_sign_bytes());
-        SignedVote::new(vote, signature)
+        Ok(SignedMessage::new(vote, signature))
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
@@ -63,14 +62,19 @@ where
         vote: &C::Vote,
         signature: &Signature,
         public_key: &PublicKey,
-    ) -> bool {
-        public_key.verify(&vote.to_sign_bytes(), signature).is_ok()
+    ) -> Result<VerificationResult, SigningError> {
+        Ok(VerificationResult::from_bool(
+            public_key.verify(&vote.to_sign_bytes(), signature).is_ok(),
+        ))
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
-    async fn sign_proposal(&self, proposal: C::Proposal) -> SignedProposal<C> {
-        let signature = self.private_key.sign(&proposal.to_sign_bytes());
-        SignedProposal::new(proposal, signature)
+    async fn sign_proposal(
+        &self,
+        proposal: C::Proposal,
+    ) -> Result<SignedMessage<C, C::Proposal>, SigningError> {
+        let signature = self.sign(&proposal.to_sign_bytes());
+        Ok(SignedMessage::new(proposal, signature))
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
@@ -79,16 +83,21 @@ where
         proposal: &C::Proposal,
         signature: &Signature,
         public_key: &PublicKey,
-    ) -> bool {
-        public_key
-            .verify(&proposal.to_sign_bytes(), signature)
-            .is_ok()
+    ) -> Result<VerificationResult, SigningError> {
+        Ok(VerificationResult::from_bool(
+            public_key
+                .verify(&proposal.to_sign_bytes(), signature)
+                .is_ok(),
+        ))
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
-    async fn sign_proposal_part(&self, proposal_part: C::ProposalPart) -> SignedProposalPart<C> {
-        let signature = self.private_key.sign(&proposal_part.to_sign_bytes());
-        SignedProposalPart::new(proposal_part, signature)
+    async fn sign_proposal_part(
+        &self,
+        proposal_part: C::ProposalPart,
+    ) -> Result<SignedMessage<C, C::ProposalPart>, SigningError> {
+        let signature = self.sign(&proposal_part.to_sign_bytes());
+        Ok(SignedMessage::new(proposal_part, signature))
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
@@ -97,13 +106,18 @@ where
         proposal_part: &C::ProposalPart,
         signature: &Signature,
         public_key: &PublicKey,
-    ) -> bool {
-        public_key
-            .verify(&proposal_part.to_sign_bytes(), signature)
-            .is_ok()
+    ) -> Result<VerificationResult, SigningError> {
+        Ok(VerificationResult::from_bool(
+            public_key
+                .verify(&proposal_part.to_sign_bytes(), signature)
+                .is_ok(),
+        ))
     }
 
-    async fn sign_vote_extension(&self, _extension: C::Extension) -> SignedExtension<C> {
+    async fn sign_vote_extension(
+        &self,
+        _extension: C::Extension,
+    ) -> Result<SignedExtension<C>, SigningError> {
         unimplemented!()
     }
 
@@ -112,7 +126,7 @@ where
         _extension: &C::Extension,
         _signature: &Signature,
         _public_key: &PublicKey,
-    ) -> bool {
+    ) -> Result<VerificationResult, SigningError> {
         unimplemented!()
     }
 }

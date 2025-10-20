@@ -55,7 +55,7 @@ impl Codec<Signature> for ProtobufCodec {
     fn encode(&self, msg: &Signature) -> Result<Bytes, Self::Error> {
         Ok(Bytes::from(
             proto::Signature {
-                bytes: Bytes::copy_from_slice(msg.to_bytes().as_ref()),
+                bytes: Bytes::copy_from_slice(msg.to_vec().as_ref()),
             }
             .encode_to_vec(),
         ))
@@ -417,12 +417,12 @@ pub fn encode_extension(
 
 pub fn encode_signature(signature: &Signature) -> proto::Signature {
     proto::Signature {
-        bytes: Bytes::copy_from_slice(signature.to_bytes().as_ref()),
+        bytes: Bytes::copy_from_slice(signature.to_vec().as_ref()),
     }
 }
 
 pub fn decode_signature(signature: proto::Signature) -> Result<Signature, ProtoError> {
-    Signature::from_bytes(signature.bytes.as_ref())
+    Signature::from_slice(signature.bytes.as_ref())
         .map_err(|err| ProtoError::Other(format!("Invalid signature: {err}")))
 }
 

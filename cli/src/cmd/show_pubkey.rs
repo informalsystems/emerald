@@ -24,7 +24,12 @@ impl ShowPubkeyCmd {
 
         // Get the public key and output as uncompressed hex so callers can register it.
         let public_key = private_key.public_key();
-        let uncompressed = public_key.to_uncompressed_bytes();
+
+        let uncompressed = public_key
+            .inner()
+            .to_encoded_point(false)
+            .as_bytes()
+            .to_vec();
 
         ensure!(
             uncompressed.len() == 65,

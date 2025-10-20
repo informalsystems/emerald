@@ -127,6 +127,7 @@ pub fn generate_config(
             },
             value_payload: ValuePayload::default(),
             queue_capacity: 0,
+            ..Default::default()
         },
         mempool: MempoolConfig {
             p2p: P2pConfig {

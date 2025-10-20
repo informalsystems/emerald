@@ -1,9 +1,7 @@
 use alloy_primitives::keccak256;
 use async_trait::async_trait;
 use bytes::Bytes;
-use malachitebft_core_types::{
-    Context, SignedExtension, SignedMessage, SignedProposal, SignedProposalPart, SignedVote,
-};
+use malachitebft_core_types::{Context, SignedExtension, SignedMessage};
 use malachitebft_signing::{Error as SigningError, SigningProvider, VerificationResult};
 pub use malachitebft_signing_ecdsa::{PrivateKey, PublicKey, Signature, K256};
 

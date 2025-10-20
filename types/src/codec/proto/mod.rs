@@ -1,6 +1,6 @@
 use bytes::Bytes;
 use malachitebft_app::streaming::{StreamContent, StreamId, StreamMessage};
-use malachitebft_codec::Codec;
+use malachitebft_codec::{Codec, HasEncodedLen};
 use malachitebft_core_consensus::{LivenessMsg, ProposedValue, SignedConsensusMsg};
 use malachitebft_core_types::{
     CommitCertificate, CommitSignature, NilOrVal, PolkaCertificate, PolkaSignature, Round,
@@ -268,6 +268,13 @@ impl Codec<sync::Response<MalakethContext>> for ProtobufCodec {
 
     fn encode(&self, response: &sync::Response<MalakethContext>) -> Result<Bytes, Self::Error> {
         encode_sync_response(response).map(|proto| proto.encode_to_vec().into())
+    }
+}
+
+impl HasEncodedLen<sync::Response<MalakethContext>> for ProtobufCodec {
+    fn encoded_len(&self, response: &sync::Response<MalakethContext>) -> Result<usize, ProtoError> {
+        let proto = encode_sync_response(response)?;
+        Ok(proto.encoded_len())
     }
 }
 

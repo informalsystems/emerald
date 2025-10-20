@@ -109,13 +109,12 @@ impl Node for App {
     }
 
     fn get_keypair(&self, pk: PrivateKey) -> Keypair {
-        let raw_key = pk.to_bytes();
-        let secret = k256::SecretKey::from_slice(&raw_key)
-            .expect("failed to convert secp256k1 private key to k256 secret key");
-        let mut der = secret
-            .to_sec1_der()
-            .expect("failed to DER-encode secp256k1 private key");
-        Keypair::secp256k1_from_der(der.as_mut_slice()).expect("failed to decode DER private key")
+        use libp2p_identity::secp256k1::{Keypair as Secp256k1Keypair, SecretKey};
+
+        let secret_bytes: [u8; 32] = pk.inner().to_bytes().into();
+        let secret_key =
+            SecretKey::try_from_bytes(secret_bytes).expect("failed to decode secp256k1 secret key");
+        Secp256k1Keypair::from(secret_key).into()
     }
 
     fn load_private_key(&self, file: Self::PrivateKeyFile) -> PrivateKey {

@@ -85,8 +85,8 @@ fn seed_from_address(address: &Address) -> u64 {
 }
 
 fn build_execution_block_from_bytes(raw_block_data: Bytes) -> ExecutionBlock {
-    let execution_payload: ExecutionPayloadV3 =
-        ExecutionPayloadV3::from_ssz_bytes(&raw_block_data).unwrap();
+    let execution_payload: ExecutionPayloadV3 = ExecutionPayloadV3::from_ssz_bytes(&raw_block_data)
+        .expect("failed to convert block bytes into executon payload");
     ExecutionBlock {
         block_hash: execution_payload.payload_inner.payload_inner.block_hash,
         block_number: execution_payload.payload_inner.payload_inner.block_number,

@@ -7,13 +7,13 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use color_eyre::eyre;
+use libp2p_identity::Keypair;
 use malachitebft_app_channel::app::events::{RxEvent, TxEvent};
 use malachitebft_app_channel::app::metrics::SharedRegistry;
 use malachitebft_app_channel::app::node::{
     CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, EngineHandle, Node, NodeHandle,
 };
 use malachitebft_app_channel::app::types::core::VotingPower;
-use malachitebft_app_channel::app::types::Keypair;
 use malachitebft_eth_cli::config::{Config, MalakethConfig};
 // Use the same types used for integration tests.
 // A real application would use its own types and context instead.

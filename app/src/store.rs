@@ -332,8 +332,10 @@ impl Db {
     fn min_unpruned_decided_value_height(&self) -> Option<Height> {
         let start = Instant::now();
 
-        let tx = self.db.begin_read().unwrap();
-        let table = tx.open_table(DECIDED_VALUES_TABLE).unwrap();
+        let tx = self.db.begin_read().expect("failed to open db for reading");
+        let table = tx
+            .open_table(DECIDED_VALUES_TABLE)
+            .expect("failed to open DECIDED_VALUES_TABLE");
         let (key, value) = table.first().ok()??;
 
         self.metrics.observe_read_time(start.elapsed());
@@ -344,8 +346,13 @@ impl Db {
     }
 
     fn max_decided_value_height(&self) -> Option<Height> {
-        let tx = self.db.begin_read().unwrap();
-        let table = tx.open_table(DECIDED_VALUES_TABLE).unwrap();
+        let tx = self
+            .db
+            .begin_read()
+            .expect("failed for open db for reading");
+        let table = tx
+            .open_table(DECIDED_VALUES_TABLE)
+            .expect("failed to open DECIDED_VALUES_TABLE");
         let (key, _) = table.last().ok()??;
         Some(key.value())
     }

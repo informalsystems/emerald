@@ -74,50 +74,60 @@ k256              = { version = "0.13" }
 
 [workspace.dependencies.malachitebft-app]
 package = "informalsystems-malachitebft-app"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
+rev = "d0ffe4dd0e2bbcc49f5bac20fc3a314add87349b"
 git = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-app-channel]
 package = "informalsystems-malachitebft-app-channel"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
+rev = "d0ffe4dd0e2bbcc49f5bac20fc3a314add87349b"
 git = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-core-types]
 package = "informalsystems-malachitebft-core-types"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
+rev = "d0ffe4dd0e2bbcc49f5bac20fc3a314add87349b"
 git = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-core-consensus]
 package = "informalsystems-malachitebft-core-consensus"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
+rev = "d0ffe4dd0e2bbcc49f5bac20fc3a314add87349b"
 git = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-codec]
 package = "informalsystems-malachitebft-codec"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
+rev = "d0ffe4dd0e2bbcc49f5bac20fc3a314add87349b"
 git = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-config]
 package = "informalsystems-malachitebft-config"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
+rev = "d0ffe4dd0e2bbcc49f5bac20fc3a314add87349b"
 git = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-metrics]
 package = "informalsystems-malachitebft-metrics"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
+rev = "d0ffe4dd0e2bbcc49f5bac20fc3a314add87349b"
 git = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-proto]
 package = "informalsystems-malachitebft-proto"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
+rev = "d0ffe4dd0e2bbcc49f5bac20fc3a314add87349b"
+git = "https://github.com/informalsystems/malachite.git"
+
+[workspace.dependencies.malachitebft-signing]
+package = "informalsystems-malachitebft-signing"
+rev = "d0ffe4dd0e2bbcc49f5bac20fc3a314add87349b"
 git = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-signing-ed25519]
 package = "informalsystems-malachitebft-signing-ed25519"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
+rev = "d0ffe4dd0e2bbcc49f5bac20fc3a314add87349b"
+git = "https://github.com/informalsystems/malachite.git"
+
+[workspace.dependencies.malachitebft-signing-ecdsa]
+package = "informalsystems-malachitebft-signing-ecdsa"
+rev = "d0ffe4dd0e2bbcc49f5bac20fc3a314add87349b"
 git = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-sync]
 package = "informalsystems-malachitebft-sync"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
+rev = "d0ffe4dd0e2bbcc49f5bac20fc3a314add87349b"
 git = "https://github.com/informalsystems/malachite.git"

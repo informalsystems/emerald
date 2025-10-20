@@ -3,10 +3,15 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use malachitebft_core_types::{Context, SignedExtension, SignedMessage};
 use malachitebft_signing::{Error as SigningError, SigningProvider, VerificationResult};
-pub use malachitebft_signing_ecdsa::{PrivateKey, PublicKey, Signature, K256};
+use malachitebft_signing_ecdsa::K256Config;
+pub use malachitebft_signing_ecdsa::{PrivateKey as EcdsaPrivateKey, PublicKey as EcdsaPublicKey, Signature as EcdsaSignature, K256 as K256};
 
 use super::Hashable;
 use crate::{Proposal, ProposalPart, Vote};
+
+pub type PrivateKey = EcdsaPrivateKey<K256Config>;
+pub type PublicKey = EcdsaPublicKey<K256Config>;
+pub type Signature = EcdsaSignature<K256Config>;
 
 impl Hashable for PublicKey {
     type Output = [u8; 32];

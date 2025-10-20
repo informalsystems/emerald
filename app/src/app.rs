@@ -163,7 +163,6 @@ pub async fn run(
                 match start_height_from_store {
                     Some(s) => {
                         initialize_state_from_existing_block(state, &engine, s).await?;
-                        // TODO ERROR HANDLING
                         info!(
                             "Start height in state set to: {:?}; height in store is {s} ",
                             state.current_height
@@ -426,8 +425,8 @@ pub async fn run(
                 state.latest_block = Some(ExecutionBlock {
                     block_hash: new_block_hash,
                     block_number: new_block_number,
-                    parent_hash: old_hash, // FIXME: should be parent_block_hash ?
-                    timestamp: new_block_timestamp,
+                    parent_hash: old_hash,
+                    timestamp: new_block_timestamp, // Note: This was a fix related to the sync reactor
                     prev_randao: new_block_prev_randao,
                 });
 

@@ -249,9 +249,24 @@ pub async fn run(
                 // propose. Then we send it back to consensus.
 
                 let latest_block = state.latest_block.expect("Head block hash is not set");
-                let execution_payload = engine.generate_block(&Some(latest_block)).await?;
+                let mut execution_payload = engine.generate_block(&Some(latest_block)).await?;
 
                 debug!("🌈 Got execution payload: {:?}", execution_payload);
+
+                // Check if payload has no transactions, if so sleep and retry once
+                if execution_payload
+                    .payload_inner
+                    .payload_inner
+                    .transactions
+                    .is_empty()
+                {
+                    info!(%height, %round, "⏰ Payload has no transactions, sleeping for 10s before retrying");
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+
+                    // Fetch payload again and continue regardless of whether it's empty
+                    execution_payload = engine.generate_block(&Some(latest_block)).await?;
+                    debug!("🌈 Got execution payload after retry: ",);
+                }
 
                 // Store block in state and propagate to peers.
                 let bytes = Bytes::from(execution_payload.as_ssz_bytes());

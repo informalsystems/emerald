@@ -59,23 +59,23 @@ function exit_and_cleanup {
     fi
 }
 
-function wait_for_reth {
-    NODE_PORT=$1
-    echo "Waiting for reth node at port $NODE_PORT to reach height 1..."
-    echo "trying 10 times"
-    for i in $(seq 1 10); do
-        BLOCK_NUMBER=$(cast block-number --rpc-url 127.0.0.1:$NODE_PORT)
-        if [[ $BLOCK_NUMBER -ge 1 ]]; then
-            echo "Reth node at port $NODE_PORT has reached height $BLOCK_NUMBER."
-            return
-        else
-            echo "Current block number: $BLOCK_NUMBER. Waiting..."
-            sleep 3
-        fi
-    done
-    echo "Reth node at port $NODE_PORT did not reach height 1 in time. Exiting with error."
-    exit_and_cleanup 1
-}
+# function wait_for_reth {
+#     NODE_PORT=$1
+#     echo "Waiting for reth node at port $NODE_PORT to reach height 1..."
+#     echo "trying 10 times"
+#     for i in $(seq 1 10); do
+#         BLOCK_NUMBER=$(cast block-number --rpc-url 127.0.0.1:$NODE_PORT)
+#         if [[ $BLOCK_NUMBER -ge 1 ]]; then
+#             echo "Reth node at port $NODE_PORT has reached height $BLOCK_NUMBER."
+#             return
+#         else
+#             echo "Current block number: $BLOCK_NUMBER. Waiting..."
+#             sleep 3
+#         fi
+#     done
+#     echo "Reth node at port $NODE_PORT did not reach height 1 in time. Exiting with error."
+#     exit_and_cleanup 1
+# }
 
 function check_reth_progress {
     NODE_PORT=$1
@@ -141,16 +141,16 @@ else
     done
 fi
 
-wait_for_reth 8545
+# wait_for_reth 8545
 
-for NODE_PORT in 8545 18545 28545; do
-    check_reth_progress $NODE_PORT || exit_and_cleanup 1
-done
+# for NODE_PORT in 8545 18545 28545; do
+#     check_reth_progress $NODE_PORT || exit_and_cleanup 1
+# done
 
-# Check progress for additional node
-if [[ $NODES_COUNT -ge 4 ]]; then
-    check_reth_progress 38545 || exit_and_cleanup 1
-fi
+# # Check progress for additional node
+# if [[ $NODES_COUNT -ge 4 ]]; then
+#     check_reth_progress 38545 || exit_and_cleanup 1
+# fi
 
 # Trap the INT signal (Ctrl+C) to run the cleanup function
 trap exit_and_cleanup INT

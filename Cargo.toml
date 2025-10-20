@@ -7,6 +7,9 @@ members = [
   "engine",
   "utils",
   "types",
+  "test",
+  "test/app",
+  "test/framework",
 ]
 
 [workspace.package]
@@ -33,6 +36,9 @@ malachitebft-eth-app    = { version = "0.0.1", path = "app" }
 malachitebft-eth-cli    = { version = "0.0.1", path = "cli" }
 malachitebft-eth-engine = { version = "0.0.1", path = "engine" }
 malachitebft-eth-types  = { version = "0.0.1", path = "types" }
+malachitebft-eth-test   = { version = "0.0.1", path = "test" }
+malachitebft-eth-test-app   = { version = "0.0.1", path = "test/app" }
+malachitebft-eth-test-framework   = { version = "0.0.1", path = "test/framework" }
 
 alloy-primitives       = { version = "0.8.21", features = ["getrandom"] }
 alloy-consensus        = { version = "0.11.1", default-features = false }
@@ -51,12 +57,14 @@ color-eyre         = "0.6"
 config             = { version = "0.14", features = ["toml"], default-features = false }
 derive-where       = "1.2.7"
 directories        = "5.0.1"
+ed25519-consensus  = "2.1.0"
 hex                = { version = "0.4.3", features = ["serde"] }
 itertools          = "0.14"
 itf                = "0.2.3"
 prost              = "0.13"
 prost-build        = "0.13"
 prost-types        = "0.13"
+protox             = "0.8.0"
 rand               = { version = "0.8.5", features = ["std_rng"] }
 redb               = "2.4.0"
 serde              = "1.0"
@@ -101,8 +109,18 @@ package = "informalsystems-malachitebft-config"
 rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
 git = "https://github.com/informalsystems/malachite.git"
 
+[workspace.dependencies.malachitebft-engine]
+package = "informalsystems-malachitebft-engine"
+rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
+git = "https://github.com/informalsystems/malachite.git"
+
 [workspace.dependencies.malachitebft-metrics]
 package = "informalsystems-malachitebft-metrics"
+rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
+git = "https://github.com/informalsystems/malachite.git"
+
+[workspace.dependencies.malachitebft-peer]
+package = "informalsystems-malachitebft-peer"
 rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
 git = "https://github.com/informalsystems/malachite.git"
 

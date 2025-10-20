@@ -1,0 +1,37 @@
+[package]
+name = "malachitebft-eth-test-app"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+color-eyre.workspace = true
+config.workspace = true
+derive-where.workspace = true
+ed25519-consensus.workspace = true
+itertools.workspace = true
+prost.workspace = true
+rand.workspace = true
+redb.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha3.workspace = true
+toml.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+malachitebft-app-channel.workspace = true
+malachitebft-proto.workspace = true
+malachitebft-eth-test.workspace = true
+
+[dev-dependencies]
+malachitebft-eth-test-framework.workspace = true
+
+[lints]
+workspace = true

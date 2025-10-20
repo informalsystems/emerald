@@ -1,0 +1,51 @@
+[package]
+name = "malachitebft-eth-test"
+
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+malachitebft-codec = { workspace = true }
+malachitebft-core-types = { workspace = true, features = ["serde"] }
+malachitebft-config = { workspace = true }
+malachitebft-core-consensus = { workspace = true }
+malachitebft-peer = { workspace = true, features = ["serde"] }
+malachitebft-proto = { workspace = true }
+malachitebft-signing-ed25519 = { workspace = true, features = ["rand", "serde"] }
+malachitebft-sync = { workspace = true }
+malachitebft-app-channel.workspace = true
+
+async-trait = { workspace = true }
+bytes = { workspace = true }
+color-eyre = { workspace = true }
+hex = { workspace = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
+rand = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true, features = ["derive", "rc"] }
+serde_json = { workspace = true }
+sha3 = { workspace = true }
+signature = { workspace = true }
+tokio = { workspace = true }
+thiserror = "2.0.16"
+ed25519-consensus = { workspace = true }
+
+[dev-dependencies]
+malachitebft-eth-test-app.workspace = true
+malachitebft-eth-test-framework.workspace = true
+
+bytesize.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tempfile           = "3.21.0"
+
+[build-dependencies]
+prost-build = { workspace = true }
+protox = { workspace = true }
+
+[lints]
+workspace = true

@@ -2,10 +2,9 @@ use std::io;
 
 use axum::routing::get;
 use axum::Router;
+use malachitebft_app::metrics::export;
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tracing::{error, info};
-
-use malachitebft_app::metrics::export;
 
 #[tracing::instrument(name = "metrics", skip_all)]
 pub async fn serve(listen_addr: impl ToSocketAddrs) {

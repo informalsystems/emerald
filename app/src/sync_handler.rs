@@ -1,18 +1,18 @@
 //! Sync handler functions for processing synced payloads
 
-use bytes::Bytes;
-use color_eyre::eyre::{self, eyre};
-use ssz::{Decode, Encode};
 use std::time::Duration;
-use tracing::{error, info, warn};
 
 use alloy_rpc_types_engine::ExecutionPayloadV3;
+use bytes::Bytes;
+use color_eyre::eyre::{self, eyre};
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::sync::RawDecidedValue;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::{BlockHash, Height, MalakethContext, Value};
+use ssz::{Decode, Encode};
+use tracing::{error, info, warn};
 
 use crate::state::reconstruct_execution_payload;
 use crate::store::Store;

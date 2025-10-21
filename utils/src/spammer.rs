@@ -1,23 +1,24 @@
-use crate::make_signers;
-use crate::tx::{make_signed_eip1559_tx, make_signed_eip4844_tx};
+use core::fmt;
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use alloy_network::eip2718::Encodable2718;
 use alloy_primitives::Address;
 use alloy_rpc_types_txpool::TxpoolStatus;
-use alloy_signer_local::LocalSigner;
+use alloy_signer_local::PrivateKeySigner;
 use color_eyre::eyre::{self, Result};
-use core::fmt;
 use jsonrpsee_core::client::ClientT;
 use jsonrpsee_core::params::{ArrayParams, BatchRequestBuilder};
 use jsonrpsee_http_client::{HttpClient, HttpClientBuilder};
-use k256::ecdsa::SigningKey;
 use reqwest::Url;
 use serde::de::DeserializeOwned;
 use serde_json::json;
-use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::time::{self, sleep, Duration, Instant};
 use tracing::debug;
+
+use crate::make_signers;
+use crate::tx::{make_signed_eip1559_tx, make_signed_eip4844_tx};
 
 /// A transaction spammer that sends Ethereum transactions at a controlled rate.
 /// Tracks and reports statistics on sent transactions.
@@ -27,7 +28,7 @@ pub struct Spammer {
     /// Client for Ethereum RPC node server.
     client: RpcClient,
     /// Ethereum transaction signer.
-    signer: LocalSigner<SigningKey>,
+    signer: PrivateKeySigner,
     /// Maximum number of transactions to send (0 for no limit).
     max_num_txs: u64,
     /// Maximum number of seconds to run the spammer (0 for no limit).

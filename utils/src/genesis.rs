@@ -1,20 +1,24 @@
+use std::collections::BTreeMap;
+use std::str::FromStr;
+
 use alloy_genesis::{ChainConfig, Genesis, GenesisAccount};
 use alloy_primitives::{Address, B256, U256};
-use alloy_signer_local::{coins_bip39::English, LocalSigner, MnemonicBuilder};
+use alloy_signer_local::coins_bip39::English;
+use alloy_signer_local::{MnemonicBuilder, PrivateKeySigner};
 use chrono::NaiveDate;
-use color_eyre::eyre::Result;
-use k256::ecdsa::SigningKey;
-use std::{collections::BTreeMap, str::FromStr};
+use color_eyre::eyre::{eyre, Result};
+use hex::decode;
+use k256::ecdsa::VerifyingKey;
 use tracing::debug;
 
-use crate::validator_manager::contract::GENESIS_VALIDATOR_MANAGER_ACCOUNT;
-use crate::validator_manager::{contract::ValidatorManager, generate_storage_data, Validator};
+use crate::validator_manager::contract::{ValidatorManager, GENESIS_VALIDATOR_MANAGER_ACCOUNT};
+use crate::validator_manager::{generate_storage_data, Validator};
 
 /// Test mnemonic for wallet generation
 const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
 /// Create a signer from a mnemonic.
-pub(crate) fn make_signer(index: u64) -> LocalSigner<SigningKey> {
+pub(crate) fn make_signer(index: u64) -> PrivateKeySigner {
     MnemonicBuilder::<English>::default()
         .phrase(TEST_MNEMONIC)
         .derivation_path(format!("m/44'/60'/0'/0/{index}"))
@@ -23,7 +27,7 @@ pub(crate) fn make_signer(index: u64) -> LocalSigner<SigningKey> {
         .expect("Failed to create wallet")
 }
 
-pub(crate) fn make_signers() -> Vec<LocalSigner<SigningKey>> {
+pub(crate) fn make_signers() -> Vec<PrivateKeySigner> {
     (0..3).map(make_signer).collect()
 }
 
@@ -52,12 +56,54 @@ pub(crate) fn generate_genesis(public_keys_file: &str, genesis_output_file: &str
         );
     }
 
-    let initial_validators = std::fs::read_to_string(public_keys_file)?
+    let mut initial_validators = Vec::new();
+    for (idx, raw_line) in std::fs::read_to_string(public_keys_file)?
         .lines()
-        .map(|line| {
-            U256::from_str(line.trim()).map(|key| Validator::from_public_key(key, U256::from(100)))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+        .enumerate()
+    {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let hex_str = line.strip_prefix("0x").unwrap_or(line);
+        let bytes = decode(hex_str).map_err(|e| {
+            eyre!(
+                "invalid hex-encoded validator key at line {} in {}: {}",
+                idx + 1,
+                public_keys_file,
+                e
+            )
+        })?;
+
+        if bytes.len() != 64 {
+            return Err(eyre!(
+                "expected 64-byte uncompressed secp256k1 payload (sans 0x04 prefix) at line {} in {}, got {} bytes",
+                idx + 1,
+                public_keys_file,
+                bytes.len()
+            ));
+        }
+
+        let mut uncompressed = [0u8; 65];
+        uncompressed[0] = 0x04;
+        uncompressed[1..].copy_from_slice(&bytes);
+
+        VerifyingKey::from_sec1_bytes(&uncompressed).map_err(|_| {
+            eyre!(
+                "invalid secp256k1 public key material at line {} in {}",
+                idx + 1,
+                public_keys_file
+            )
+        })?;
+
+        let mut x_bytes = [0u8; 32];
+        x_bytes.copy_from_slice(&bytes[..32]);
+        let mut y_bytes = [0u8; 32];
+        y_bytes.copy_from_slice(&bytes[32..]);
+        let key = (U256::from_be_bytes(x_bytes), U256::from_be_bytes(y_bytes));
+        initial_validators.push(Validator::from_public_key(key, 100));
+    }
 
     let storage = generate_storage_data(initial_validators, signer_addresses[0])?;
 

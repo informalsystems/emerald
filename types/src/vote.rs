@@ -1,11 +1,9 @@
 use bytes::Bytes;
+pub use malachitebft_core_types::Extension;
 use malachitebft_core_types::{NilOrVal, Round, SignedExtension, VoteType};
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 
-use crate::proto;
-use crate::{Address, Height, MalakethContext, ValueId};
-
-pub use malachitebft_core_types::Extension;
+use crate::{proto, Address, Height, MalakethContext, ValueId};
 
 /// A vote for a value in a round
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

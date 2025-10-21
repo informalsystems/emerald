@@ -330,7 +330,7 @@ contract ValidatorManagerTest is Test {
         return ValidatorManager.Secp256k1Key({x: DERIVED_PUBLIC_KEY_X, y: DERIVED_PUBLIC_KEY_Y});
     }
 
-    function testValidatorKeyIdMatchesAddressDerivedFromPrivateKey() public {
+    function testValidatorKeyIdMatchesAddressDerivedFromPrivateKey() public pure {
         ValidatorManager.Secp256k1Key memory key = mnemonicDerivedKey();
         bytes32 keyId = keccak256(abi.encodePacked(key.x, key.y));
         address derived = address(uint160(uint256(keyId)));

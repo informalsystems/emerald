@@ -41,6 +41,15 @@ jobs:
       - name: Check formatting
         uses: actions-rust-lang/rustfmt@v1
 
+      - name: Install Taplo
+        uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: taplo-cli
+          locked: true
+
+      - name: Check TOML formatting
+        run: taplo fmt --check
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest

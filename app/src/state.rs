@@ -1,18 +1,19 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
+use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use color_eyre::eyre;
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
-use sha3::Digest;
-use tokio::time::Instant;
-use tracing::{debug, error, info};
-
 use malachitebft_app_channel::app::streaming::{StreamContent, StreamId, StreamMessage};
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
+use sha3::Digest;
+use ssz::Decode;
+use tokio::time::Instant;
+use tracing::{debug, error, info};
 
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
@@ -92,6 +93,18 @@ fn seed_from_address(address: &Address) -> u64 {
     })
 }
 
+fn build_execution_block_from_bytes(raw_block_data: Bytes) -> ExecutionBlock {
+    let execution_payload: ExecutionPayloadV3 = ExecutionPayloadV3::from_ssz_bytes(&raw_block_data)
+        .expect("failed to convert block bytes into executon payload");
+    ExecutionBlock {
+        block_hash: execution_payload.payload_inner.payload_inner.block_hash,
+        block_number: execution_payload.payload_inner.payload_inner.block_number,
+        parent_hash: execution_payload.payload_inner.payload_inner.parent_hash,
+        timestamp: execution_payload.payload_inner.payload_inner.timestamp,
+        prev_randao: execution_payload.payload_inner.payload_inner.prev_randao,
+    }
+}
+
 impl State {
     /// Creates a new State instance with the given validator address and starting height
     pub fn new(
@@ -129,6 +142,23 @@ impl State {
             start_time,
             metrics: state_metrics.metrics,
         }
+    }
+
+    pub async fn get_latest_block_candidate(&self, height: Height) -> Option<ExecutionBlock> {
+        let decided_value = self.store.get_decided_value(height).await.ok().flatten()?;
+
+        let certificate = decided_value.certificate;
+
+        let raw_block_data = self
+            .get_block_data(certificate.height, certificate.round)
+            .await
+            .expect("state: certificate should have associated block data");
+        debug!(
+            "🎁 block size: {:?}, height: {}",
+            raw_block_data.iter().len(),
+            height
+        );
+        Some(build_execution_block_from_bytes(raw_block_data))
     }
 
     /// Returns the earliest height available via EL

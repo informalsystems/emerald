@@ -80,14 +80,53 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     }
 
     /**
+     * @dev Batch register validators.
+     * @param addValidators Array of validator key identifiers and power to be added
+     * @param removeValidatorKeys Array of validator key identifiers to be removed
+     */
+    function addAndRemove(ValidatorInfo[] memory addValidators, uint256[] memory removeValidatorKeys)
+        external
+        nonReentrant
+        onlyOwner
+    {
+        _registerSet(addValidators);
+        _unregisterSet(removeValidatorKeys);
+    }
+
+    /**
+     * @dev Batch register validators.
+     * @param addValidators Array of validator key identifiers and power to be added
+     */
+    function registerSet(ValidatorInfo[] memory addValidators) external nonReentrant onlyOwner {
+        _registerSet(addValidators);
+    }
+
+    /**
+     * @dev Internal implementation of batch register validators
+     * @param addValidators Array of validator key identifiers and power to be added
+     */
+    function _registerSet(ValidatorInfo[] memory addValidators) internal {
+        for (uint256 i = 0; i < addValidators.length; i++) {
+            _register(addValidators[i].validatorKey, addValidators[i].power);
+        }
+    }
+
+    /**
      * @dev Register a new validator with specified key and power
      * @param validatorKey The validator key identifier
      * @param power The voting power for the validator
      */
-    function register(uint256 validatorKey, uint256 power)
-        external
-        nonReentrant
-        onlyOwner
+    function register(uint256 validatorKey, uint256 power) external nonReentrant onlyOwner {
+        _register(validatorKey, power);
+    }
+
+    /**
+     * @dev Internal implementation to register a new validator with specified key and power
+     * @param validatorKey The validator key identifier
+     * @param power The voting power for the validator
+     */
+    function _register(uint256 validatorKey, uint256 power)
+        internal
         validatorNotExists(validatorKey)
         validKey(validatorKey)
         validPower(power)
@@ -99,9 +138,34 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     }
 
     /**
+     * @dev Batch unregister validators.
+     * @param validatorKeys Array of validator key identifiers
+     */
+    function unregisterSet(uint256[] memory validatorKeys) external nonReentrant onlyOwner {
+        _unregisterSet(validatorKeys);
+    }
+
+    /**
+     * @dev Internal implementation of batch unregister validators
+     * @param validatorKeys Array of validator key identifiers
+     */
+    function _unregisterSet(uint256[] memory validatorKeys) internal {
+        for (uint256 i = 0; i < validatorKeys.length; i++) {
+            _unregister(validatorKeys[i]);
+        }
+    }
+
+    /**
      * @dev Unregister a validator (only callable by the owner)
      */
-    function unregister(uint256 validatorKey) external nonReentrant onlyOwner validatorExists(validatorKey) {
+    function unregister(uint256 validatorKey) external nonReentrant onlyOwner {
+        _unregister(validatorKey);
+    }
+
+    /**
+     * @dev Internal implementation to unregister a validator (only callable by the owner)
+     */
+    function _unregister(uint256 validatorKey) internal validatorExists(validatorKey) {
         delete _validatorPowers[validatorKey];
         _validatorKeys.remove(validatorKey);
 

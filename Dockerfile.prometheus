@@ -1,0 +1,17 @@
+# Use the official Prometheus image as base
+FROM prom/prometheus:latest
+USER root
+
+# Make sure Prometheus directories are owned by its runtime user
+RUN chown -R 65534:65534 /etc/prometheus /prometheus
+
+# Copy your local config and data (optional, if you want to bake them in)
+COPY --chown=65534:65534 ../monitoring/prometheus.yml /etc/prometheus/prometheus.yml
+
+# Set correct working directory and user
+WORKDIR /prometheus
+USER 65534
+
+ENTRYPOINT ["/bin/prometheus"]
+CMD ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus"]
+

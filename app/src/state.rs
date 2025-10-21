@@ -22,8 +22,16 @@ use ssz::Decode;
 use tokio::time::Instant;
 use tracing::{debug, error, info};
 
+use crate::metrics::Metrics;
 use crate::store::Store;
 use crate::streaming::{PartStreamsMap, ProposalParts};
+
+pub struct StateMetrics {
+    pub txs_count: u64,
+    pub chain_bytes: u64,
+    pub elapsed_seconds: u64,
+    pub metrics: Metrics,
+}
 
 /// Size of randomly generated blocks in bytes
 #[allow(dead_code)]
@@ -57,6 +65,7 @@ pub struct State {
     pub txs_count: u64,
     pub chain_bytes: u64,
     pub start_time: Instant,
+    pub metrics: Metrics,
 }
 
 /// Represents errors that can occur during the verification of a proposal's signature.
@@ -105,7 +114,14 @@ impl State {
         address: Address,
         height: Height,
         store: Store,
+        state_metrics: StateMetrics,
     ) -> Self {
+        // Calculate start_time by subtracting elapsed_seconds from now.
+        // It represents the start time of measuring metrics, not the actual node start time.
+        // This allows us to continue accumulating time correctly after a restart
+        let start_time =
+            Instant::now() - std::time::Duration::from_secs(state_metrics.elapsed_seconds);
+
         Self {
             ctx,
             signing_provider,
@@ -121,9 +137,10 @@ impl State {
             latest_block: None,
             validator_set: None,
 
-            txs_count: 0,
-            chain_bytes: 0,
-            start_time: Instant::now(),
+            txs_count: state_metrics.txs_count,
+            chain_bytes: state_metrics.chain_bytes,
+            start_time,
+            metrics: state_metrics.metrics,
         }
     }
 

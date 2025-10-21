@@ -352,6 +352,36 @@ pub async fn run(
                 state.txs_count += tx_count as u64;
                 state.chain_bytes += block_bytes.len() as u64;
                 let elapsed_time = state.start_time.elapsed();
+
+                state.metrics.tx_stats.add_txs(tx_count as u64);
+                state
+                    .metrics
+                    .tx_stats
+                    .add_chain_bytes(block_bytes.len() as u64);
+                state
+                    .metrics
+                    .tx_stats
+                    .set_txs_per_second(state.txs_count as f64 / elapsed_time.as_secs_f64());
+                state
+                    .metrics
+                    .tx_stats
+                    .set_bytes_per_second(state.chain_bytes as f64 / elapsed_time.as_secs_f64());
+                state.metrics.tx_stats.set_block_tx_count(tx_count as u64);
+                state
+                    .metrics
+                    .tx_stats
+                    .set_block_size(block_bytes.len() as u64);
+
+                // Persist cumulative metrics to database for crash recovery
+                state
+                    .store
+                    .store_cumulative_metrics(
+                        state.txs_count,
+                        state.chain_bytes,
+                        elapsed_time.as_secs(),
+                    )
+                    .await?;
+
                 info!(
                     "👉 stats at height {}: #txs={}, txs/s={:.2}, chain_bytes={}, bytes/s={:.2}",
                     height,

@@ -41,6 +41,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     error ValidatorDoesNotExist();
     error InvalidPower();
     error InvalidKey();
+    error TotalPowerOverflow();
 
     /**
      * @dev Modifier to check if a validator exists
@@ -266,10 +267,14 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      */
     function getTotalPower() external view returns (uint64) {
         uint256 length = _validatorKeys.length();
-        uint64 total;
+        uint64 total = 0;
         for (uint256 i = 0; i < length; i++) {
             bytes32 keyId = _validatorKeys.at(i);
-            total += _validators[keyId].power;
+            uint64 power = _validators[keyId].power;
+            if (total > type(uint64).max - power) {
+                revert TotalPowerOverflow();
+            }
+            total += power;
         }
         return total;
     }

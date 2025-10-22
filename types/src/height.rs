@@ -1,4 +1,5 @@
 use core::fmt;
+
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 use serde::{Deserialize, Serialize};
 

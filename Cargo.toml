@@ -22,11 +22,11 @@ publish      = false
 opt-level = 1
 
 [profile.release]
-lto = "thin"
+lto             = "thin"
 overflow-checks = true
 
 [workspace.lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+unexpected_cfgs = { level = "warn", check-cfg = [ 'cfg(coverage_nightly)' ] }
 
 [workspace.dependencies]
 malachitebft-eth-app    = { version = "0.0.1", path = "app" }
@@ -34,13 +34,13 @@ malachitebft-eth-cli    = { version = "0.0.1", path = "cli" }
 malachitebft-eth-engine = { version = "0.0.1", path = "engine" }
 malachitebft-eth-types  = { version = "0.0.1", path = "types" }
 
-alloy-primitives       = { version = "0.8.21", features = ["getrandom"] }
+alloy-primitives       = { version = "0.8.21", features = [ "getrandom" ] }
 alloy-consensus        = { version = "0.11.1", default-features = false }
-alloy-rpc-types        = { version = "0.11.1", features = ["eth"], default-features = false }
+alloy-rpc-types        = { version = "0.11.1", features = [ "eth" ], default-features = false }
 alloy-contract         = { version = "0.11.1", default-features = false }
-alloy-sol-types        = { version = "0.8.15", features = ["json"], default-features = false }
+alloy-sol-types        = { version = "0.8.15", features = [ "json" ], default-features = false }
 alloy-rpc-types-eth    = { version = "0.11.1", default-features = false }
-alloy-rpc-types-engine = { version = "0.11.1", features = ["ssz", "jwt", "serde"], default-features = false }
+alloy-rpc-types-engine = { version = "0.11.1", features = [ "ssz", "jwt", "serde" ], default-features = false }
 
 async-trait        = "0.1.88"
 axum               = "0.7"
@@ -48,16 +48,16 @@ bytes              = { version = "1", default-features = false }
 bytesize           = "1.3"
 clap               = "4.5"
 color-eyre         = "0.6"
-config             = { version = "0.14", features = ["toml"], default-features = false }
+config             = { version = "0.14", features = [ "toml" ], default-features = false }
 derive-where       = "1.2.7"
 directories        = "5.0.1"
-hex                = { version = "0.4.3", features = ["serde"] }
+hex                = { version = "0.4.3", features = [ "serde" ] }
 itertools          = "0.14"
 itf                = "0.2.3"
 prost              = "0.13"
 prost-build        = "0.13"
 prost-types        = "0.13"
-rand               = { version = "0.8.5", features = ["std_rng"] }
+rand               = { version = "0.8.5", features = [ "std_rng" ] }
 redb               = "2.4.0"
 serde              = "1.0"
 serde_json         = "1.0"
@@ -68,56 +68,67 @@ tokio              = "1.46.1"
 toml               = "0.8.23"
 tracing            = "0.1.41"
 tracing-appender   = "0.2.3"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.18", features = [ "env-filter" ] }
 url                = "2"
+k256               = { version = "0.13" }
 
 [workspace.dependencies.malachitebft-app]
 package = "informalsystems-malachitebft-app"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
-git = "https://github.com/informalsystems/malachite.git"
+rev     = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
+git     = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-app-channel]
 package = "informalsystems-malachitebft-app-channel"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
-git = "https://github.com/informalsystems/malachite.git"
+rev     = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
+git     = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-core-types]
 package = "informalsystems-malachitebft-core-types"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
+rev = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 git = "https://github.com/informalsystems/malachite.git"
 features = ["serde"]
 
 [workspace.dependencies.malachitebft-core-consensus]
 package = "informalsystems-malachitebft-core-consensus"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
-git = "https://github.com/informalsystems/malachite.git"
+rev     = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
+git     = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-codec]
 package = "informalsystems-malachitebft-codec"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
-git = "https://github.com/informalsystems/malachite.git"
+rev     = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
+git     = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-config]
 package = "informalsystems-malachitebft-config"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
-git = "https://github.com/informalsystems/malachite.git"
+rev     = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
+git     = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-metrics]
 package = "informalsystems-malachitebft-metrics"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
-git = "https://github.com/informalsystems/malachite.git"
+rev     = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
+git     = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-proto]
 package = "informalsystems-malachitebft-proto"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
-git = "https://github.com/informalsystems/malachite.git"
+rev     = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
+git     = "https://github.com/informalsystems/malachite.git"
+
+[workspace.dependencies.malachitebft-signing]
+package = "informalsystems-malachitebft-signing"
+rev     = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
+git     = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-signing-ed25519]
 package = "informalsystems-malachitebft-signing-ed25519"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
-git = "https://github.com/informalsystems/malachite.git"
+rev     = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
+git     = "https://github.com/informalsystems/malachite.git"
+
+[workspace.dependencies.malachitebft-signing-ecdsa]
+package = "informalsystems-malachitebft-signing-ecdsa"
+rev     = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
+git     = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-sync]
 package = "informalsystems-malachitebft-sync"
-rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
-git = "https://github.com/informalsystems/malachite.git"
+rev     = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
+git     = "https://github.com/informalsystems/malachite.git"

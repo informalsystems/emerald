@@ -1,10 +1,10 @@
 use core::fmt;
-use serde::{Deserialize, Serialize};
 
 use alloy_primitives::Address as AlloyAddress;
 use malachitebft_proto::{Error as ProtoError, Protobuf};
+use serde::{Deserialize, Serialize};
 
-use crate::signing::PublicKey;
+use crate::signing::secp256k1::PublicKey;
 use crate::{proto, Hashable};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

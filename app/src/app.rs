@@ -1,25 +1,22 @@
+use std::time::Duration;
+
+use alloy_primitives::{address, Address};
 use alloy_provider::ProviderBuilder;
+use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre, OptionExt};
-use ed25519_consensus::VerificationKey;
-use malachitebft_eth_cli::config::MalakethConfig;
-use ssz::{Decode, Encode};
-use std::time::Duration;
-use tracing::{debug, error, info};
-
-use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
 use malachitebft_app_channel::app::engine::host::Next;
 use malachitebft_app_channel::app::streaming::StreamContent;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
 use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
-
-use alloy_primitives::{address, Address};
+use malachitebft_eth_cli::config::MalakethConfig;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
-use malachitebft_eth_types::{
-    Block, BlockHash, Height, MalakethContext, PublicKey, Validator, ValidatorSet,
-};
+use malachitebft_eth_types::secp256k1::PublicKey;
+use malachitebft_eth_types::{Block, BlockHash, Height, MalakethContext, Validator, ValidatorSet};
+use ssz::{Decode, Encode};
+use tracing::{debug, error, info};
 
 const GENESIS_VALIDATOR_MANAGER_ACCOUNT: Address =
     address!("0x0000000000000000000000000000000000002000");
@@ -114,30 +111,27 @@ pub async fn read_validators_from_contract(
         .call()
         .await?;
 
-    Ok(ValidatorSet::new(
-        genesis_validator_set_sol
-            .validators
-            .into_iter()
-            .map(
-                |ValidatorManager::ValidatorInfo {
-                     validatorKey,
-                     power,
-                 }| {
-                    let pub_key_bytes = validatorKey.to_be_bytes::<32>();
-                    let pub_key = PublicKey::new(
-                        VerificationKey::try_from(pub_key_bytes)
-                            .expect("Failed to convert validator key bytes to VerificationKey"),
-                    );
-                    Validator::new(
-                        pub_key,
-                        power
-                            .try_into()
-                            .expect("Failed to convert validator power to VotingPower"),
-                    )
-                },
-            )
-            .collect::<Vec<_>>(),
-    ))
+    let validators = genesis_validator_set_sol
+        .validators
+        .into_iter()
+        .map(
+            |ValidatorManager::ValidatorInfo {
+                 validatorKey,
+                 power,
+             }| {
+                let mut uncompressed = [0u8; 65];
+                uncompressed[0] = 0x04;
+                uncompressed[1..33].copy_from_slice(&validatorKey.x.to_be_bytes::<32>());
+                uncompressed[33..].copy_from_slice(&validatorKey.y.to_be_bytes::<32>());
+
+                let pub_key = PublicKey::from_sec1_bytes(&uncompressed)?;
+
+                Ok(Validator::new(pub_key, power))
+            },
+        )
+        .collect::<eyre::Result<Vec<_>>>()?;
+
+    Ok(ValidatorSet::new(validators))
 }
 
 pub async fn run(
@@ -361,18 +355,6 @@ pub async fn run(
 
                 if reply.send(proposed_value).is_err() {
                     error!("Failed to send ReceivedProposalPart reply");
-                }
-            }
-
-            // In some cases, e.g. to verify the signature of a vote received at a higher height
-            // than the one we are at (e.g. because we are lagging behind a little bit),
-            // the engine may ask us for the validator set at that height.
-            //
-            // In our case, our validator set stays constant between heights so we can
-            // send back the validator set found in our genesis state.
-            AppMsg::GetValidatorSet { height: _, reply } => {
-                if reply.send(Some(state.get_validator_set().clone())).is_err() {
-                    error!("🔴 Failed to send GetValidatorSet reply");
                 }
             }
 

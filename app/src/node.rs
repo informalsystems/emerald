@@ -7,29 +7,24 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use color_eyre::eyre;
+use libp2p_identity::Keypair;
 use malachitebft_app_channel::app::events::{RxEvent, TxEvent};
-use malachitebft_app_channel::app::node::NodeHandle;
-use malachitebft_eth_engine::engine::Engine;
-use malachitebft_eth_engine::engine_rpc::EngineRPC;
-use malachitebft_eth_engine::ethereum_rpc::EthereumRPC;
-use rand::{CryptoRng, RngCore};
-
 use malachitebft_app_channel::app::metrics::SharedRegistry;
 use malachitebft_app_channel::app::node::{
-    CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, EngineHandle, Node,
+    CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, EngineHandle, Node, NodeHandle,
 };
 use malachitebft_app_channel::app::types::core::VotingPower;
-use malachitebft_app_channel::app::types::Keypair;
 use malachitebft_eth_cli::config::{Config, MalakethConfig};
-
 // Use the same types used for integration tests.
 // A real application would use its own types and context instead.
 use malachitebft_eth_cli::metrics;
+use malachitebft_eth_engine::engine::Engine;
+use malachitebft_eth_engine::engine_rpc::EngineRPC;
+use malachitebft_eth_engine::ethereum_rpc::EthereumRPC;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::{
-    Address, Ed25519Provider, Genesis, Height, MalakethContext, PrivateKey, PublicKey, Validator,
-    ValidatorSet,
-};
+use malachitebft_eth_types::secp256k1::{K256Provider, PrivateKey, PublicKey};
+use malachitebft_eth_types::{Address, Genesis, Height, MalakethContext, Validator, ValidatorSet};
+use rand::{CryptoRng, RngCore};
 use tokio::task::JoinHandle;
 use url::Url;
 
@@ -90,7 +85,7 @@ impl Node for App {
     type Config = Config;
     type Genesis = Genesis;
     type PrivateKeyFile = PrivateKey;
-    type SigningProvider = Ed25519Provider;
+    type SigningProvider = K256Provider;
     type NodeHandle = Handle;
 
     fn get_home_dir(&self) -> PathBuf {
@@ -102,7 +97,7 @@ impl Node for App {
     }
 
     fn get_signing_provider(&self, private_key: PrivateKey) -> Self::SigningProvider {
-        Ed25519Provider::new(private_key)
+        K256Provider::new(private_key)
     }
 
     fn get_address(&self, pk: &PublicKey) -> Address {
@@ -114,7 +109,12 @@ impl Node for App {
     }
 
     fn get_keypair(&self, pk: PrivateKey) -> Keypair {
-        Keypair::ed25519_from_bytes(pk.inner().to_bytes()).unwrap()
+        use libp2p_identity::secp256k1::{Keypair as Secp256k1Keypair, SecretKey};
+
+        let secret_bytes: [u8; 32] = pk.inner().to_bytes().into();
+        let secret_key =
+            SecretKey::try_from_bytes(secret_bytes).expect("failed to decode secp256k1 secret key");
+        Secp256k1Keypair::from(secret_key).into()
     }
 
     fn load_private_key(&self, file: Self::PrivateKeyFile) -> PrivateKey {

@@ -1,13 +1,12 @@
 use core::fmt;
 
 use bytes::Bytes;
-use serde::{Deserialize, Serialize};
-
 use malachitebft_core_types::Round;
 use malachitebft_proto::{self as proto, Error as ProtoError, Protobuf};
-use malachitebft_signing_ed25519::Signature;
+use serde::{Deserialize, Serialize};
 
 use crate::codec::proto::{decode_signature, encode_signature};
+use crate::secp256k1::Signature;
 use crate::{Address, Height, MalakethContext};
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]

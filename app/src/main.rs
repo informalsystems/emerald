@@ -15,6 +15,7 @@ mod state;
 mod store;
 mod streaming;
 mod sync_handler;
+mod validator_set_manager;
 
 use node::App;
 

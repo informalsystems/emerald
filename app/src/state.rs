@@ -1,6 +1,8 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
+use std::sync::Arc;
+
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use color_eyre::eyre;
@@ -25,6 +27,7 @@ use tracing::{debug, error, info};
 use crate::metrics::Metrics;
 use crate::store::Store;
 use crate::streaming::{PartStreamsMap, ProposalParts};
+use crate::validator_set_manager::ValidatorSetManager;
 
 pub struct StateMetrics {
     pub txs_count: u64,
@@ -59,6 +62,7 @@ pub struct State {
 
     pub latest_block: Option<ExecutionBlock>,
 
+    pub validator_set_manager: Arc<ValidatorSetManager>,
     validator_set: Option<ValidatorSet>,
 
     // For stats
@@ -135,6 +139,7 @@ impl State {
             rng: StdRng::seed_from_u64(seed_from_address(&address)),
 
             latest_block: None,
+            validator_set_manager: Arc::new(ValidatorSetManager::new()),
             validator_set: None,
 
             txs_count: state_metrics.txs_count,

@@ -1,7 +1,5 @@
 use std::time::Duration;
 
-use alloy_primitives::{address, Address};
-use alloy_provider::ProviderBuilder;
 use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre, OptionExt};
@@ -13,20 +11,9 @@ use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
 use malachitebft_eth_cli::config::MalakethConfig;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
-use malachitebft_eth_types::secp256k1::PublicKey;
-use malachitebft_eth_types::{Block, BlockHash, Height, MalakethContext, Validator, ValidatorSet};
+use malachitebft_eth_types::{Block, BlockHash, Height, MalakethContext};
 use ssz::{Decode, Encode};
 use tracing::{debug, error, info};
-
-const GENESIS_VALIDATOR_MANAGER_ACCOUNT: Address =
-    address!("0x0000000000000000000000000000000000002000");
-
-alloy_sol_types::sol!(
-    #[derive(Debug)]
-    #[sol(rpc)]
-    ValidatorManager,
-    "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
-);
 
 use crate::state::{decode_value, extract_block_header, State};
 use crate::sync_handler::{get_decided_value_for_sync, validate_synced_payload};
@@ -41,10 +28,6 @@ pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -
         .ok_or_eyre("Genesis block does not exist")?;
     debug!("👉 genesis_block: {:?}", genesis_block);
     state.latest_block = Some(genesis_block);
-    let genesis_validator_set =
-        read_validators_from_contract(engine.eth.url().as_ref(), &genesis_block.block_hash).await?;
-    debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
-    state.set_validator_set(genesis_validator_set);
     state.current_height = Height::default();
     Ok(())
 }
@@ -65,13 +48,6 @@ pub async fn initialize_state_from_existing_block(
     let payload_status = engine
         .send_forkchoice_updated(latest_block_candidate_from_store.block_hash)
         .await?;
-    let block_validator_set = read_validators_from_contract(
-        engine.eth.url().as_ref(),
-        &latest_block_candidate_from_store.block_hash,
-    )
-    .await?;
-    debug!("🌈 Got block validator set: {:?}", block_validator_set);
-    state.set_validator_set(block_validator_set);
     match payload_status.status {
         PayloadStatusEnum::Valid | PayloadStatusEnum::Syncing => {
             state.current_height = start_height;
@@ -94,44 +70,6 @@ pub async fn initialize_state_from_existing_block(
             "execution engine returned ACCEPTED for payload, this should not happen"
         )),
     }
-}
-
-pub async fn read_validators_from_contract(
-    eth_url: &str,
-    block_hash: &BlockHash,
-) -> eyre::Result<ValidatorSet> {
-    let provider = ProviderBuilder::new().on_builtin(eth_url).await?;
-
-    let validator_manager_contract =
-        ValidatorManager::new(GENESIS_VALIDATOR_MANAGER_ACCOUNT, provider);
-
-    let genesis_validator_set_sol = validator_manager_contract
-        .getValidators()
-        .block((*block_hash).into())
-        .call()
-        .await?;
-
-    let validators = genesis_validator_set_sol
-        .validators
-        .into_iter()
-        .map(
-            |ValidatorManager::ValidatorInfo {
-                 validatorKey,
-                 power,
-             }| {
-                let mut uncompressed = [0u8; 65];
-                uncompressed[0] = 0x04;
-                uncompressed[1..33].copy_from_slice(&validatorKey.x.to_be_bytes::<32>());
-                uncompressed[33..].copy_from_slice(&validatorKey.y.to_be_bytes::<32>());
-
-                let pub_key = PublicKey::from_sec1_bytes(&uncompressed)?;
-
-                Ok(Validator::new(pub_key, power))
-            },
-        )
-        .collect::<eyre::Result<Vec<_>>>()?;
-
-    Ok(ValidatorSet::new(validators))
 }
 
 pub async fn run(
@@ -169,6 +107,18 @@ pub async fn run(
                     }
                 }
                 let start_height = state.current_height.increment();
+
+                let eth_url = engine.eth.url().as_str();
+                state
+                    .validator_set_manager
+                    .process_height(eth_url, state.latest_block.unwrap().block_number)
+                    .await;
+                state.set_validator_set(
+                    state
+                        .validator_set_manager
+                        .fetch_height_with_delay(eth_url, state.latest_block.unwrap().block_number)
+                        .await?,
+                );
 
                 // We can simply respond by telling the engine to start consensus
                 // at the current height, which is initially 1
@@ -442,11 +392,19 @@ pub async fn run(
                     prev_randao: new_block_prev_randao,
                 });
 
-                let new_validator_set =
-                    read_validators_from_contract(engine.eth.url().as_ref(), &latest_valid_hash)
-                        .await?;
-                debug!("🌈 Got validator set: {:?}", new_validator_set);
-                state.set_validator_set(new_validator_set);
+                let eth_url = engine.eth.url().as_str();
+
+                state
+                    .validator_set_manager
+                    .process_height(eth_url, new_block_number)
+                    .await;
+
+                state.set_validator_set(
+                    state
+                        .validator_set_manager
+                        .fetch_height_with_delay(eth_url, new_block_number)
+                        .await?,
+                );
 
                 // Pause briefly before starting next height, just to make following the logs easier
                 // tokio::time::sleep(std::time::Duration::from_millis(500)).await;

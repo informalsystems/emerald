@@ -15,6 +15,7 @@ use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::secp256k1::PublicKey;
 use malachitebft_eth_types::{Block, BlockHash, Height, MalakethContext, Validator, ValidatorSet};
+use rand::Rng;
 use ssz::{Decode, Encode};
 use tracing::{debug, error, info};
 
@@ -248,8 +249,19 @@ pub async fn run(
                 debug!("🌈 Got execution payload: {:?}", execution_payload);
 
                 // Store block in state and propagate to peers.
-                let bytes = Bytes::from(execution_payload.as_ssz_bytes());
-                debug!("🎁 block size: {:?}, height: {}", bytes.len(), height);
+                // Inject a poisoned dummy proposal 50% of the time for testing.
+                let bytes = if rand::thread_rng().gen() {
+                    debug!("🧪 Injecting poison proposal at height {}", height);
+                    Bytes::from_static(b"poison")
+                } else {
+                    let vec = execution_payload.as_ssz_bytes();
+                    debug!(
+                        "🎁 Proposing block size: {:?}, height: {}",
+                        vec.len(),
+                        height
+                    );
+                    Bytes::from(vec)
+                };
 
                 // Prepare block proposal.
                 let proposal: LocallyProposedValue<MalakethContext> =

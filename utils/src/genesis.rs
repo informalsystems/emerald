@@ -28,7 +28,7 @@ pub(crate) fn make_signer(index: u64) -> PrivateKeySigner {
 }
 
 pub(crate) fn make_signers() -> Vec<PrivateKeySigner> {
-    (0..3).map(make_signer).collect()
+    (0..10).map(make_signer).collect()
 }
 
 pub(crate) fn generate_genesis(public_keys_file: &str, genesis_output_file: &str) -> Result<()> {

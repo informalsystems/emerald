@@ -85,6 +85,7 @@ git = "https://github.com/informalsystems/malachite.git"
 package = "informalsystems-malachitebft-core-types"
 rev = "3f225bd581230820dc1a36ca5801f07a7720fc50"
 git = "https://github.com/informalsystems/malachite.git"
+features = ["serde"]
 
 [workspace.dependencies.malachitebft-core-consensus]
 package = "informalsystems-malachitebft-core-consensus"

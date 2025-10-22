@@ -147,8 +147,8 @@ for NODE_PORT in 8545 18545 28545; do
     check_reth_progress $NODE_PORT || exit_and_cleanup 1
 done
 
-# Check progress for additional node
-if [[ $NODES_COUNT -ge 4 ]]; then
+# Check progress for additional node only if 4 nodes and not in sync mode
+if [[ $NODES_COUNT -ge 4 ]] && [[ -n "$NO_DELAY" ]]; then
     check_reth_progress 38545 || exit_and_cleanup 1
 fi
 

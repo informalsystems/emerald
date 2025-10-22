@@ -1,13 +1,13 @@
-use color_eyre::eyre;
-use malachitebft_app::node::NodeConfig;
-use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+use color_eyre::eyre;
+use malachitebft_app::node::NodeConfig;
 pub use malachitebft_config::{
     BootstrapProtocol, ConsensusConfig, DiscoveryConfig, LoggingConfig, MempoolConfig,
     MempoolLoadConfig, MetricsConfig, P2pConfig, PubSubProtocol, RuntimeConfig, ScoringStrategy,
     Selector, TestConfig, TimeoutConfig, TransportProtocol, ValuePayload, ValueSyncConfig,
 };
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -93,8 +93,16 @@ impl NodeConfig for Config {
         &self.consensus
     }
 
+    fn consensus_mut(&mut self) -> &mut ConsensusConfig {
+        &mut self.consensus
+    }
+
     fn value_sync(&self) -> &ValueSyncConfig {
         &self.value_sync
+    }
+
+    fn value_sync_mut(&mut self) -> &mut ValueSyncConfig {
+        &mut self.value_sync
     }
 }
 

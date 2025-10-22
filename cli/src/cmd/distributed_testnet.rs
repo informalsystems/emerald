@@ -4,17 +4,16 @@ use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
+use bytesize::ByteSize;
 use clap::Parser;
 use color_eyre::eyre::{eyre, Result};
 use itertools::Itertools;
-use tracing::info;
-
-use crate::config::*;
-use bytesize::ByteSize;
 use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, Node};
+use tracing::info;
 
 use crate::args::Args;
 use crate::cmd::testnet::RuntimeFlavour;
+use crate::config::*;
 use crate::file::{save_config, save_genesis, save_priv_validator_key};
 
 #[derive(Parser, Debug, Clone, PartialEq)]
@@ -305,6 +304,7 @@ fn generate_distributed_config(
             },
             value_payload: ValuePayload::default(),
             queue_capacity: 0,
+            ..Default::default()
         },
         mempool: MempoolConfig {
             p2p: P2pConfig {

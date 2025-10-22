@@ -1,24 +1,22 @@
-use alloy_provider::ProviderBuilder;
-use bytes::Bytes;
-use color_eyre::eyre::{self, eyre};
-use ed25519_consensus::VerificationKey;
-use malachitebft_eth_cli::config::MalakethConfig;
-use ssz::{Decode, Encode};
 use std::time::Duration;
-use tracing::{debug, error, info};
 
-use alloy_rpc_types_engine::ExecutionPayloadV3;
+use alloy_primitives::{address, Address};
+use alloy_provider::ProviderBuilder;
+use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
+use bytes::Bytes;
+use color_eyre::eyre::{self, eyre, OptionExt};
 use malachitebft_app_channel::app::engine::host::Next;
 use malachitebft_app_channel::app::streaming::StreamContent;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
 use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
-
-use alloy_primitives::{address, Address};
+use malachitebft_eth_cli::config::MalakethConfig;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
-use malachitebft_eth_types::{Block, BlockHash, MalakethContext};
-use malachitebft_eth_types::{PublicKey, Validator, ValidatorSet};
+use malachitebft_eth_types::secp256k1::PublicKey;
+use malachitebft_eth_types::{Block, BlockHash, Height, MalakethContext, Validator, ValidatorSet};
+use ssz::{Decode, Encode};
+use tracing::{debug, error, info};
 
 const GENESIS_VALIDATOR_MANAGER_ACCOUNT: Address =
     address!("0x0000000000000000000000000000000000002000");
@@ -32,6 +30,71 @@ alloy_sol_types::sol!(
 
 use crate::state::{decode_value, extract_block_header, State};
 use crate::sync_handler::{get_decided_value_for_sync, validate_synced_payload};
+
+pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
+    // TODO Unify this with code above @Jasmina
+    // Get the genesis block from the execution engine
+    let genesis_block = engine
+        .eth
+        .get_block_by_number("earliest")
+        .await?
+        .ok_or_eyre("Genesis block does not exist")?;
+    debug!("👉 genesis_block: {:?}", genesis_block);
+    state.latest_block = Some(genesis_block);
+    let genesis_validator_set =
+        read_validators_from_contract(engine.eth.url().as_ref(), &genesis_block.block_hash).await?;
+    debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
+    state.set_validator_set(genesis_validator_set);
+    state.current_height = Height::default();
+    Ok(())
+}
+
+pub async fn initialize_state_from_existing_block(
+    state: &mut State,
+    engine: &Engine,
+    start_height: Height,
+) -> eyre::Result<()> {
+    // If there was somethign stored in the store for height, we should be able to retrieve
+    // block data as well.
+
+    let latest_block_candidate_from_store = state
+        .get_latest_block_candidate(start_height)
+        .await
+        .ok_or_eyre("we have not atomically stored the last block, database corrupted")?;
+
+    let payload_status = engine
+        .send_forkchoice_updated(latest_block_candidate_from_store.block_hash)
+        .await?;
+    let block_validator_set = read_validators_from_contract(
+        engine.eth.url().as_ref(),
+        &latest_block_candidate_from_store.block_hash,
+    )
+    .await?;
+    debug!("🌈 Got block validator set: {:?}", block_validator_set);
+    state.set_validator_set(block_validator_set);
+    match payload_status.status {
+        PayloadStatusEnum::Valid | PayloadStatusEnum::Syncing => {
+            state.current_height = start_height;
+            state.latest_block = Some(latest_block_candidate_from_store);
+            // From the Engine API spec:
+            // 8. Client software MUST respond to this method call in the
+            //    following way:
+            //   * {payloadStatus: {status: SYNCING, latestValidHash: null,
+            //   * validationError: null}, payloadId: null} if
+            //     forkchoiceState.headBlockHash references an unknown
+            //     payload or a payload that can't be validated because
+            //     requisite data for the validation is missing
+            debug!("Payload is valid");
+            info!("latest block {:?}", state.latest_block);
+            Ok(())
+        }
+        PayloadStatusEnum::Invalid { validation_error } => Err(eyre::eyre!(validation_error)),
+
+        PayloadStatusEnum::Accepted => Err(eyre::eyre!(
+            "execution engine returned ACCEPTED for payload, this should not happen"
+        )),
+    }
+}
 
 pub async fn read_validators_from_contract(
     eth_url: &str,
@@ -48,30 +111,27 @@ pub async fn read_validators_from_contract(
         .call()
         .await?;
 
-    Ok(ValidatorSet::new(
-        genesis_validator_set_sol
-            .validators
-            .into_iter()
-            .map(
-                |ValidatorManager::ValidatorInfo {
-                     validatorKey,
-                     power,
-                 }| {
-                    let pub_key_bytes = validatorKey.to_be_bytes::<32>();
-                    let pub_key = PublicKey::new(
-                        VerificationKey::try_from(pub_key_bytes)
-                            .expect("Failed to convert validator key bytes to VerificationKey"),
-                    );
-                    Validator::new(
-                        pub_key,
-                        power
-                            .try_into()
-                            .expect("Failed to convert validator power to VotingPower"),
-                    )
-                },
-            )
-            .collect::<Vec<_>>(),
-    ))
+    let validators = genesis_validator_set_sol
+        .validators
+        .into_iter()
+        .map(
+            |ValidatorManager::ValidatorInfo {
+                 validatorKey,
+                 power,
+             }| {
+                let mut uncompressed = [0u8; 65];
+                uncompressed[0] = 0x04;
+                uncompressed[1..33].copy_from_slice(&validatorKey.x.to_be_bytes::<32>());
+                uncompressed[33..].copy_from_slice(&validatorKey.y.to_be_bytes::<32>());
+
+                let pub_key = PublicKey::from_sec1_bytes(&uncompressed)?;
+
+                Ok(Validator::new(pub_key, power))
+            },
+        )
+        .collect::<eyre::Result<Vec<_>>>()?;
+
+    Ok(ValidatorSet::new(validators))
 }
 
 pub async fn run(
@@ -91,27 +151,29 @@ pub async fn run(
                 // Check compatibility with execution client
                 engine.check_capabilities().await?;
 
-                // Get the genesis block from the execution engine
-                let genesis_block = engine
-                    .eth
-                    .get_block_by_number("earliest")
-                    .await?
-                    .expect("Genesis block must exist");
-                debug!("👉 genesis_block: {:?}", genesis_block);
-                state.latest_block = Some(genesis_block);
+                // Get latest state from local store
+                let start_height_from_store = state.store.max_decided_value_height().await;
 
-                let genesis_validator_set = read_validators_from_contract(
-                    engine.eth.url().as_ref(),
-                    &genesis_block.block_hash,
-                )
-                .await?;
-                debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
-                state.set_validator_set(genesis_validator_set);
+                match start_height_from_store {
+                    Some(s) => {
+                        initialize_state_from_existing_block(state, &engine, s).await?;
+                        info!(
+                            "Start height in state set to: {:?}; height in store is {s} ",
+                            state.current_height
+                        );
+                    }
+                    None => {
+                        info!("Starting from genesis");
+                        // Get the genesis block from the execution engine
+                        initialize_state_from_genesis(state, &engine).await?;
+                    }
+                }
+                let start_height = state.current_height.increment();
 
                 // We can simply respond by telling the engine to start consensus
                 // at the current height, which is initially 1
                 if reply
-                    .send((state.current_height, state.get_validator_set().clone()))
+                    .send((start_height, state.get_validator_set().clone()))
                     .is_err()
                 {
                     error!("Failed to send ConsensusReady reply");
@@ -179,8 +241,10 @@ pub async fn run(
 
                 // We need to ask the execution engine for a new value to
                 // propose. Then we send it back to consensus.
+
                 let latest_block = state.latest_block.expect("Head block hash is not set");
-                let execution_payload = engine.generate_block(&latest_block).await?;
+                let execution_payload = engine.generate_block(&Some(latest_block)).await?;
+
                 debug!("🌈 Got execution payload: {:?}", execution_payload);
 
                 // Store block in state and propagate to peers.
@@ -243,18 +307,6 @@ pub async fn run(
                 }
             }
 
-            // In some cases, e.g. to verify the signature of a vote received at a higher height
-            // than the one we are at (e.g. because we are lagging behind a little bit),
-            // the engine may ask us for the validator set at that height.
-            //
-            // In our case, our validator set stays constant between heights so we can
-            // send back the validator set found in our genesis state.
-            AppMsg::GetValidatorSet { height: _, reply } => {
-                if reply.send(Some(state.get_validator_set().clone())).is_err() {
-                    error!("🔴 Failed to send GetValidatorSet reply");
-                }
-            }
-
             // After some time, consensus will finally reach a decision on the value
             // to commit for the current height, and will notify the application,
             // providing it with a commit certificate which contains the ID of the value
@@ -273,7 +325,7 @@ pub async fn run(
                 let block_bytes = state
                     .get_block_data(height, round)
                     .await
-                    .expect("certificate should have associated block data");
+                    .ok_or_eyre("app: certificate should have associated block data")?;
                 debug!("🎁 block size: {:?}, height: {}", block_bytes.len(), height);
 
                 // Decode bytes into execution payload (a block)
@@ -300,6 +352,36 @@ pub async fn run(
                 state.txs_count += tx_count as u64;
                 state.chain_bytes += block_bytes.len() as u64;
                 let elapsed_time = state.start_time.elapsed();
+
+                state.metrics.tx_stats.add_txs(tx_count as u64);
+                state
+                    .metrics
+                    .tx_stats
+                    .add_chain_bytes(block_bytes.len() as u64);
+                state
+                    .metrics
+                    .tx_stats
+                    .set_txs_per_second(state.txs_count as f64 / elapsed_time.as_secs_f64());
+                state
+                    .metrics
+                    .tx_stats
+                    .set_bytes_per_second(state.chain_bytes as f64 / elapsed_time.as_secs_f64());
+                state.metrics.tx_stats.set_block_tx_count(tx_count as u64);
+                state
+                    .metrics
+                    .tx_stats
+                    .set_block_size(block_bytes.len() as u64);
+
+                // Persist cumulative metrics to database for crash recovery
+                state
+                    .store
+                    .store_cumulative_metrics(
+                        state.txs_count,
+                        state.chain_bytes,
+                        elapsed_time.as_secs(),
+                    )
+                    .await?;
+
                 info!(
                     "👉 stats at height {}: #txs={}, txs/s={:.2}, chain_bytes={}, bytes/s={:.2}",
                     height,
@@ -309,7 +391,7 @@ pub async fn run(
                     state.chain_bytes as f64 / elapsed_time.as_secs_f64(),
                 );
 
-                let tx_count = execution_payload
+                let tx_count: usize = execution_payload
                     .payload_inner
                     .payload_inner
                     .transactions
@@ -347,13 +429,16 @@ pub async fn run(
                 // When that happens, we store the decided value in our store
                 // TODO: we should return an error reply if commit fails
                 state.commit(certificate, block_header_bytes).await?;
-
+                let old_hash = state
+                    .latest_block
+                    .ok_or_eyre("missing latest block in state")?
+                    .block_hash;
                 // Save the latest block
                 state.latest_block = Some(ExecutionBlock {
                     block_hash: new_block_hash,
                     block_number: new_block_number,
-                    parent_hash: latest_valid_hash, // FIXME: should be parent_block_hash ?
-                    timestamp: new_block_timestamp,
+                    parent_hash: old_hash,
+                    timestamp: new_block_timestamp, // Note: This was a fix related to the sync reactor
                     prev_randao: new_block_prev_randao,
                 });
 

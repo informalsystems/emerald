@@ -1,28 +1,37 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
+use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use color_eyre::eyre;
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
-use sha3::Digest;
-use tokio::time::Instant;
-use tracing::{debug, error, info};
-
 use malachitebft_app_channel::app::streaming::{StreamContent, StreamId, StreamMessage};
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
-
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
+use malachitebft_eth_types::secp256k1::K256Provider;
 use malachitebft_eth_types::{
-    Address, Ed25519Provider, Genesis, Height, MalakethContext, ProposalData, ProposalFin,
-    ProposalInit, ProposalPart, ValidatorSet, Value,
+    Address, Genesis, Height, MalakethContext, ProposalData, ProposalFin, ProposalInit,
+    ProposalPart, ValidatorSet, Value,
 };
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
+use sha3::Digest;
+use ssz::Decode;
+use tokio::time::Instant;
+use tracing::{debug, error, info};
 
+use crate::metrics::Metrics;
 use crate::store::Store;
 use crate::streaming::{PartStreamsMap, ProposalParts};
+
+pub struct StateMetrics {
+    pub txs_count: u64,
+    pub chain_bytes: u64,
+    pub elapsed_seconds: u64,
+    pub metrics: Metrics,
+}
 
 /// Size of randomly generated blocks in bytes
 #[allow(dead_code)]
@@ -36,7 +45,7 @@ const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB
 pub struct State {
     #[allow(dead_code)]
     ctx: MalakethContext,
-    signing_provider: Ed25519Provider,
+    signing_provider: K256Provider,
     address: Address,
     pub store: Store,
     stream_nonce: u32,
@@ -56,6 +65,7 @@ pub struct State {
     pub txs_count: u64,
     pub chain_bytes: u64,
     pub start_time: Instant,
+    pub metrics: Metrics,
 }
 
 /// Represents errors that can occur during the verification of a proposal's signature.
@@ -83,16 +93,35 @@ fn seed_from_address(address: &Address) -> u64 {
     })
 }
 
+fn build_execution_block_from_bytes(raw_block_data: Bytes) -> ExecutionBlock {
+    let execution_payload: ExecutionPayloadV3 = ExecutionPayloadV3::from_ssz_bytes(&raw_block_data)
+        .expect("failed to convert block bytes into executon payload");
+    ExecutionBlock {
+        block_hash: execution_payload.payload_inner.payload_inner.block_hash,
+        block_number: execution_payload.payload_inner.payload_inner.block_number,
+        parent_hash: execution_payload.payload_inner.payload_inner.parent_hash,
+        timestamp: execution_payload.payload_inner.payload_inner.timestamp,
+        prev_randao: execution_payload.payload_inner.payload_inner.prev_randao,
+    }
+}
+
 impl State {
     /// Creates a new State instance with the given validator address and starting height
     pub fn new(
         _genesis: Genesis, // all genesis data is in EVM via genesis.json
         ctx: MalakethContext,
-        signing_provider: Ed25519Provider,
+        signing_provider: K256Provider,
         address: Address,
         height: Height,
         store: Store,
+        state_metrics: StateMetrics,
     ) -> Self {
+        // Calculate start_time by subtracting elapsed_seconds from now.
+        // It represents the start time of measuring metrics, not the actual node start time.
+        // This allows us to continue accumulating time correctly after a restart
+        let start_time =
+            Instant::now() - std::time::Duration::from_secs(state_metrics.elapsed_seconds);
+
         Self {
             ctx,
             signing_provider,
@@ -108,10 +137,28 @@ impl State {
             latest_block: None,
             validator_set: None,
 
-            txs_count: 0,
-            chain_bytes: 0,
-            start_time: Instant::now(),
+            txs_count: state_metrics.txs_count,
+            chain_bytes: state_metrics.chain_bytes,
+            start_time,
+            metrics: state_metrics.metrics,
         }
+    }
+
+    pub async fn get_latest_block_candidate(&self, height: Height) -> Option<ExecutionBlock> {
+        let decided_value = self.store.get_decided_value(height).await.ok().flatten()?;
+
+        let certificate = decided_value.certificate;
+
+        let raw_block_data = self
+            .get_block_data(certificate.height, certificate.round)
+            .await
+            .expect("state: certificate should have associated block data");
+        debug!(
+            "🎁 block size: {:?}, height: {}",
+            raw_block_data.iter().len(),
+            height
+        );
+        Some(build_execution_block_from_bytes(raw_block_data))
     }
 
     /// Returns the earliest height available via EL
@@ -463,7 +510,7 @@ impl State {
         let public_key = self
             .get_validator_set()
             .get_by_address(&parts.proposer)
-            .map(|v| v.public_key);
+            .map(|v| v.public_key.clone());
 
         let public_key = public_key.ok_or(SignatureVerificationError::ProposerNotFound)?;
 

@@ -1,9 +1,8 @@
 use alloy_consensus::{SignableTransaction, TxEip1559, TxEip4844};
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_signer::Signer;
-use alloy_signer_local::LocalSigner;
+use alloy_signer_local::PrivateKeySigner;
 use color_eyre::eyre::Result;
-use k256::ecdsa::SigningKey;
 use reth_primitives::{Transaction, TransactionSigned};
 
 pub(crate) fn make_eip4844_tx(nonce: u64) -> Transaction {
@@ -23,7 +22,7 @@ pub(crate) fn make_eip4844_tx(nonce: u64) -> Transaction {
 }
 
 pub(crate) async fn make_signed_eip4844_tx(
-    signer: &LocalSigner<SigningKey>,
+    signer: &PrivateKeySigner,
     nonce: u64,
 ) -> Result<TransactionSigned> {
     let tx = make_eip4844_tx(nonce);
@@ -47,7 +46,7 @@ pub(crate) fn make_eip1559_tx(nonce: u64) -> Transaction {
 }
 
 pub(crate) async fn make_signed_eip1559_tx(
-    signer: &LocalSigner<SigningKey>,
+    signer: &PrivateKeySigner,
     nonce: u64,
 ) -> Result<TransactionSigned> {
     let tx = make_eip1559_tx(nonce);
@@ -58,10 +57,11 @@ pub(crate) async fn make_signed_eip1559_tx(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alloy_network::eip2718::Encodable2718;
     use alloy_primitives::PrimitiveSignature as Signature;
     use alloy_rlp::Decodable;
+
+    use super::*;
 
     #[tokio::test]
     async fn test_encode_decode_signed_eip4844_tx() {

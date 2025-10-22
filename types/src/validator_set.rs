@@ -3,7 +3,7 @@ use std::sync::Arc;
 use malachitebft_core_types::VotingPower;
 use serde::{Deserialize, Serialize};
 
-use crate::signing::PublicKey;
+use crate::signing::secp256k1::PublicKey;
 use crate::{Address, MalakethContext};
 
 /// A validator is a public key and voting power
@@ -99,7 +99,10 @@ impl ValidatorSet {
         vals.dedup();
     }
     pub fn get_keys(&self) -> Vec<PublicKey> {
-        self.validators.iter().map(|v| v.public_key).collect()
+        self.validators
+            .iter()
+            .map(|v| v.public_key.clone())
+            .collect()
     }
 }
 

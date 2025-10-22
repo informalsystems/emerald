@@ -1,14 +1,15 @@
-use color_eyre::eyre::{self, Ok};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tracing::debug;
 
 use alloy_rpc_types_engine::{
     ExecutionPayloadV3, ForkchoiceUpdated, PayloadAttributes, PayloadStatus, PayloadStatusEnum,
 };
-
+use color_eyre::eyre::{self, Ok};
 use malachitebft_eth_types::{Address, BlockHash, B256};
+use tracing::debug;
 
-use crate::{engine_rpc::EngineRPC, ethereum_rpc::EthereumRPC, json_structures::ExecutionBlock};
+use crate::engine_rpc::EngineRPC;
+use crate::ethereum_rpc::EthereumRPC;
+use crate::json_structures::ExecutionBlock;
 /// RPC client for Engine API.
 /// Spec: https://github.com/ethereum/execution-apis/tree/main/src/engine
 pub struct Engine {
@@ -32,6 +33,20 @@ impl Engine {
             return Err(eyre::eyre!("Engine does not support required methods"));
         }
         Ok(())
+    }
+
+    pub async fn send_forkchoice_updated(
+        &self,
+        head_block_hash: BlockHash,
+    ) -> eyre::Result<PayloadStatus> {
+        debug!("🟠 set_latest_forkchoice_state: {:?}", head_block_hash);
+
+        let ForkchoiceUpdated {
+            payload_status,
+            payload_id: _,
+        } = self.api.forkchoice_updated(head_block_hash, None).await?;
+
+        Ok(payload_status)
     }
 
     pub async fn set_latest_forkchoice_state(
@@ -71,33 +86,43 @@ impl Engine {
 
     pub async fn generate_block(
         &self,
-        latest_block: &ExecutionBlock,
+        latest_block: &Option<ExecutionBlock>,
     ) -> eyre::Result<ExecutionPayloadV3> {
         debug!("🟠 generate_block on top of {:?}", latest_block);
+        let payload_attributes: PayloadAttributes;
+        let block_hash: BlockHash;
+        match latest_block {
+            Some(lb) => {
+                block_hash = lb.block_hash;
 
-        let block_hash = latest_block.block_hash;
+                payload_attributes = PayloadAttributes {
+                    // Unix timestamp for when the payload is expected to be executed.
+                    // It should be greater than that of forkchoiceState.headBlockHash.
+                    timestamp: lb.timestamp + 1,
 
-        let payload_attributes = PayloadAttributes {
-            // Unix timestamp for when the payload is expected to be executed.
-            // It should be greater than that of forkchoiceState.headBlockHash.
-            timestamp: latest_block.timestamp + 1,
+                    // prev_randao comes from the previous beacon block and influences the proposer selection mechanism.
+                    // prev_randao is derived from the RANDAO mix (randomness accumulator) of the parent beacon block.
+                    // The beacon chain generates this value using aggregated validator signatures over time.
+                    // The mix_hash field in the generated block will be equal to prev_randao.
+                    // TODO: generate value according to spec.
+                    prev_randao: lb.prev_randao,
 
-            // prev_randao comes from the previous beacon block and influences the proposer selection mechanism.
-            // prev_randao is derived from the RANDAO mix (randomness accumulator) of the parent beacon block.
-            // The beacon chain generates this value using aggregated validator signatures over time.
-            // The mix_hash field in the generated block will be equal to prev_randao.
-            // TODO: generate value according to spec.
-            prev_randao: latest_block.prev_randao,
+                    // TODO: provide proper address.
+                    suggested_fee_recipient: Address::repeat_byte(42).to_alloy_address(),
 
-            // TODO: provide proper address.
-            suggested_fee_recipient: Address::repeat_byte(42).to_alloy_address(),
+                    // Cannot be None in V3.
+                    withdrawals: Some(vec![]),
 
-            // Cannot be None in V3.
-            withdrawals: Some(vec![]),
+                    // Cannot be None in V3.
+                    parent_beacon_block_root: Some(block_hash),
+                };
+            }
+            None => {
+                // TODO once validated that this is never happening
+                panic!("lb should never be none")
+            }
+        }
 
-            // Cannot be None in V3.
-            parent_beacon_block_root: Some(block_hash),
-        };
         let ForkchoiceUpdated {
             payload_status,
             payload_id,

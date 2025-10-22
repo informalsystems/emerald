@@ -7,34 +7,29 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use color_eyre::eyre;
+use libp2p_identity::Keypair;
 use malachitebft_app_channel::app::events::{RxEvent, TxEvent};
-use malachitebft_app_channel::app::node::NodeHandle;
-use malachitebft_eth_engine::engine::Engine;
-use malachitebft_eth_engine::engine_rpc::EngineRPC;
-use malachitebft_eth_engine::ethereum_rpc::EthereumRPC;
-use rand::{CryptoRng, RngCore};
-
 use malachitebft_app_channel::app::metrics::SharedRegistry;
 use malachitebft_app_channel::app::node::{
-    CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, EngineHandle, Node,
+    CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, EngineHandle, Node, NodeHandle,
 };
 use malachitebft_app_channel::app::types::core::VotingPower;
-use malachitebft_app_channel::app::types::Keypair;
 use malachitebft_eth_cli::config::{Config, MalakethConfig};
-
 // Use the same types used for integration tests.
 // A real application would use its own types and context instead.
 use malachitebft_eth_cli::metrics;
+use malachitebft_eth_engine::engine::Engine;
+use malachitebft_eth_engine::engine_rpc::EngineRPC;
+use malachitebft_eth_engine::ethereum_rpc::EthereumRPC;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::{
-    Address, Ed25519Provider, Genesis, Height, MalakethContext, PrivateKey, PublicKey, Validator,
-    ValidatorSet,
-};
+use malachitebft_eth_types::secp256k1::{K256Provider, PrivateKey, PublicKey};
+use malachitebft_eth_types::{Address, Genesis, Height, MalakethContext, Validator, ValidatorSet};
+use rand::{CryptoRng, RngCore};
 use tokio::task::JoinHandle;
 use url::Url;
 
-use crate::metrics::DbMetrics;
-use crate::state::State;
+use crate::metrics::Metrics;
+use crate::state::{State, StateMetrics};
 use crate::store::Store;
 
 /// Main application struct implementing the consensus node functionality
@@ -90,7 +85,7 @@ impl Node for App {
     type Config = Config;
     type Genesis = Genesis;
     type PrivateKeyFile = PrivateKey;
-    type SigningProvider = Ed25519Provider;
+    type SigningProvider = K256Provider;
     type NodeHandle = Handle;
 
     fn get_home_dir(&self) -> PathBuf {
@@ -102,7 +97,7 @@ impl Node for App {
     }
 
     fn get_signing_provider(&self, private_key: PrivateKey) -> Self::SigningProvider {
-        Ed25519Provider::new(private_key)
+        K256Provider::new(private_key)
     }
 
     fn get_address(&self, pk: &PublicKey) -> Address {
@@ -114,7 +109,12 @@ impl Node for App {
     }
 
     fn get_keypair(&self, pk: PrivateKey) -> Keypair {
-        Keypair::ed25519_from_bytes(pk.inner().to_bytes()).unwrap()
+        use libp2p_identity::secp256k1::{Keypair as Secp256k1Keypair, SecretKey};
+
+        let secret_bytes: [u8; 32] = pk.inner().to_bytes().into();
+        let secret_key =
+            SecretKey::try_from_bytes(secret_bytes).expect("failed to decode secp256k1 secret key");
+        Secp256k1Keypair::from(secret_key).into()
     }
 
     fn load_private_key(&self, file: Self::PrivateKeyFile) -> PrivateKey {
@@ -162,15 +162,38 @@ impl Node for App {
         let tx_event = channels.events.clone();
 
         let registry = SharedRegistry::global().with_moniker(&config.moniker);
-        let metrics = DbMetrics::register(&registry);
+        let metrics = Metrics::register(&registry);
 
         if config.metrics.enabled {
             tokio::spawn(metrics::serve(config.metrics.listen_addr));
         }
 
-        let store = Store::open(self.get_home_dir().join("store.db"), metrics)?;
+        let store = Store::open(self.get_home_dir().join("store.db"), metrics.db.clone())?;
         let start_height = self.start_height.unwrap_or_default();
-        let mut state = State::new(genesis, ctx, signing_provider, address, start_height, store);
+
+        // Load cumulative metrics from database for crash recovery
+        let (txs_count, chain_bytes, elapsed_seconds) =
+            store.load_cumulative_metrics().await?.unwrap_or_else(|| {
+                tracing::info!("📊 No metrics found in database, starting with default values");
+                (0, 0, 0)
+            });
+
+        let state_metrics = StateMetrics {
+            txs_count,
+            chain_bytes,
+            elapsed_seconds,
+            metrics,
+        };
+
+        let mut state = State::new(
+            genesis,
+            ctx,
+            signing_provider,
+            address,
+            start_height,
+            store,
+            state_metrics,
+        );
 
         let malaketh_config = self.load_malaketh_config()?;
 

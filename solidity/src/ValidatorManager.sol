@@ -11,36 +11,44 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
  * @dev Ownership controls who can register, unregister, and update validator power
  */
 contract ValidatorManager is Ownable, ReentrancyGuard {
-    using EnumerableSet for EnumerableSet.UintSet;
+    using EnumerableSet for EnumerableSet.Bytes32Set;
+
+    struct Secp256k1Key {
+        uint256 x;
+        uint256 y;
+    }
 
     struct ValidatorInfo {
-        uint256 validatorKey; // Validator identifier
-        uint256 power; // Voting power
+        Secp256k1Key validatorKey; // Uncompressed secp256k1 key stored as X and Y limbs
+        uint64 power; // Voting power
     }
 
     // State variables
-    EnumerableSet.UintSet private _validatorKeys;
-    mapping(uint256 => uint256) private _validatorPowers;
+    EnumerableSet.Bytes32Set private _validatorKeys;
+    mapping(bytes32 => ValidatorInfo) private _validators;
 
     constructor() Ownable(_msgSender()) {}
 
     // Events
-    event ValidatorRegistered(uint256 indexed validatorKey, uint256 power);
-    event ValidatorUnregistered(uint256 indexed validatorKey);
-    event ValidatorPowerUpdated(uint256 indexed validatorKey, uint256 oldPower, uint256 newPower);
+    event ValidatorRegistered(bytes32 indexed validatorKeyId, Secp256k1Key validatorKey, uint64 power);
+    event ValidatorUnregistered(bytes32 indexed validatorKeyId, Secp256k1Key validatorKey);
+    event ValidatorPowerUpdated(
+        bytes32 indexed validatorKeyId, Secp256k1Key validatorKey, uint64 oldPower, uint64 newPower
+    );
 
     // Errors
     error ValidatorAlreadyExists();
     error ValidatorDoesNotExist();
     error InvalidPower();
     error InvalidKey();
+    error TotalPowerOverflow();
 
     /**
      * @dev Modifier to check if a validator exists
      * @param validatorKey The validator key to check
      */
-    modifier validatorExists(uint256 validatorKey) {
-        if (!_validatorKeys.contains(validatorKey)) {
+    modifier validatorExists(Secp256k1Key memory validatorKey) {
+        if (!_validatorKeys.contains(_validatorKeyId(validatorKey))) {
             revert ValidatorDoesNotExist();
         }
         _;
@@ -50,8 +58,8 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @dev Modifier to check if a validator does not exist
      * @param validatorKey The validator key to check
      */
-    modifier validatorNotExists(uint256 validatorKey) {
-        if (_validatorKeys.contains(validatorKey)) {
+    modifier validatorNotExists(Secp256k1Key memory validatorKey) {
+        if (_validatorKeys.contains(_validatorKeyId(validatorKey))) {
             revert ValidatorAlreadyExists();
         }
         _;
@@ -61,7 +69,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @dev Modifier to check if power is valid (greater than 0)
      * @param power The power value to validate
      */
-    modifier validPower(uint256 power) {
+    modifier validPower(uint64 power) {
         if (power == 0) {
             revert InvalidPower();
         }
@@ -72,11 +80,43 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @dev Modifier to check if validator key is valid (not zero)
      * @param validatorKey The validator key to validate
      */
-    modifier validKey(uint256 validatorKey) {
-        if (validatorKey == 0) {
+    modifier validKey(Secp256k1Key memory validatorKey) {
+        if (validatorKey.x == 0 && validatorKey.y == 0) {
             revert InvalidKey();
         }
         _;
+    }
+
+    /**
+     * @dev Batch register validators.
+     * @param addValidators Array of validator key identifiers and power to be added
+     * @param removeValidatorKeys Array of validator key identifiers to be removed
+     */
+    function addAndRemove(ValidatorInfo[] memory addValidators, Secp256k1Key[] memory removeValidatorKeys)
+        external
+        nonReentrant
+        onlyOwner
+    {
+        _registerSet(addValidators);
+        _unregisterSet(removeValidatorKeys);
+    }
+
+    /**
+     * @dev Batch register validators.
+     * @param addValidators Array of validator key identifiers and power to be added
+     */
+    function registerSet(ValidatorInfo[] memory addValidators) external nonReentrant onlyOwner {
+        _registerSet(addValidators);
+    }
+
+    /**
+     * @dev Internal implementation of batch register validators
+     * @param addValidators Array of validator key identifiers and power to be added
+     */
+    function _registerSet(ValidatorInfo[] memory addValidators) internal {
+        for (uint256 i = 0; i < addValidators.length; i++) {
+            _register(addValidators[i]);
+        }
     }
 
     /**
@@ -84,28 +124,62 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @param validatorKey The validator key identifier
      * @param power The voting power for the validator
      */
-    function register(uint256 validatorKey, uint256 power)
-        external
-        nonReentrant
-        onlyOwner
-        validatorNotExists(validatorKey)
-        validKey(validatorKey)
-        validPower(power)
-    {
-        _validatorPowers[validatorKey] = power;
-        _validatorKeys.add(validatorKey);
+    function register(Secp256k1Key memory validatorKey, uint64 power) external nonReentrant onlyOwner {
+        _register(ValidatorInfo({validatorKey: validatorKey, power: power}));
+    }
 
-        emit ValidatorRegistered(validatorKey, power);
+    /**
+     * @dev Internal implementation to register a new validator with specified key and power
+     * @param validator Validator data containing key and power
+     */
+    function _register(ValidatorInfo memory validator)
+        internal
+        validatorNotExists(validator.validatorKey)
+        validKey(validator.validatorKey)
+        validPower(validator.power)
+    {
+        bytes32 keyId = _validatorKeyId(validator.validatorKey);
+        _validators[keyId] = validator;
+        _validatorKeys.add(keyId);
+
+        emit ValidatorRegistered(keyId, validator.validatorKey, validator.power);
+    }
+
+    /**
+     * @dev Batch unregister validators.
+     * @param validatorKeys Array of validator key identifiers
+     */
+    function unregisterSet(Secp256k1Key[] memory validatorKeys) external nonReentrant onlyOwner {
+        _unregisterSet(validatorKeys);
+    }
+
+    /**
+     * @dev Internal implementation of batch unregister validators
+     * @param validatorKeys Array of validator key identifiers
+     */
+    function _unregisterSet(Secp256k1Key[] memory validatorKeys) internal {
+        for (uint256 i = 0; i < validatorKeys.length; i++) {
+            _unregister(validatorKeys[i]);
+        }
     }
 
     /**
      * @dev Unregister a validator (only callable by the owner)
      */
-    function unregister(uint256 validatorKey) external nonReentrant onlyOwner validatorExists(validatorKey) {
-        delete _validatorPowers[validatorKey];
-        _validatorKeys.remove(validatorKey);
+    function unregister(Secp256k1Key memory validatorKey) external nonReentrant onlyOwner {
+        _unregister(validatorKey);
+    }
 
-        emit ValidatorUnregistered(validatorKey);
+    /**
+     * @dev Internal implementation to unregister a validator (only callable by the owner)
+     */
+    function _unregister(Secp256k1Key memory validatorKey) internal validatorExists(validatorKey) {
+        bytes32 keyId = _validatorKeyId(validatorKey);
+
+        delete _validators[keyId];
+        _validatorKeys.remove(keyId);
+
+        emit ValidatorUnregistered(keyId, validatorKey);
     }
 
     /**
@@ -113,18 +187,19 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @param validatorKey The validator key to update
      * @param newPower The new voting power
      */
-    function updatePower(uint256 validatorKey, uint256 newPower)
+    function updatePower(Secp256k1Key memory validatorKey, uint64 newPower)
         external
         nonReentrant
         onlyOwner
         validatorExists(validatorKey)
         validPower(newPower)
     {
-        uint256 oldPower = _validatorPowers[validatorKey];
+        bytes32 keyId = _validatorKeyId(validatorKey);
+        uint64 oldPower = _validators[keyId].power;
 
-        _validatorPowers[validatorKey] = newPower;
+        _validators[keyId].power = newPower;
 
-        emit ValidatorPowerUpdated(validatorKey, oldPower, newPower);
+        emit ValidatorPowerUpdated(keyId, validatorKey, oldPower, newPower);
     }
 
     /**
@@ -133,13 +208,13 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @return info Complete validator info including key and power
      * @dev Reverts with {ValidatorDoesNotExist} if the key is not registered
      */
-    function getValidator(uint256 validatorKey)
+    function getValidator(Secp256k1Key memory validatorKey)
         external
         view
         validatorExists(validatorKey)
         returns (ValidatorInfo memory info)
     {
-        return ValidatorInfo({validatorKey: validatorKey, power: _validatorPowers[validatorKey]});
+        return _validators[_validatorKeyId(validatorKey)];
     }
 
     /**
@@ -151,8 +226,8 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         validators = new ValidatorInfo[](length);
 
         for (uint256 i = 0; i < length; i++) {
-            uint256 validatorKey = _validatorKeys.at(i);
-            validators[i] = ValidatorInfo({validatorKey: validatorKey, power: _validatorPowers[validatorKey]});
+            bytes32 keyId = _validatorKeys.at(i);
+            validators[i] = _validators[keyId];
         }
     }
 
@@ -169,31 +244,45 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @param validatorKey The validator key to check
      * @return True if the key is a registered validator
      */
-    function isValidator(uint256 validatorKey) external view returns (bool) {
-        return _validatorKeys.contains(validatorKey);
+    function isValidator(Secp256k1Key memory validatorKey) external view returns (bool) {
+        return _validatorKeys.contains(_validatorKeyId(validatorKey));
     }
 
     /**
      * @dev Get all validator keys
      * @return validatorKeys Array of all validator keys
      */
-    function getValidatorKeys() external view returns (uint256[] memory validatorKeys) {
-        return _validatorKeys.values();
+    function getValidatorKeys() external view returns (Secp256k1Key[] memory validatorKeys) {
+        uint256 length = _validatorKeys.length();
+        validatorKeys = new Secp256k1Key[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            validatorKeys[i] = _validators[_validatorKeys.at(i)].validatorKey;
+        }
     }
 
     /**
      * @dev Get total power of all validators
      * @return The sum of all validator powers
      */
-    function getTotalPower() external view returns (uint256) {
-        uint256 total = 0;
+    function getTotalPower() external view returns (uint64) {
         uint256 length = _validatorKeys.length();
-
+        uint64 total = 0;
         for (uint256 i = 0; i < length; i++) {
-            uint256 validatorKey = _validatorKeys.at(i);
-            total += _validatorPowers[validatorKey];
+            bytes32 keyId = _validatorKeys.at(i);
+            uint64 power = _validators[keyId].power;
+            if (total > type(uint64).max - power) {
+                revert TotalPowerOverflow();
+            }
+            total += power;
         }
-
         return total;
+    }
+
+    /**
+     * @dev Compute a deterministic identifier for a validator key
+     */
+    function _validatorKeyId(Secp256k1Key memory validatorKey) private pure returns (bytes32) {
+        return keccak256(abi.encodePacked(validatorKey.x, validatorKey.y));
     }
 }

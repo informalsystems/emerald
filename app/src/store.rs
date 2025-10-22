@@ -11,8 +11,7 @@ use malachitebft_app_channel::app::types::core::{CommitCertificate, Round};
 use malachitebft_app_channel::app::types::ProposedValue;
 use malachitebft_eth_types::codec::proto as codec;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::proto;
-use malachitebft_eth_types::{Height, MalakethContext, Value, ValueId};
+use malachitebft_eth_types::{proto,Height, MalakethContext, Value, ValueId};
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 use prost::Message;
 use redb::ReadableTable;
@@ -418,10 +417,6 @@ impl Db {
             // Remove all decided block data with height < retain_height
             let mut decided_block_data = tx.open_table(DECIDED_BLOCK_DATA_TABLE)?;
             decided_block_data.retain(|k, _| k >= retain_height)?;
-
-            // Remove all certificates with height < retain_height
-            let mut certificates = tx.open_table(CERTIFICATES_TABLE)?;
-            certificates.retain(|k, _| k >= retain_height)?;
         }
 
         tx.commit()?;

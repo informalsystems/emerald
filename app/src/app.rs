@@ -297,9 +297,53 @@ pub async fn run(
                     "Received proposal part"
                 );
 
-                let proposed_value = state.received_proposal_part(from, part).await?;
-                if let Some(proposed_value) = proposed_value.clone() {
-                    debug!("✅ Received complete proposal: {:?}", proposed_value);
+                // Try to reassemble the proposal from received parts. If present,
+                // validate it with the execution engine and mark invalid when
+                // parsing or validation fails. Keep the outer `Option` and send it
+                // back to the caller (consensus) regardless.
+                let mut proposed_value = state.received_proposal_part(from, part).await?;
+
+                if let Some(pv) = proposed_value.as_mut() {
+                    debug!("✅ Received complete proposal: {:?}", pv);
+
+                    // Try to parse the execution payload and notify the engine.
+                    // Any failure (parse error, engine error, or invalid status)
+                    // results in marking the proposal Invalid.
+                    match ExecutionPayloadV3::from_ssz_bytes(&pv.value.extensions) {
+                        Ok(execution_payload) => {
+                            let block: Block = execution_payload.clone().try_into_block().unwrap();
+                            let versioned_hashes: Vec<BlockHash> =
+                                block.body.blob_versioned_hashes_iter().copied().collect();
+
+                            match engine
+                                .notify_new_block(execution_payload, versioned_hashes)
+                                .await
+                            {
+                                Ok(status) if status.status.is_valid() => {
+                                    // valid: nothing to do
+                                }
+                                Ok(status) => {
+                                    // Engine returned a non-valid status (e.g., Syncing/Invalid)
+                                    error!(
+                                        "Proposal validation failed: engine returned non-valid status: {:?}",
+                                        status.status
+                                    );
+                                    pv.validity = Validity::Invalid;
+                                }
+                                Err(e) => {
+                                    error!("Proposal validation failed: engine error: {}", e);
+                                    pv.validity = Validity::Invalid;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!(
+                                "Proposal validation failed: could not parse execution payload: {:?}",
+                                e
+                            );
+                            pv.validity = Validity::Invalid;
+                        }
+                    }
                 }
 
                 if reply.send(proposed_value).is_err() {

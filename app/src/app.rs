@@ -442,11 +442,12 @@ pub async fn run(
                     prev_randao: new_block_prev_randao,
                 });
 
-                let new_validator_set =
-                    read_validators_from_contract(engine.eth.url().as_ref(), &latest_valid_hash)
-                        .await?;
-                debug!("🌈 Got validator set: {:?}", new_validator_set);
-                state.set_validator_set(new_validator_set);
+                // debug(rano): validator set stays constant
+                // let new_validator_set =
+                //     read_validators_from_contract(engine.eth.url().as_ref(), &latest_valid_hash)
+                //         .await?;
+                // debug!("🌈 Got validator set: {:?}", new_validator_set);
+                // state.set_validator_set(new_validator_set);
 
                 // Pause briefly before starting next height, just to make following the logs easier
                 // tokio::time::sleep(std::time::Duration::from_millis(500)).await;

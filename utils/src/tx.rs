@@ -37,9 +37,9 @@ pub(crate) fn make_eip1559_tx(nonce: u64) -> Transaction {
         nonce,
         max_priority_fee_per_gas: 1_000_000_000, // 1 gwei
         max_fee_per_gas: 2_000_000_000,          // 2 gwei
-        gas_limit: 21_000,
+        gas_limit: 50_000,
         to: Address::left_padding_from(&[5]).into(),
-        value: U256::from(10e15), // 0.001 ETH
+        value: U256::from(10), // 10 wei
         input: Bytes::default(),
         access_list: Default::default(),
     })

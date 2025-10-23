@@ -192,6 +192,18 @@ of 1000 tx/s to one of Reth RPC endpoints.
 cargo run --bin malachitebft-eth-utils spam --time=60 --rate=1000
 ```
 
+The spammer supports full URLs including HTTPS and DNS hostnames:
+```
+# Local IP with port (defaults to http://)
+cargo run --bin malachitebft-eth-utils spam --time=60 --rate=1000 --rpc-url=127.0.0.1:8545
+
+# HTTPS with DNS
+cargo run --bin malachitebft-eth-utils spam --time=60 --rate=1000 --rpc-url=https://eth.example.com
+
+# HTTP with DNS and port
+cargo run --bin malachitebft-eth-utils spam --time=60 --rate=1000 --rpc-url=http://node.example.com:8545
+```
+
 > [!TIP]
 > With the `cast` tool one can explore the blockchain by querying the execution client. For example:
 > ```

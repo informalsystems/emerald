@@ -45,8 +45,8 @@ pub enum Commands {
 
 #[derive(Parser, Debug, Clone, Default, PartialEq)]
 pub struct SpamCmd {
-    /// URL of the execution client's RPC endpoint
-    #[clap(long, default_value = "127.0.0.1:8545")]
+    /// URL of the execution client's RPC endpoint (e.g., http://127.0.0.1:8545, https://eth.example.com)
+    #[clap(long, default_value = "http://127.0.0.1:8545")]
     rpc_url: String,
     /// Number of transactions to send
     #[clap(short, long, default_value = "0")]
@@ -75,7 +75,12 @@ impl SpamCmd {
             blobs,
             signer_index,
         } = self;
-        let url = format!("http://{rpc_url}").parse()?;
+        // Parse URL directly - if no scheme is provided, default to http://
+        let url = if rpc_url.contains("://") {
+            rpc_url.parse()?
+        } else {
+            format!("http://{rpc_url}").parse()?
+        };
         Spammer::new(url, *signer_index, *num_txs, *time, *rate, *blobs)?
             .run()
             .await

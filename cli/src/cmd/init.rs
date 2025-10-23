@@ -21,6 +21,10 @@ pub struct InitCmd {
     #[clap(long)]
     pub overwrite: bool,
 
+    /// Moniker for this node. If not provided and config doesn't exist, defaults to "node"
+    #[clap(long)]
+    pub moniker: Option<String>,
+
     /// Enable peer discovery.
     /// If enabled, the node will attempt to discover other nodes in the network
     #[clap(long, default_value = "true")]
@@ -58,6 +62,19 @@ pub struct InitCmd {
 }
 
 impl InitCmd {
+    /// Create a default MalakethConfig with the specified moniker
+    fn create_default_malaketh_config(moniker: String) -> crate::config::MalakethConfig {
+        crate::config::MalakethConfig {
+            moniker,
+            execution_authrpc_address: "http://localhost:8545".to_string(),
+            engine_authrpc_address: "http://localhost:8551".to_string(),
+            jwt_token_path: "/jwtsecret".to_string(),
+            sync_timeout_ms: 10000,
+            sync_initial_delay_ms: 100,
+            el_node_type: crate::config::ElNodeType::Archive,
+        }
+    }
+
     /// Execute the init command
     pub fn run<N>(
         &self,
@@ -71,11 +88,49 @@ impl InitCmd {
     where
         N: Node + CanMakePrivateKeyFile + CanGeneratePrivateKey + CanMakeGenesis,
     {
-        let malaketh_config_content = fs::read_to_string(malaketh_config_file)
-            .map_err(|e| Error::LoadFile(malaketh_config_file.to_path_buf(), e))?;
-        let malaketh_config =
-            toml::from_str::<crate::config::MalakethConfig>(&malaketh_config_content)
+        // Load existing config or create default
+        let malaketh_config = if malaketh_config_file.exists() {
+            info!(file = ?malaketh_config_file, "Loading existing Malaketh configuration");
+            let malaketh_config_content = fs::read_to_string(malaketh_config_file)
+                .map_err(|e| Error::LoadFile(malaketh_config_file.to_path_buf(), e))?;
+            let mut config = toml::from_str::<crate::config::MalakethConfig>(&malaketh_config_content)
                 .map_err(Error::FromTOML)?;
+
+            // Override moniker if provided via CLI
+            if let Some(ref moniker) = self.moniker {
+                config.moniker = moniker.clone();
+            }
+            config
+        } else {
+            // Create default config
+            let moniker = self.moniker.clone().unwrap_or_else(|| "node".to_string());
+            info!(file = ?malaketh_config_file, moniker = %moniker, "Creating default Malaketh configuration");
+            let config = Self::create_default_malaketh_config(moniker);
+
+            // Create parent directory if needed
+            if let Some(parent) = malaketh_config_file.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|_| Error::ParentDir(parent.to_path_buf()))?;
+            }
+
+            // Save the default config
+            let config_content = toml::to_string_pretty(&config)
+                .map_err(|e| Error::ToJSON(e.to_string()))?;
+            fs::write(malaketh_config_file, config_content)
+                .map_err(|_| Error::WriteFile(malaketh_config_file.to_path_buf()))?;
+
+            config
+        };
+
+        // Save the malaketh config if moniker was provided or if overwrite is set
+        if self.moniker.is_some() || (self.overwrite && malaketh_config_file.exists()) {
+            info!(file = ?malaketh_config_file, "Saving Malaketh configuration");
+            let config_content = toml::to_string_pretty(&malaketh_config)
+                .map_err(|e| Error::ToJSON(e.to_string()))?;
+            fs::write(malaketh_config_file, config_content)
+                .map_err(|_| Error::WriteFile(malaketh_config_file.to_path_buf()))?;
+        }
+
         let config = &generate_config(
             0,
             1,

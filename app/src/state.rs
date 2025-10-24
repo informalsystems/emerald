@@ -1,6 +1,7 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
+use std::collections::VecDeque;
 use std::time::Duration;
 
 use alloy_rpc_types_engine::ExecutionPayloadV3;
@@ -28,6 +29,41 @@ use tracing::{debug, error, info};
 use crate::metrics::Metrics;
 use crate::store::Store;
 use crate::streaming::{PartStreamsMap, ProposalParts};
+
+/// Cache for tracking recently validated execution payloads to avoid redundant validation.
+/// Stores both the block hash and its validity result (Valid or Invalid).
+/// Uses a bounded VecDeque to maintain a sliding window of validated blocks.
+/// Memory usage: ~40 bytes per entry (32 for hash + 8 for validity), so 10 entries = ~400 bytes.
+pub struct ValidatedPayloadCache {
+    validated_blocks: VecDeque<(BlockHash, Validity)>,
+    max_size: usize,
+}
+
+impl ValidatedPayloadCache {
+    pub fn new(max_size: usize) -> Self {
+        Self {
+            validated_blocks: VecDeque::with_capacity(max_size),
+            max_size,
+        }
+    }
+
+    /// Check if a block hash has been validated and return its cached validity
+    pub fn get(&self, block_hash: &BlockHash) -> Option<Validity> {
+        self.validated_blocks
+            .iter()
+            .find(|(hash, _)| hash == block_hash)
+            .map(|(_, validity)| *validity)
+    }
+
+    /// Insert a block hash and its validity result into the cache
+    pub fn insert(&mut self, block_hash: BlockHash, validity: Validity) {
+        // Evict oldest entry if cache is full
+        if self.validated_blocks.len() >= self.max_size {
+            self.validated_blocks.pop_front();
+        }
+        self.validated_blocks.push_back((block_hash, validity));
+    }
+}
 use crate::sync_handler::validate_payload;
 
 pub struct StateMetrics {
@@ -64,6 +100,9 @@ pub struct State {
     pub latest_block: Option<ExecutionBlock>,
 
     validator_set: Option<ValidatorSet>,
+
+    // Cache for tracking recently validated payloads to avoid duplicate validation
+    validated_payload_cache: ValidatedPayloadCache,
 
     // For stats
     pub txs_count: u64,
@@ -141,11 +180,17 @@ impl State {
             latest_block: None,
             validator_set: None,
 
+            validated_payload_cache: ValidatedPayloadCache::new(10),
+
             txs_count: state_metrics.txs_count,
             chain_bytes: state_metrics.chain_bytes,
             start_time,
             metrics: state_metrics.metrics,
         }
+    }
+
+    pub fn validated_cache_mut(&mut self) -> &mut ValidatedPayloadCache {
+        &mut self.validated_payload_cache
     }
 
     pub async fn get_latest_block_candidate(&self, height: Height) -> Option<ExecutionBlock> {
@@ -255,6 +300,7 @@ impl State {
             block.body.blob_versioned_hashes_iter().copied().collect();
 
         let validity = validate_payload(
+            &mut self.validated_payload_cache,
             engine,
             &execution_payload,
             &versioned_hashes,

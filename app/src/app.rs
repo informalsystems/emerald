@@ -424,16 +424,29 @@ pub async fn run(
                 let versioned_hashes: Vec<BlockHash> =
                     block.body.blob_versioned_hashes_iter().copied().collect();
 
-                let payload_status = engine
-                    .notify_new_block(execution_payload, versioned_hashes)
-                    .await?;
-                if payload_status.status.is_invalid() {
-                    return Err(eyre!("Invalid payload status: {}", payload_status.status));
+                // Get validation status from cache or call newPayload
+                let validity = if let Some(cached) = state.validated_cache_mut().get(&new_block_hash) {
+                    cached
+                } else {
+                    let payload_status = engine
+                        .notify_new_block(execution_payload, versioned_hashes)
+                        .await?;
+
+                    let validity = if payload_status.status.is_valid() {
+                        Validity::Valid
+                    } else {
+                        Validity::Invalid
+                    };
+
+                    state.validated_cache_mut().insert(new_block_hash, validity);
+                    validity
+                };
+
+                if validity == Validity::Invalid {
+                    return Err(eyre!("Block validation failed for hash: {}", new_block_hash));
                 }
-                debug!(
-                    "💡 New block added at height {} with hash: {}",
-                    height, new_block_hash
-                );
+
+                debug!("💡 Block validated at height {} with hash: {}", height, new_block_hash);
 
                 // Notify the execution client (EL) of the new block.
                 // Update the execution head state to this block.
@@ -509,6 +522,7 @@ pub async fn run(
 
                 // Validate the synced block
                 let validity = validate_payload(
+                    state.validated_cache_mut(),
                     &engine,
                     &execution_payload,
                     &versioned_hashes,

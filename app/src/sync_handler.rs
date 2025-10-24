@@ -14,12 +14,14 @@ use malachitebft_eth_types::{BlockHash, Height, MalakethContext, Value};
 use ssz::{Decode, Encode};
 use tracing::{error, info, warn};
 
-use crate::state::reconstruct_execution_payload;
+use crate::state::{reconstruct_execution_payload, ValidatedPayloadCache};
 use crate::store::Store;
 
 /// Generic function to validate execution payload with retry mechanism for SYNCING status.
 /// Returns the validity of the payload or an error if timeout is exceeded.
+/// Uses cache to avoid duplicate validation
 pub async fn validate_payload(
+    cache: &mut ValidatedPayloadCache,
     engine: &Engine,
     execution_payload: &ExecutionPayloadV3,
     versioned_hashes: &[BlockHash],
@@ -28,6 +30,17 @@ pub async fn validate_payload(
     height: Height,
     round: Round,
 ) -> eyre::Result<Validity> {
+    let block_hash = execution_payload.payload_inner.payload_inner.block_hash;
+
+    // Check if we've already called newPayload for this block
+    if let Some(cached_validity) = cache.get(&block_hash) {
+        warn!(
+            %height, %round, %block_hash, validity = ?cached_validity,
+            "Skipping duplicate newPayload call, returning cached result"
+        );
+        return Ok(cached_validity);
+    }
+
     let validation_future = async {
         let mut retry_delay = initial_delay;
 
@@ -39,6 +52,7 @@ pub async fn validate_payload(
             match result {
                 Ok(payload_status) => {
                     if payload_status.status.is_valid() {
+                        cache.insert(block_hash, Validity::Valid);
                         return Ok(Validity::Valid);
                     }
 
@@ -51,12 +65,13 @@ pub async fn validate_payload(
 
                         tokio::time::sleep(retry_delay).await;
                         retry_delay = std::cmp::min(retry_delay * 2, Duration::from_secs(2));
-                        continue;
+                        continue; // Don't cache yet, retry
                     }
 
                     // INVALID or ACCEPTED - both are treated as invalid
                     // INVALID: malicious block
                     // ACCEPTED: Non-canonical payload - should not happen with instant finality
+                    cache.insert(block_hash, Validity::Invalid);
                     error!(%height, %round, "🔴 Block validation failed: {}", payload_status.status);
                     return Ok(Validity::Invalid);
                 }

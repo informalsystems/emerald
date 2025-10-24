@@ -425,28 +425,35 @@ pub async fn run(
                     block.body.blob_versioned_hashes_iter().copied().collect();
 
                 // Get validation status from cache or call newPayload
-                let validity = if let Some(cached) = state.validated_cache_mut().get(&new_block_hash) {
-                    cached
-                } else {
-                    let payload_status = engine
-                        .notify_new_block(execution_payload, versioned_hashes)
-                        .await?;
-
-                    let validity = if payload_status.status.is_valid() {
-                        Validity::Valid
+                let validity =
+                    if let Some(cached) = state.validated_cache_mut().get(&new_block_hash) {
+                        cached
                     } else {
-                        Validity::Invalid
+                        let payload_status = engine
+                            .notify_new_block(execution_payload, versioned_hashes)
+                            .await?;
+
+                        let validity = if payload_status.status.is_valid() {
+                            Validity::Valid
+                        } else {
+                            Validity::Invalid
+                        };
+
+                        state.validated_cache_mut().insert(new_block_hash, validity);
+                        validity
                     };
 
-                    state.validated_cache_mut().insert(new_block_hash, validity);
-                    validity
-                };
-
                 if validity == Validity::Invalid {
-                    return Err(eyre!("Block validation failed for hash: {}", new_block_hash));
+                    return Err(eyre!(
+                        "Block validation failed for hash: {}",
+                        new_block_hash
+                    ));
                 }
 
-                debug!("💡 Block validated at height {} with hash: {}", height, new_block_hash);
+                debug!(
+                    "💡 Block validated at height {} with hash: {}",
+                    height, new_block_hash
+                );
 
                 // Notify the execution client (EL) of the new block.
                 // Update the execution head state to this block.

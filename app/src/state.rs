@@ -304,8 +304,10 @@ impl State {
             engine,
             &execution_payload,
             &versioned_hashes,
-            timeout,
-            timeout_delay,
+            crate::sync_handler::ValidationTimeouts {
+                timeout,
+                initial_delay: timeout_delay,
+            },
             value.height,
             value.round,
         )

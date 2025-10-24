@@ -533,8 +533,10 @@ pub async fn run(
                     &engine,
                     &execution_payload,
                     &versioned_hashes,
-                    Duration::from_millis(malaketh_config.sync_timeout_ms),
-                    Duration::from_millis(malaketh_config.sync_initial_delay_ms),
+                    crate::sync_handler::ValidationTimeouts {
+                        timeout: Duration::from_millis(malaketh_config.sync_timeout_ms),
+                        initial_delay: Duration::from_millis(malaketh_config.sync_initial_delay_ms),
+                    },
                     height,
                     round,
                 )

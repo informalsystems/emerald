@@ -17,6 +17,12 @@ use tracing::{error, info, warn};
 use crate::state::{reconstruct_execution_payload, ValidatedPayloadCache};
 use crate::store::Store;
 
+/// Timeout configuration for payload validation
+pub struct ValidationTimeouts {
+    pub timeout: Duration,
+    pub initial_delay: Duration,
+}
+
 /// Generic function to validate execution payload with retry mechanism for SYNCING status.
 /// Returns the validity of the payload or an error if timeout is exceeded.
 /// Uses cache to avoid duplicate validation
@@ -25,8 +31,7 @@ pub async fn validate_payload(
     engine: &Engine,
     execution_payload: &ExecutionPayloadV3,
     versioned_hashes: &[BlockHash],
-    timeout: Duration,
-    initial_delay: Duration,
+    timeouts: ValidationTimeouts,
     height: Height,
     round: Round,
 ) -> eyre::Result<Validity> {
@@ -42,7 +47,7 @@ pub async fn validate_payload(
     }
 
     let validation_future = async {
-        let mut retry_delay = initial_delay;
+        let mut retry_delay = timeouts.initial_delay;
 
         loop {
             let result = engine
@@ -83,10 +88,10 @@ pub async fn validate_payload(
         }
     };
 
-    let Ok(result) = tokio::time::timeout(timeout, validation_future).await else {
+    let Ok(result) = tokio::time::timeout(timeouts.timeout, validation_future).await else {
         return Err(eyre!(
             "Execution client stuck in SYNCING for {:?} at height {}",
-            timeout,
+            timeouts.timeout,
             height
         ));
     };

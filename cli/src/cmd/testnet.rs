@@ -181,11 +181,12 @@ where
             .configuration_paths
             .get(i)
             .ok_or(Error::MissingPath(i))?;
-        let malaketh_config_content = fs::read_to_string(node_malaketh_config_file)
-            .map_err(|e| Error::LoadFile(node_malaketh_config_file.to_path_buf(), e))?;
-        let malaketh_config =
-            toml::from_str::<crate::config::MalakethConfig>(&malaketh_config_content)
-                .map_err(Error::FromTOML)?;
+
+        let moniker = testnet_config
+            .monikers
+            .get(i)
+            .ok_or(Error::MissingMoniker(i))?
+            .clone();
 
         info!(
             id = %i,
@@ -216,7 +217,7 @@ where
                 ephemeral_connection_timeout_ms,
                 transport,
                 logging,
-                malaketh_config,
+                moniker,
             ),
         )?;
 
@@ -240,4 +241,5 @@ pub struct TestnetConfig {
     pub nodes: usize,
     pub deterministic: bool,
     pub configuration_paths: Vec<PathBuf>,
+    pub monikers: Vec<String>,
 }

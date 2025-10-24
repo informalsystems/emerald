@@ -73,7 +73,7 @@ impl InitCmd {
     where
         N: Node + CanMakePrivateKeyFile + CanGeneratePrivateKey + CanMakeGenesis,
     {
-        // Create default config
+        // Use `node` as default moniker if not provided
         let moniker = self.moniker.clone().unwrap_or_else(|| "node".to_string());
 
         let config = &generate_config(

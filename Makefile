@@ -1,6 +1,6 @@
 all: clean build
 	./scripts/generate_testnet_config.sh --nodes 3 --testnet-config-dir .testnet
-	cargo run --bin malachitebft-eth-app -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
+	cargo run --bin malachitebft-eth-app -- testnet --home nodes --testnet-config .testnet/testnet_config.toml --log-level info
 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin malachitebft-eth-app show-pubkey {} > nodes/validator_public_keys.txt
 	cargo run --bin malachitebft-eth-utils genesis --public-keys-file ./nodes/validator_public_keys.txt
 	docker compose up -d reth0 reth1 reth2 prometheus grafana otterscan
@@ -31,7 +31,7 @@ sync: clean build
 	bash scripts/spawn.bash --nodes 4 --home nodes
 
 build:
-	cargo build
+	cargo build --release
 	forge build
 
 stop:

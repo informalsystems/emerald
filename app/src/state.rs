@@ -229,6 +229,18 @@ impl State {
             );
         }
 
+        if let Err(e) = ExecutionPayloadV3::from_ssz_bytes(&data) {
+            error!(
+                height = %self.current_height,
+                round = %self.current_round,
+                error = ?e,
+                "Received proposal with invalid ExecutionPayloadV3 encoding, ignoring"
+            );
+            return Ok(None);
+        }
+
+        //Validation needs to be here
+
         // Store the proposal and its data
         self.store.store_undecided_proposal(value.clone()).await?;
         self.store_undecided_proposal_data(value.height, value.round, data)

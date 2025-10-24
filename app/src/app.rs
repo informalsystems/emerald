@@ -29,7 +29,7 @@ alloy_sol_types::sol!(
 );
 
 use crate::state::{decode_value, extract_block_header, State};
-use crate::sync_handler::{get_decided_value_for_sync, validate_synced_payload};
+use crate::sync_handler::{get_decided_value_for_sync, validate_payload};
 
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
     // TODO Unify this with code above @Jasmina
@@ -301,49 +301,10 @@ pub async fn run(
                 // validate it with the execution engine and mark invalid when
                 // parsing or validation fails. Keep the outer `Option` and send it
                 // back to the caller (consensus) regardless.
-                let mut proposed_value = state.received_proposal_part(from, part).await?;
+                let proposed_value = state.received_proposal_part(from, part).await?;
 
-                if let Some(pv) = proposed_value.as_mut() {
-                    debug!("✅ Received complete proposal: {:?}", pv);
-
-                    // Try to parse the execution payload and notify the engine.
-                    // Any failure (parse error, engine error, or invalid status)
-                    // results in marking the proposal Invalid.
-                    match ExecutionPayloadV3::from_ssz_bytes(&pv.value.extensions) {
-                        Ok(execution_payload) => {
-                            let block: Block = execution_payload.clone().try_into_block().unwrap();
-                            let versioned_hashes: Vec<BlockHash> =
-                                block.body.blob_versioned_hashes_iter().copied().collect();
-
-                            match engine
-                                .notify_new_block(execution_payload, versioned_hashes)
-                                .await
-                            {
-                                Ok(status) if status.status.is_valid() => {
-                                    // valid: nothing to do
-                                }
-                                Ok(status) => {
-                                    // Engine returned a non-valid status (e.g., Syncing/Invalid)
-                                    error!(
-                                        "Proposal validation failed: engine returned non-valid status: {:?}",
-                                        status.status
-                                    );
-                                    pv.validity = Validity::Invalid;
-                                }
-                                Err(e) => {
-                                    error!("Proposal validation failed: engine error: {}", e);
-                                    pv.validity = Validity::Invalid;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            error!(
-                                "Proposal validation failed: could not parse execution payload: {:?}",
-                                e
-                            );
-                            pv.validity = Validity::Invalid;
-                        }
-                    }
+                if let Some(proposed_value) = proposed_value.clone() {
+                    debug!("✅ Received complete proposal: {:?}", proposed_value);
                 }
 
                 if reply.send(proposed_value).is_err() {
@@ -535,7 +496,7 @@ pub async fn run(
                     block.body.blob_versioned_hashes_iter().copied().collect();
 
                 // Validate the synced block
-                let validity = validate_synced_payload(
+                let validity = validate_payload(
                     &engine,
                     &execution_payload,
                     &versioned_hashes,

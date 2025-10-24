@@ -17,19 +17,19 @@ use tracing::{error, info, warn};
 use crate::state::reconstruct_execution_payload;
 use crate::store::Store;
 
-/// Validates execution payload with retry mechanism for SYNCING status.
+/// Generic function to validate execution payload with retry mechanism for SYNCING status.
 /// Returns the validity of the payload or an error if timeout is exceeded.
-pub async fn validate_synced_payload(
+pub async fn validate_payload(
     engine: &Engine,
     execution_payload: &ExecutionPayloadV3,
     versioned_hashes: &[BlockHash],
-    sync_timeout: Duration,
-    sync_initial_delay: Duration,
+    timeout: Duration,
+    initial_delay: Duration,
     height: Height,
     round: Round,
 ) -> eyre::Result<Validity> {
     let validation_future = async {
-        let mut retry_delay = sync_initial_delay;
+        let mut retry_delay = initial_delay;
 
         loop {
             let result = engine
@@ -57,7 +57,7 @@ pub async fn validate_synced_payload(
                     // INVALID or ACCEPTED - both are treated as invalid
                     // INVALID: malicious block
                     // ACCEPTED: Non-canonical payload - should not happen with instant finality
-                    error!(%height, %round, "🔴 Synced block validation failed: {}", payload_status.status);
+                    error!(%height, %round, "🔴 Block validation failed: {}", payload_status.status);
                     return Ok(Validity::Invalid);
                 }
                 Err(e) => {
@@ -68,10 +68,10 @@ pub async fn validate_synced_payload(
         }
     };
 
-    let Ok(result) = tokio::time::timeout(sync_timeout, validation_future).await else {
+    let Ok(result) = tokio::time::timeout(timeout, validation_future).await else {
         return Err(eyre!(
             "Execution client stuck in SYNCING for {:?} at height {}",
-            sync_timeout,
+            timeout,
             height
         ));
     };

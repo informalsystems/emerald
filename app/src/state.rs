@@ -1,6 +1,8 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
+use std::time::Duration;
+
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use color_eyre::eyre;
@@ -8,12 +10,13 @@ use malachitebft_app_channel::app::streaming::{StreamContent, StreamId, StreamMe
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
+use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::secp256k1::K256Provider;
 use malachitebft_eth_types::{
-    Address, Genesis, Height, MalakethContext, ProposalData, ProposalFin, ProposalInit,
-    ProposalPart, ValidatorSet, Value,
+    Address, Block, BlockHash, Genesis, Height, MalakethContext, ProposalData, ProposalFin,
+    ProposalInit, ProposalPart, ValidatorSet, Value,
 };
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -25,6 +28,7 @@ use tracing::{debug, error, info};
 use crate::metrics::Metrics;
 use crate::store::Store;
 use crate::streaming::{PartStreamsMap, ProposalParts};
+use crate::sync_handler::validate_payload;
 
 pub struct StateMetrics {
     pub txs_count: u64,
@@ -183,6 +187,9 @@ impl State {
         &mut self,
         from: PeerId,
         part: StreamMessage<ProposalPart>,
+        engine: &Engine,
+        timeout: Duration,
+        timeout_delay: Duration,
     ) -> eyre::Result<Option<ProposedValue<MalakethContext>>> {
         let sequence = part.sequence;
 
@@ -229,17 +236,43 @@ impl State {
             );
         }
 
-        if let Err(e) = ExecutionPayloadV3::from_ssz_bytes(&data) {
+        let execution_payload = match ExecutionPayloadV3::from_ssz_bytes(&data) {
+            Ok(payload) => payload,
+            Err(e) => {
+                error!(
+                    height = %self.current_height,
+                    round = %self.current_round,
+                    error = ?e,
+                    "Received proposal with invalid ExecutionPayloadV3 encoding, ignoring"
+                );
+                return Ok(None);
+            }
+        };
+
+        // Validate the execution payload with the execution engine
+        let block: Block = execution_payload.clone().try_into_block().unwrap();
+        let versioned_hashes: Vec<BlockHash> =
+            block.body.blob_versioned_hashes_iter().copied().collect();
+
+        let validity = validate_payload(
+            engine,
+            &execution_payload,
+            &versioned_hashes,
+            timeout,
+            timeout_delay,
+            value.height,
+            value.round,
+        )
+        .await?;
+
+        if validity == Validity::Invalid {
             error!(
                 height = %self.current_height,
                 round = %self.current_round,
-                error = ?e,
-                "Received proposal with invalid ExecutionPayloadV3 encoding, ignoring"
+                "Received proposal with invalid execution payload, ignoring"
             );
             return Ok(None);
         }
-
-        //Validation needs to be here
 
         // Store the proposal and its data
         self.store.store_undecided_proposal(value.clone()).await?;

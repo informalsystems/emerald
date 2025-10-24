@@ -209,8 +209,14 @@ impl Node for App {
         };
 
         let app_handle = tokio::spawn(async move {
-            if let Err(e) =
-                crate::app::run(&mut state, &mut channels, engine, malaketh_config).await
+            if let Err(e) = crate::app::run(
+                &mut state,
+                &mut channels,
+                engine,
+                malaketh_config,
+                config.consensus.clone(),
+            )
+            .await
             {
                 tracing::error!(%e, "Application error");
             }

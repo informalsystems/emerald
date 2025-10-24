@@ -10,7 +10,7 @@ use malachitebft_app_channel::app::streaming::StreamContent;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
 use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
-use malachitebft_eth_cli::config::MalakethConfig;
+use malachitebft_eth_cli::config::{ConsensusConfig, MalakethConfig};
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::secp256k1::PublicKey;
@@ -139,6 +139,7 @@ pub async fn run(
     channels: &mut Channels<MalakethContext>,
     engine: Engine,
     malaketh_config: MalakethConfig,
+    consensus_config: ConsensusConfig,
 ) -> eyre::Result<()> {
     while let Some(msg) = channels.consensus.recv().await {
         match msg {
@@ -301,7 +302,18 @@ pub async fn run(
                 // validate it with the execution engine and mark invalid when
                 // parsing or validation fails. Keep the outer `Option` and send it
                 // back to the caller (consensus) regardless.
-                let proposed_value = state.received_proposal_part(from, part).await?;
+                let validation_timeout = consensus_config.timeouts.timeout_propose / 2; // 50% of timeout_propose, since we want to avoid timeout_propose before finishing the validation
+                let validation_timeout_delay = consensus_config.timeouts.timeout_propose_delta;
+
+                let proposed_value = state
+                    .received_proposal_part(
+                        from,
+                        part,
+                        &engine,
+                        validation_timeout,
+                        validation_timeout_delay,
+                    )
+                    .await?;
 
                 if let Some(proposed_value) = proposed_value.clone() {
                     debug!("✅ Received complete proposal: {:?}", proposed_value);

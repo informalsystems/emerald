@@ -31,8 +31,8 @@ sync: clean build
 	bash scripts/spawn.bash --nodes 4 --home nodes
 
 build:
-	cargo build
 	forge build
+	cargo build
 
 stop:
 	docker compose down

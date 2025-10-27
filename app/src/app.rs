@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use alloy_primitives::{address, Address};
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
@@ -66,8 +64,7 @@ pub async fn initialize_state_from_existing_block(
     let payload_status = engine
         .send_forkchoice_updated(
             latest_block_candidate_from_store.block_hash,
-            Duration::from_millis(malaketh_config.sync_timeout_ms),
-            Duration::from_millis(malaketh_config.sync_initial_delay_ms),
+            &malaketh_config.retry_config,
         )
         .await?;
     match payload_status.status {
@@ -253,11 +250,7 @@ pub async fn run(
 
                 let latest_block = state.latest_block.expect("Head block hash is not set");
                 let execution_payload = engine
-                    .generate_block(
-                        &Some(latest_block),
-                        Duration::from_millis(malaketh_config.sync_timeout_ms),
-                        Duration::from_millis(malaketh_config.sync_initial_delay_ms),
-                    )
+                    .generate_block(&Some(latest_block), &malaketh_config.retry_config)
                     .await?;
 
                 debug!("🌈 Got execution payload: {:?}", execution_payload);
@@ -436,11 +429,7 @@ pub async fn run(
                 // Notify the execution client (EL) of the new block.
                 // Update the execution head state to this block.
                 let latest_valid_hash = engine
-                    .set_latest_forkchoice_state(
-                        new_block_hash,
-                        Duration::from_millis(malaketh_config.sync_timeout_ms),
-                        Duration::from_millis(malaketh_config.sync_initial_delay_ms),
-                    )
+                    .set_latest_forkchoice_state(new_block_hash, &malaketh_config.retry_config)
                     .await?;
                 debug!(
                     "🚀 Forkchoice updated to height {} for block hash={} and latest_valid_hash={}",
@@ -516,8 +505,7 @@ pub async fn run(
                     &engine,
                     &execution_payload,
                     &versioned_hashes,
-                    Duration::from_millis(malaketh_config.sync_timeout_ms),
-                    Duration::from_millis(malaketh_config.sync_initial_delay_ms),
+                    &malaketh_config.retry_config,
                     height,
                     round,
                 )

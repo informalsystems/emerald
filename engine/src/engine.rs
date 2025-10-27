@@ -4,7 +4,7 @@ use alloy_rpc_types_engine::{
     ExecutionPayloadV3, ForkchoiceUpdated, PayloadAttributes, PayloadStatus, PayloadStatusEnum,
 };
 use color_eyre::eyre;
-use malachitebft_eth_types::{Address, BlockHash, B256};
+use malachitebft_eth_types::{Address, BlockHash, RetryConfig, B256};
 use tracing::{debug, warn};
 
 use crate::engine_rpc::EngineRPC;
@@ -39,11 +39,10 @@ impl Engine {
         &self,
         head_block_hash: BlockHash,
         payload_attributes: Option<PayloadAttributes>,
-        sync_timeout: Duration,
-        sync_initial_delay: Duration,
+        retry_config: &RetryConfig,
     ) -> eyre::Result<ForkchoiceUpdated> {
         let fcu_future = async {
-            let mut retry_delay = sync_initial_delay;
+            let mut retry_delay = retry_config.initial_delay;
 
             loop {
                 let result = self
@@ -60,8 +59,7 @@ impl Engine {
                             );
 
                             tokio::time::sleep(retry_delay).await;
-                            retry_delay =
-                                std::cmp::min(retry_delay * 2, std::time::Duration::from_secs(2));
+                            retry_delay = retry_config.next_delay(retry_delay);
                             continue;
                         }
 
@@ -72,12 +70,12 @@ impl Engine {
             }
         };
 
-        tokio::time::timeout(sync_timeout, fcu_future)
+        tokio::time::timeout(retry_config.max_elapsed_time, fcu_future)
             .await
             .map_err(|_| {
                 eyre::eyre!(
                     "Timeout after {:?} waiting for execution client to sync",
-                    sync_timeout
+                    retry_config.max_elapsed_time
                 )
             })?
     }
@@ -85,23 +83,19 @@ impl Engine {
     pub async fn send_forkchoice_updated(
         &self,
         head_block_hash: BlockHash,
-        sync_timeout: Duration,
-        sync_initial_delay: Duration,
+        retry_config: &RetryConfig,
     ) -> eyre::Result<PayloadStatus> {
         debug!("🟠 send_forkchoice_updated: {:?}", head_block_hash);
 
-        let ForkchoiceUpdated { payload_status, .. } = self
-            .forkchoice_updated_with_retry(head_block_hash, None, sync_timeout, sync_initial_delay)
-            .await?;
-
-        Ok(payload_status)
+        self.forkchoice_updated_with_retry(head_block_hash, None, retry_config)
+            .await
+            .map(|ForkchoiceUpdated { payload_status, .. }| payload_status)
     }
 
     pub async fn set_latest_forkchoice_state(
         &self,
         head_block_hash: BlockHash,
-        sync_timeout: Duration,
-        sync_initial_delay: Duration,
+        retry_config: &RetryConfig,
     ) -> eyre::Result<BlockHash> {
         debug!("🟠 set_latest_forkchoice_state: {:?}", head_block_hash);
 
@@ -109,24 +103,24 @@ impl Engine {
             payload_status,
             payload_id,
         } = self
-            .forkchoice_updated_with_retry(head_block_hash, None, sync_timeout, sync_initial_delay)
+            .forkchoice_updated_with_retry(head_block_hash, None, retry_config)
             .await?;
 
         assert!(payload_id.is_none(), "Payload ID should be None!");
 
         debug!("➡️ payload_status: {:?}", payload_status);
 
-        match payload_status.status {
-            PayloadStatusEnum::Valid => Ok(payload_status.latest_valid_hash.unwrap()),
-            status => Err(eyre::eyre!("Invalid payload status: {}", status)),
-        }
+        payload_status
+            .status
+            .is_valid()
+            .then(|| payload_status.latest_valid_hash.unwrap())
+            .ok_or_else(|| eyre::eyre!("Invalid payload status: {}", payload_status.status))
     }
 
     pub async fn generate_block(
         &self,
         latest_block: &Option<ExecutionBlock>,
-        sync_timeout: Duration,
-        sync_initial_delay: Duration,
+        retry_config: &RetryConfig,
     ) -> eyre::Result<ExecutionPayloadV3> {
         debug!("🟠 generate_block on top of {:?}", latest_block);
         let payload_attributes: PayloadAttributes;
@@ -167,12 +161,7 @@ impl Engine {
             payload_status,
             payload_id,
         } = self
-            .forkchoice_updated_with_retry(
-                block_hash,
-                Some(payload_attributes),
-                sync_timeout,
-                sync_initial_delay,
-            )
+            .forkchoice_updated_with_retry(block_hash, Some(payload_attributes), retry_config)
             .await?;
 
         assert_eq!(payload_status.latest_valid_hash, Some(block_hash));
@@ -227,6 +216,54 @@ impl Engine {
         self.api
             .get_payload_bodies_by_range(start_block, count)
             .await
+    }
+
+    /// Notifies the execution client of a new block with retry mechanism for SYNCING status.
+    /// Returns the payload status or an error if timeout is exceeded.
+    pub async fn notify_new_block_with_retry(
+        &self,
+        execution_payload: ExecutionPayloadV3,
+        versioned_hashes: Vec<BlockHash>,
+        retry_config: &RetryConfig,
+    ) -> eyre::Result<PayloadStatus> {
+        let validation_future = async {
+            let mut retry_delay = retry_config.initial_delay;
+
+            loop {
+                let result = self
+                    .notify_new_block(execution_payload.clone(), versioned_hashes.clone())
+                    .await;
+
+                match result {
+                    Ok(payload_status) => {
+                        if payload_status.status.is_syncing() {
+                            warn!(
+                                "⚠️  Execution client SYNCING, retrying in {:?}",
+                                retry_delay
+                            );
+
+                            tokio::time::sleep(retry_delay).await;
+                            retry_delay = retry_config.next_delay(retry_delay);
+                            continue;
+                        }
+
+                        return Ok(payload_status);
+                    }
+                    Err(e) => {
+                        return Err(e);
+                    }
+                }
+            }
+        };
+
+        tokio::time::timeout(retry_config.max_elapsed_time, validation_future)
+            .await
+            .map_err(|_| {
+                eyre::eyre!(
+                    "Timeout after {:?} waiting for execution client to sync",
+                    retry_config.max_elapsed_time
+                )
+            })?
     }
 
     /// Returns the duration since the unix epoch.

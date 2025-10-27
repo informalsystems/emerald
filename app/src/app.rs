@@ -93,6 +93,9 @@ pub async fn initialize_state_from_existing_block(
         PayloadStatusEnum::Accepted => Err(eyre::eyre!(
             "execution engine returned ACCEPTED for payload, this should not happen"
         )),
+        PayloadStatusEnum::Syncing => Err(eyre::eyre!(
+            "SYNCING status passed for payload, this should not happen"
+        )),
     }
 }
 

@@ -38,79 +38,131 @@ impl Engine {
     pub async fn send_forkchoice_updated(
         &self,
         head_block_hash: BlockHash,
+        sync_timeout: Duration,
+        sync_initial_delay: Duration,
     ) -> eyre::Result<PayloadStatus> {
-        debug!("🟠 set_latest_forkchoice_state: {:?}", head_block_hash);
+        debug!("🟠 send_forkchoice_updated: {:?}", head_block_hash);
 
-        let mut retry_delay = std::time::Duration::from_millis(100);
+        let fcu_future = async {
+            let mut retry_delay = sync_initial_delay;
 
-        loop {
-            let result = self.api.forkchoice_updated(head_block_hash, None).await;
+            loop {
+                let result = self.api.forkchoice_updated(head_block_hash, None).await;
 
-            match result {
-                Ok(ForkchoiceUpdated {
-                    payload_status,
-                    payload_id: _,
-                }) => {
-                    if payload_status.status.is_syncing() {
-                        warn!(
-                            "⚠️  Execution client SYNCING, retrying in {:?}",
-                            retry_delay
-                        );
+                match result {
+                    Ok(ForkchoiceUpdated {
+                        payload_status,
+                        payload_id: _,
+                    }) => {
+                        if payload_status.status.is_syncing() {
+                            warn!(
+                                "⚠️  Execution client SYNCING, retrying in {:?}",
+                                retry_delay
+                            );
 
-                        tokio::time::sleep(retry_delay).await;
-                        retry_delay =
-                            std::cmp::min(retry_delay * 2, std::time::Duration::from_secs(2));
-                        continue;
+                            tokio::time::sleep(retry_delay).await;
+                            retry_delay =
+                                std::cmp::min(retry_delay * 2, std::time::Duration::from_secs(2));
+                            continue;
+                        }
+
+                        //  Valid, Invalid or Accepted
+                        return Ok(payload_status);
                     }
-
-                    //  Valid, Invalid or Accepted
-                    return Ok(payload_status);
-                }
-                Err(e) => {
-                    return Err(e);
+                    Err(e) => {
+                        return Err(e);
+                    }
                 }
             }
-        }
+        };
+
+        let Ok(result) = tokio::time::timeout(sync_timeout, fcu_future).await else {
+            return Err(eyre::eyre!(
+                "Timeout after {:?} waiting for execution client to sync",
+                sync_timeout
+            ));
+        };
+
+        result
     }
 
     pub async fn set_latest_forkchoice_state(
         &self,
         head_block_hash: BlockHash,
+        sync_timeout: Duration,
+        sync_initial_delay: Duration,
     ) -> eyre::Result<BlockHash> {
         debug!("🟠 set_latest_forkchoice_state: {:?}", head_block_hash);
 
-        let ForkchoiceUpdated {
-            payload_status,
-            payload_id,
-        } = self.api.forkchoice_updated(head_block_hash, None).await?;
+        let fcu_future = async {
+            let mut retry_delay = sync_initial_delay;
 
-        assert!(payload_id.is_none(), "Payload ID should be None!");
+            loop {
+                let result = self.api.forkchoice_updated(head_block_hash, None).await;
 
-        debug!("➡️ payload_status: {:?}", payload_status);
+                match result {
+                    Ok(ForkchoiceUpdated {
+                        payload_status,
+                        payload_id,
+                    }) => {
+                        assert!(payload_id.is_none(), "Payload ID should be None!");
 
-        match payload_status.status {
-            PayloadStatusEnum::Valid => Ok(payload_status.latest_valid_hash.unwrap()),
-            PayloadStatusEnum::Syncing if payload_status.latest_valid_hash.is_none() => {
-                // From the Engine API spec:
-                // 8. Client software MUST respond to this method call in the
-                //    following way:
-                //   * {payloadStatus: {status: SYNCING, latestValidHash: null,
-                //   * validationError: null}, payloadId: null} if
-                //     forkchoiceState.headBlockHash references an unknown
-                //     payload or a payload that can't be validated because
-                //     requisite data for the validation is missing
-                Err(eyre::eyre!(
-                    "headBlockHash={:?} references an unknown payload or a payload that can't be validated",
-                    head_block_hash
-                ))
+                        debug!("➡️ payload_status: {:?}", payload_status);
+
+                        match payload_status.status {
+                            PayloadStatusEnum::Valid => {
+                                return Ok(payload_status.latest_valid_hash.unwrap());
+                            }
+                            PayloadStatusEnum::Syncing
+                                if payload_status.latest_valid_hash.is_none() =>
+                            {
+                                // From the Engine API spec:
+                                // 8. Client software MUST respond to this method call in the
+                                //    following way:
+                                //   * {payloadStatus: {status: SYNCING, latestValidHash: null,
+                                //   * validationError: null}, payloadId: null} if
+                                //     forkchoiceState.headBlockHash references an unknown
+                                //     payload or a payload that can't be validated because
+                                //     requisite data for the validation is missing
+                                warn!(
+                                    "⚠️  Execution client SYNCING (unknown block), retrying in {:?}",
+                                    retry_delay
+                                );
+
+                                tokio::time::sleep(retry_delay).await;
+                                retry_delay = std::cmp::min(
+                                    retry_delay * 2,
+                                    std::time::Duration::from_secs(2),
+                                );
+                                continue;
+                            }
+                            status => {
+                                return Err(eyre::eyre!("Invalid payload status: {}", status));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        return Err(e);
+                    }
+                }
             }
-            status => Err(eyre::eyre!("Invalid payload status: {}", status)),
-        }
+        };
+
+        let Ok(result) = tokio::time::timeout(sync_timeout, fcu_future).await else {
+            return Err(eyre::eyre!(
+                "Timeout after {:?} waiting for execution client to sync",
+                sync_timeout
+            ));
+        };
+
+        result
     }
 
     pub async fn generate_block(
         &self,
         latest_block: &Option<ExecutionBlock>,
+        sync_timeout: Duration,
+        sync_initial_delay: Duration,
     ) -> eyre::Result<ExecutionPayloadV3> {
         debug!("🟠 generate_block on top of {:?}", latest_block);
         let payload_attributes: PayloadAttributes;
@@ -147,26 +199,63 @@ impl Engine {
             }
         }
 
-        let ForkchoiceUpdated {
-            payload_status,
-            payload_id,
-        } = self
-            .api
-            .forkchoice_updated(block_hash, Some(payload_attributes))
-            .await?;
+        let fcu_future = async {
+            let mut retry_delay = sync_initial_delay;
 
-        assert_eq!(payload_status.latest_valid_hash, Some(block_hash));
+            loop {
+                let result = self
+                    .api
+                    .forkchoice_updated(block_hash, Some(payload_attributes.clone()))
+                    .await;
 
-        match payload_status.status {
-            PayloadStatusEnum::Valid => {
-                assert!(payload_id.is_some(), "Payload ID should be Some!");
-                let payload_id = payload_id.unwrap();
-                // See how payload is constructed: https://github.com/ethereum/consensus-specs/blob/v1.1.5/specs/merge/validator.md#block-proposal
-                Ok(self.api.get_payload(payload_id).await?)
+                match result {
+                    Ok(ForkchoiceUpdated {
+                        payload_status,
+                        payload_id,
+                    }) => {
+                        assert_eq!(payload_status.latest_valid_hash, Some(block_hash));
+
+                        match payload_status.status {
+                            PayloadStatusEnum::Valid => {
+                                assert!(payload_id.is_some(), "Payload ID should be Some!");
+                                let payload_id = payload_id.unwrap();
+                                // See how payload is constructed: https://github.com/ethereum/consensus-specs/blob/v1.1.5/specs/merge/validator.md#block-proposal
+                                return self.api.get_payload(payload_id).await;
+                            }
+                            PayloadStatusEnum::Syncing => {
+                                warn!(
+                                    "⚠️  Execution client SYNCING during block generation, retrying in {:?}",
+                                    retry_delay
+                                );
+
+                                tokio::time::sleep(retry_delay).await;
+                                retry_delay = std::cmp::min(
+                                    retry_delay * 2,
+                                    std::time::Duration::from_secs(2),
+                                );
+                                continue;
+                            }
+                            // TODO: Handle other statuses.
+                            status => {
+                                return Err(eyre::eyre!("Invalid payload status: {}", status));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        return Err(e);
+                    }
+                }
             }
-            // TODO: Handle other statuses.
-            status => Err(eyre::eyre!("Invalid payload status: {}", status)),
-        }
+        };
+
+        let Ok(result) = tokio::time::timeout(sync_timeout, fcu_future).await else {
+            return Err(eyre::eyre!(
+                "Timeout after {:?} waiting for execution client to sync during block generation",
+                sync_timeout
+            ));
+        };
+
+        result
     }
 
     pub async fn notify_new_block(

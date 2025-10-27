@@ -5,8 +5,7 @@ use alloy_rpc_types_engine::{
 };
 use color_eyre::eyre;
 use malachitebft_eth_types::{Address, BlockHash, B256};
-use tracing::debug;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::engine_rpc::EngineRPC;
 use crate::ethereum_rpc::EthereumRPC;

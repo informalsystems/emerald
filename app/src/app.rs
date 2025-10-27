@@ -65,15 +65,8 @@ pub async fn initialize_state_from_existing_block(
     let payload_status = engine
         .send_forkchoice_updated(latest_block_candidate_from_store.block_hash)
         .await?;
-    let block_validator_set = read_validators_from_contract(
-        engine.eth.url().as_ref(),
-        &latest_block_candidate_from_store.block_hash,
-    )
-    .await?;
-    debug!("🌈 Got block validator set: {:?}", block_validator_set);
-    state.set_validator_set(block_validator_set);
     match payload_status.status {
-        PayloadStatusEnum::Valid | PayloadStatusEnum::Syncing => {
+        PayloadStatusEnum::Valid => {
             state.current_height = start_height;
             state.latest_block = Some(latest_block_candidate_from_store);
             // From the Engine API spec:
@@ -86,6 +79,13 @@ pub async fn initialize_state_from_existing_block(
             //     requisite data for the validation is missing
             debug!("Payload is valid");
             info!("latest block {:?}", state.latest_block);
+            let block_validator_set = read_validators_from_contract(
+                engine.eth.url().as_ref(),
+                &latest_block_candidate_from_store.block_hash,
+            )
+            .await?;
+            debug!("🌈 Got block validator set: {:?}", block_validator_set);
+            state.set_validator_set(block_validator_set);
             Ok(())
         }
         PayloadStatusEnum::Invalid { validation_error } => Err(eyre::eyre!(validation_error)),

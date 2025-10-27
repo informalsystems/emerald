@@ -3,9 +3,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use alloy_rpc_types_engine::{
     ExecutionPayloadV3, ForkchoiceUpdated, PayloadAttributes, PayloadStatus, PayloadStatusEnum,
 };
-use color_eyre::eyre::{self, Ok};
+use color_eyre::eyre;
 use malachitebft_eth_types::{Address, BlockHash, B256};
 use tracing::debug;
+use tracing::warn;
 
 use crate::engine_rpc::EngineRPC;
 use crate::ethereum_rpc::EthereumRPC;
@@ -41,12 +42,36 @@ impl Engine {
     ) -> eyre::Result<PayloadStatus> {
         debug!("🟠 set_latest_forkchoice_state: {:?}", head_block_hash);
 
-        let ForkchoiceUpdated {
-            payload_status,
-            payload_id: _,
-        } = self.api.forkchoice_updated(head_block_hash, None).await?;
+        let mut retry_delay = std::time::Duration::from_millis(100);
 
-        Ok(payload_status)
+        loop {
+            let result = self.api.forkchoice_updated(head_block_hash, None).await;
+
+            match result {
+                Ok(ForkchoiceUpdated {
+                    payload_status,
+                    payload_id: _,
+                }) => {
+                    if payload_status.status.is_syncing() {
+                        warn!(
+                            "⚠️  Execution client SYNCING, retrying in {:?}",
+                            retry_delay
+                        );
+
+                        tokio::time::sleep(retry_delay).await;
+                        retry_delay =
+                            std::cmp::min(retry_delay * 2, std::time::Duration::from_secs(2));
+                        continue;
+                    }
+
+                    //  Valid, Invalid or Accepted
+                    return Ok(payload_status);
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+        }
     }
 
     pub async fn set_latest_forkchoice_state(

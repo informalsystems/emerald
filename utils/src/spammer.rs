@@ -18,7 +18,7 @@ use tokio::time::{self, sleep, Duration, Instant};
 use tracing::debug;
 
 use crate::make_signers;
-use crate::tx::{make_signed_eip1559_tx, make_signed_eip4844_tx};
+use crate::tx::{make_signed_contract_call_tx, make_signed_eip1559_tx, make_signed_eip4844_tx};
 
 /// A transaction spammer that sends Ethereum transactions at a controlled rate.
 /// Tracks and reports statistics on sent transactions.
@@ -37,6 +37,12 @@ pub struct Spammer {
     max_rate: u64,
     /// Whether to send EIP-4844 blob transactions.
     blobs: bool,
+    /// Optional contract address for contract call spamming.
+    contract_address: Option<Address>,
+    /// Optional function signature for contract calls (e.g., "increment()").
+    function_sig: Option<String>,
+    /// Optional function arguments.
+    function_args: Option<String>,
 }
 
 impl Spammer {
@@ -57,6 +63,35 @@ impl Spammer {
             max_time,
             max_rate,
             blobs,
+            contract_address: None,
+            function_sig: None,
+            function_args: None,
+        })
+    }
+
+    pub fn new_contract(
+        url: Url,
+        signer_index: usize,
+        max_num_txs: u64,
+        max_time: u64,
+        max_rate: u64,
+        contract: &str,
+        function: &str,
+        args: &str,
+    ) -> Result<Self> {
+        let signers = make_signers();
+        let contract_address = contract.parse::<Address>()?;
+        Ok(Self {
+            id: signer_index.to_string(),
+            client: RpcClient::new(url)?,
+            signer: signers[signer_index].clone(),
+            max_num_txs,
+            max_time,
+            max_rate,
+            blobs: false, // Contract calls don't use blobs
+            contract_address: Some(contract_address),
+            function_sig: Some(function.to_string()),
+            function_args: Some(args.to_string()),
         })
     }
 
@@ -140,9 +175,23 @@ impl Spammer {
                 }
 
                 // Create one transaction and sign it.
-                let signed_tx = if self.blobs {
+                let signed_tx = if let Some(ref contract_addr) = self.contract_address {
+                    // Contract call transaction
+                    let function_sig = self.function_sig.as_ref().unwrap();
+                    let function_args = self.function_args.as_ref().unwrap();
+                    make_signed_contract_call_tx(
+                        &self.signer,
+                        nonce,
+                        *contract_addr,
+                        function_sig,
+                        function_args,
+                    )
+                    .await?
+                } else if self.blobs {
+                    // Blob transaction
                     make_signed_eip4844_tx(&self.signer, nonce).await?
                 } else {
+                    // Regular transfer
                     make_signed_eip1559_tx(&self.signer, nonce).await?
                 };
                 let tx_bytes = signed_tx.encoded_2718();

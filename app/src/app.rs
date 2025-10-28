@@ -266,59 +266,58 @@ pub async fn run(
 
                 // Here it is important that, if we have previously built a value for this height and round,
                 // we send back the very same value.
-                let (proposal, bytes) = match state
-                    .get_previously_built_value(height, round)
-                    .await?
-                {
-                    Some(proposal) => {
-                        info!(value = %proposal.value.id(), "Re-using previously built value");
-                        // Fetch the block data for the previously built value
-                        let bytes = state
-                            .store
-                            .get_block_data(height, round, proposal.value.id())
-                            .await?
-                            .ok_or_else(|| {
-                                eyre!("Block data not found for previously built value")
-                            })?;
-                        (proposal, bytes)
-                    }
-                    None => {
-                        // If we have not previously built a value for that very same height and round,
-                        // we need to create a new value to propose and send it back to consensus.
-                        info!("Building a new value to propose");
+                let (proposal, bytes) =
+                    match state.get_previously_built_value(height, round).await? {
+                        Some(proposal) => {
+                            info!(value = %proposal.value.id(), "Re-using previously built value");
+                            // Fetch the block data for the previously built value
+                            let bytes = state
+                                .store
+                                .get_block_data(height, round, proposal.value.id())
+                                .await?
+                                .ok_or_else(|| {
+                                    eyre!("Block data not found for previously built value")
+                                })?;
+                            (proposal, bytes)
+                        }
+                        None => {
+                            // If we have not previously built a value for that very same height and round,
+                            // we need to create a new value to propose and send it back to consensus.
+                            info!("Building a new value to propose");
 
-                        // We need to ask the execution engine for a new value to
-                        // propose. Then we send it back to consensus.
+                            // We need to ask the execution engine for a new value to
+                            // propose. Then we send it back to consensus.
 
-                        let latest_block = state.latest_block.expect("Head block hash is not set");
-                        let execution_payload = engine
-                            .generate_block(&Some(latest_block), &malaketh_config.retry_config)
-                            .await?;
+                            let latest_block =
+                                state.latest_block.expect("Head block hash is not set");
+                            let execution_payload = engine
+                                .generate_block(&Some(latest_block), &malaketh_config.retry_config)
+                                .await?;
 
-                        debug!("🌈 Got execution payload: {:?}", execution_payload);
+                            debug!("🌈 Got execution payload: {:?}", execution_payload);
 
-                        // Store block in state and propagate to peers.
-                        let bytes = Bytes::from(execution_payload.as_ssz_bytes());
-                        debug!("🎁 block size: {:?}, height: {}", bytes.len(), height);
+                            // Store block in state and propagate to peers.
+                            let bytes = Bytes::from(execution_payload.as_ssz_bytes());
+                            debug!("🎁 block size: {:?}, height: {}", bytes.len(), height);
 
-                        // Prepare block proposal.
-                        let proposal: LocallyProposedValue<MalakethContext> =
-                            state.propose_value(height, round, bytes.clone()).await?;
+                            // Prepare block proposal.
+                            let proposal: LocallyProposedValue<MalakethContext> =
+                                state.propose_value(height, round, bytes.clone()).await?;
 
-                        // Store the block data at the proposal's height/round,
-                        // which will be passed to the execution client (EL) on commit.
-                        state
-                            .store_undecided_proposal_data(
-                                height,
-                                round,
-                                proposal.value.id(),
-                                bytes.clone(),
-                            )
-                            .await?;
+                            // Store the block data at the proposal's height/round,
+                            // which will be passed to the execution client (EL) on commit.
+                            state
+                                .store_undecided_proposal_data(
+                                    height,
+                                    round,
+                                    proposal.value.id(),
+                                    bytes.clone(),
+                                )
+                                .await?;
 
-                        (proposal, bytes)
-                    }
-                };
+                            (proposal, bytes)
+                        }
+                    };
 
                 // Send it to consensus
                 if reply.send(proposal.clone()).is_err() {

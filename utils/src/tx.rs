@@ -70,8 +70,8 @@ fn encode_call_data(function_sig: &str, args: &str) -> Result<Bytes> {
 
     // If args provided, encode as uint256 (for setNumber)
     if !args.is_empty() {
-        let value = if args.starts_with("0x") {
-            U256::from_str_radix(&args[2..], 16)?
+        let value = if let Some(stripped) = args.strip_prefix("0x") {
+            U256::from_str_radix(stripped, 16)?
         } else {
             U256::from_str_radix(args, 10)?
         };
@@ -95,7 +95,7 @@ pub(crate) fn make_contract_call_tx(
         nonce,
         max_priority_fee_per_gas: 1_000_000_000, // 1 gwei
         max_fee_per_gas: 2_000_000_000,          // 2 gwei
-        gas_limit: 100_000, // Higher gas limit for contract calls
+        gas_limit: 100_000,                      // Higher gas limit for contract calls
         to: contract_address.into(),
         value: U256::ZERO, // No ETH transfer
         input: call_data,

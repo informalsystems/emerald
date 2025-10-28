@@ -69,6 +69,7 @@ impl Spammer {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new_contract(
         url: Url,
         signer_index: usize,

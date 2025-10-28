@@ -5,8 +5,14 @@ import {Test} from "forge-std/Test.sol";
 import {ValidatorManager} from "../src/ValidatorManager.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
+contract ValidatorManagerMock is ValidatorManager {
+    function exposedValidatorKeyId(Secp256k1Key memory validatorKey) external pure returns (bytes32) {
+        return _validatorKeyId(validatorKey);
+    }
+}
+
 contract ValidatorManagerTest is Test {
-    ValidatorManager internal validatorManager;
+    ValidatorManagerMock internal validatorManager;
 
     uint256 internal constant ALICE_KEY_X = 0xA11CE;
     uint256 internal constant ALICE_KEY_Y = 0x1;
@@ -41,8 +47,8 @@ contract ValidatorManagerTest is Test {
         return ValidatorManager.Secp256k1Key({x: 0, y: 0});
     }
 
-    function validatorKeyId(ValidatorManager.Secp256k1Key memory key) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(key.x, key.y));
+    function validatorKeyId(ValidatorManager.Secp256k1Key memory key) internal view returns (bytes32) {
+        return validatorManager.exposedValidatorKeyId(key);
     }
 
     function keysEqual(ValidatorManager.Secp256k1Key memory a, ValidatorManager.Secp256k1Key memory b)
@@ -67,7 +73,7 @@ contract ValidatorManagerTest is Test {
     );
 
     function setUp() public {
-        validatorManager = new ValidatorManager();
+        validatorManager = new ValidatorManagerMock();
     }
 
     function testOwnerCanRegisterValidator() public {
@@ -330,9 +336,8 @@ contract ValidatorManagerTest is Test {
         return ValidatorManager.Secp256k1Key({x: DERIVED_PUBLIC_KEY_X, y: DERIVED_PUBLIC_KEY_Y});
     }
 
-    function testValidatorKeyIdMatchesAddressDerivedFromPrivateKey() public pure {
-        ValidatorManager.Secp256k1Key memory key = mnemonicDerivedKey();
-        bytes32 keyId = keccak256(abi.encodePacked(key.x, key.y));
+    function testValidatorKeyIdMatchesAddressDerivedFromPrivateKey() public {
+        bytes32 keyId = validatorManager.exposedValidatorKeyId(mnemonicDerivedKey());
         address derived = address(uint160(uint256(keyId)));
         address expected = vm.addr(DERIVED_PRIVATE_KEY);
         assertEq(derived, expected);

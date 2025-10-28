@@ -2,7 +2,6 @@
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
 use std::collections::VecDeque;
-use std::time::Duration;
 
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
@@ -17,7 +16,7 @@ use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::secp256k1::K256Provider;
 use malachitebft_eth_types::{
     Address, Block, BlockHash, Genesis, Height, MalakethContext, ProposalData, ProposalFin,
-    ProposalInit, ProposalPart, ValidatorSet, Value,
+    ProposalInit, ProposalPart, RetryConfig, ValidatorSet, Value,
 };
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -233,8 +232,7 @@ impl State {
         from: PeerId,
         part: StreamMessage<ProposalPart>,
         engine: &Engine,
-        timeout: Duration,
-        timeout_delay: Duration,
+        retry_config: &RetryConfig,
     ) -> eyre::Result<Option<ProposedValue<MalakethContext>>> {
         let sequence = part.sequence;
 
@@ -304,10 +302,7 @@ impl State {
             engine,
             &execution_payload,
             &versioned_hashes,
-            crate::sync_handler::ValidationTimeouts {
-                timeout,
-                initial_delay: timeout_delay,
-            },
+            retry_config,
             value.height,
             value.round,
         )

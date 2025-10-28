@@ -1,7 +1,5 @@
 //! Sync handler functions for processing synced payloads
 
-use std::time::Duration;
-
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre};
@@ -10,18 +8,12 @@ use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::sync::RawDecidedValue;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::{BlockHash, Height, MalakethContext, Value};
+use malachitebft_eth_types::{BlockHash, Height, MalakethContext, RetryConfig, Value};
 use ssz::{Decode, Encode};
 use tracing::{error, info, warn};
 
 use crate::state::{reconstruct_execution_payload, ValidatedPayloadCache};
 use crate::store::Store;
-
-/// Timeout configuration for payload validation
-pub struct ValidationTimeouts {
-    pub timeout: Duration,
-    pub initial_delay: Duration,
-}
 
 /// Generic function to validate execution payload with retry mechanism for SYNCING status.
 /// Returns the validity of the payload or an error if timeout is exceeded.
@@ -31,7 +23,7 @@ pub async fn validate_payload(
     engine: &Engine,
     execution_payload: &ExecutionPayloadV3,
     versioned_hashes: &[BlockHash],
-    timeouts: ValidationTimeouts,
+    retry_config: &RetryConfig,
     height: Height,
     round: Round,
 ) -> eyre::Result<Validity> {
@@ -46,57 +38,31 @@ pub async fn validate_payload(
         return Ok(cached_validity);
     }
 
-    let validation_future = async {
-        let mut retry_delay = timeouts.initial_delay;
+    let payload_status = engine
+        .notify_new_block_with_retry(
+            execution_payload.clone(),
+            versioned_hashes.to_vec(),
+            retry_config,
+        )
+        .await
+        .map_err(|e| {
+            eyre!(
+                "Execution client stuck in SYNCING for {:?} at height {}: {}",
+                retry_config.max_elapsed_time,
+                height,
+                e
+            )
+        })?;
 
-        loop {
-            let result = engine
-                .notify_new_block(execution_payload.clone(), versioned_hashes.to_vec())
-                .await;
-
-            match result {
-                Ok(payload_status) => {
-                    if payload_status.status.is_valid() {
-                        cache.insert(block_hash, Validity::Valid);
-                        return Ok(Validity::Valid);
-                    }
-
-                    if payload_status.status.is_syncing() {
-                        warn!(
-                            %height, %round,
-                            "⚠️  Execution client SYNCING, retrying in {:?}",
-                            retry_delay
-                        );
-
-                        tokio::time::sleep(retry_delay).await;
-                        retry_delay = std::cmp::min(retry_delay * 2, Duration::from_secs(2));
-                        continue; // Don't cache yet, retry
-                    }
-
-                    // INVALID or ACCEPTED - both are treated as invalid
-                    // INVALID: malicious block
-                    // ACCEPTED: Non-canonical payload - should not happen with instant finality
-                    cache.insert(block_hash, Validity::Invalid);
-                    error!(%height, %round, "🔴 Block validation failed: {}", payload_status.status);
-                    return Ok(Validity::Invalid);
-                }
-                Err(e) => {
-                    error!(%height, %round, "🔴 Payload validation RPC error: {}", e);
-                    return Err(e);
-                }
-            }
-        }
-    };
-
-    let Ok(result) = tokio::time::timeout(timeouts.timeout, validation_future).await else {
-        return Err(eyre!(
-            "Execution client stuck in SYNCING for {:?} at height {}",
-            timeouts.timeout,
-            height
-        ));
-    };
-
-    result
+    if payload_status.status.is_valid() {
+        Ok(Validity::Valid)
+    } else {
+        // INVALID or ACCEPTED - both are treated as invalid
+        // INVALID: malicious block
+        // ACCEPTED: Non-canonical payload - should not happen with instant finality
+        error!(%height, %round, "🔴 Synced block validation failed: {}", payload_status.status);
+        Ok(Validity::Invalid)
+    }
 }
 
 /// Retrieves a decided value for sync at the given height.

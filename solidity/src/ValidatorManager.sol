@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title ValidatorManager
@@ -48,9 +48,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @param validatorKey The validator key to check
      */
     modifier validatorExists(Secp256k1Key memory validatorKey) {
-        if (!_validatorKeys.contains(_validatorKeyId(validatorKey))) {
-            revert ValidatorDoesNotExist();
-        }
+        _requireValidatorExists(validatorKey);
         _;
     }
 
@@ -59,9 +57,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @param validatorKey The validator key to check
      */
     modifier validatorNotExists(Secp256k1Key memory validatorKey) {
-        if (_validatorKeys.contains(_validatorKeyId(validatorKey))) {
-            revert ValidatorAlreadyExists();
-        }
+        _requireValidatorNotExists(validatorKey);
         _;
     }
 
@@ -70,9 +66,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @param power The power value to validate
      */
     modifier validPower(uint64 power) {
-        if (power == 0) {
-            revert InvalidPower();
-        }
+        _requireValidPower(power);
         _;
     }
 
@@ -81,10 +75,44 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @param validatorKey The validator key to validate
      */
     modifier validKey(Secp256k1Key memory validatorKey) {
+        _requireValidKey(validatorKey);
+        _;
+    }
+
+    /**
+     * @dev Ensures the provided validator key is already registered.
+     */
+    function _requireValidatorExists(Secp256k1Key memory validatorKey) internal view {
+        if (!_validatorKeys.contains(_validatorKeyId(validatorKey))) {
+            revert ValidatorDoesNotExist();
+        }
+    }
+
+    /**
+     * @dev Ensures the provided validator key has not been registered yet.
+     */
+    function _requireValidatorNotExists(Secp256k1Key memory validatorKey) internal view {
+        if (_validatorKeys.contains(_validatorKeyId(validatorKey))) {
+            revert ValidatorAlreadyExists();
+        }
+    }
+
+    /**
+     * @dev Validates that the provided voting power is non-zero.
+     */
+    function _requireValidPower(uint64 power) internal pure {
+        if (power == 0) {
+            revert InvalidPower();
+        }
+    }
+
+    /**
+     * @dev Validates that the validator key is not the all-zero point.
+     */
+    function _requireValidKey(Secp256k1Key memory validatorKey) internal pure {
         if (validatorKey.x == 0 && validatorKey.y == 0) {
             revert InvalidKey();
         }
-        _;
     }
 
     /**
@@ -280,9 +308,11 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Compute a deterministic identifier for a validator key
+     * @dev Computes the deterministic identifier for a validator key.
      */
-    function _validatorKeyId(Secp256k1Key memory validatorKey) private pure returns (bytes32) {
-        return keccak256(abi.encodePacked(validatorKey.x, validatorKey.y));
+    function _validatorKeyId(Secp256k1Key memory validatorKey) internal pure returns (bytes32 keyId) {
+        assembly {
+            keyId := keccak256(validatorKey, 0x40)
+        }
     }
 }

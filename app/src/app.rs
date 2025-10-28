@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use alloy_primitives::{address, Address};
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
@@ -10,7 +8,7 @@ use malachitebft_app_channel::app::streaming::StreamContent;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
 use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
-use malachitebft_eth_cli::config::{ConsensusConfig, MalakethConfig};
+use malachitebft_eth_cli::config::MalakethConfig;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::secp256k1::PublicKey;
@@ -53,6 +51,7 @@ pub async fn initialize_state_from_existing_block(
     state: &mut State,
     engine: &Engine,
     start_height: Height,
+    malaketh_config: &MalakethConfig,
 ) -> eyre::Result<()> {
     // If there was somethign stored in the store for height, we should be able to retrieve
     // block data as well.
@@ -63,17 +62,13 @@ pub async fn initialize_state_from_existing_block(
         .ok_or_eyre("we have not atomically stored the last block, database corrupted")?;
 
     let payload_status = engine
-        .send_forkchoice_updated(latest_block_candidate_from_store.block_hash)
+        .send_forkchoice_updated(
+            latest_block_candidate_from_store.block_hash,
+            &malaketh_config.retry_config,
+        )
         .await?;
-    let block_validator_set = read_validators_from_contract(
-        engine.eth.url().as_ref(),
-        &latest_block_candidate_from_store.block_hash,
-    )
-    .await?;
-    debug!("🌈 Got block validator set: {:?}", block_validator_set);
-    state.set_validator_set(block_validator_set);
     match payload_status.status {
-        PayloadStatusEnum::Valid | PayloadStatusEnum::Syncing => {
+        PayloadStatusEnum::Valid => {
             state.current_height = start_height;
             state.latest_block = Some(latest_block_candidate_from_store);
             // From the Engine API spec:
@@ -86,12 +81,22 @@ pub async fn initialize_state_from_existing_block(
             //     requisite data for the validation is missing
             debug!("Payload is valid");
             info!("latest block {:?}", state.latest_block);
+            let block_validator_set = read_validators_from_contract(
+                engine.eth.url().as_ref(),
+                &latest_block_candidate_from_store.block_hash,
+            )
+            .await?;
+            debug!("🌈 Got block validator set: {:?}", block_validator_set);
+            state.set_validator_set(block_validator_set);
             Ok(())
         }
         PayloadStatusEnum::Invalid { validation_error } => Err(eyre::eyre!(validation_error)),
 
         PayloadStatusEnum::Accepted => Err(eyre::eyre!(
             "execution engine returned ACCEPTED for payload, this should not happen"
+        )),
+        PayloadStatusEnum::Syncing => Err(eyre::eyre!(
+            "SYNCING status passed for payload, this should not happen due to retry logic in send_forkchoice_updated function"
         )),
     }
 }
@@ -139,7 +144,6 @@ pub async fn run(
     channels: &mut Channels<MalakethContext>,
     engine: Engine,
     malaketh_config: MalakethConfig,
-    consensus_config: ConsensusConfig,
 ) -> eyre::Result<()> {
     while let Some(msg) = channels.consensus.recv().await {
         match msg {
@@ -157,7 +161,8 @@ pub async fn run(
 
                 match start_height_from_store {
                     Some(s) => {
-                        initialize_state_from_existing_block(state, &engine, s).await?;
+                        initialize_state_from_existing_block(state, &engine, s, &malaketh_config)
+                            .await?;
                         info!(
                             "Start height in state set to: {:?}; height in store is {s} ",
                             state.current_height
@@ -244,7 +249,9 @@ pub async fn run(
                 // propose. Then we send it back to consensus.
 
                 let latest_block = state.latest_block.expect("Head block hash is not set");
-                let execution_payload = engine.generate_block(&Some(latest_block)).await?;
+                let execution_payload = engine
+                    .generate_block(&Some(latest_block), &malaketh_config.retry_config)
+                    .await?;
 
                 debug!("🌈 Got execution payload: {:?}", execution_payload);
 
@@ -302,17 +309,8 @@ pub async fn run(
                 // validate it with the execution engine and mark invalid when
                 // parsing or validation fails. Keep the outer `Option` and send it
                 // back to the caller (consensus) regardless.
-                let validation_timeout = consensus_config.timeouts.timeout_propose / 2; // 50% of timeout_propose, since we want to avoid timeout_propose before finishing the validation
-                let validation_timeout_delay = consensus_config.timeouts.timeout_propose_delta;
-
                 let proposed_value = state
-                    .received_proposal_part(
-                        from,
-                        part,
-                        &engine,
-                        validation_timeout,
-                        validation_timeout_delay,
-                    )
+                    .received_proposal_part(from, part, &engine, &malaketh_config.retry_config)
                     .await?;
 
                 if let Some(proposed_value) = proposed_value.clone() {
@@ -457,7 +455,9 @@ pub async fn run(
 
                 // Notify the execution client (EL) of the new block.
                 // Update the execution head state to this block.
-                let latest_valid_hash = engine.set_latest_forkchoice_state(new_block_hash).await?;
+                let latest_valid_hash = engine
+                    .set_latest_forkchoice_state(new_block_hash, &malaketh_config.retry_config)
+                    .await?;
                 debug!(
                     "🚀 Forkchoice updated to height {} for block hash={} and latest_valid_hash={}",
                     height, new_block_hash, latest_valid_hash
@@ -533,10 +533,7 @@ pub async fn run(
                     &engine,
                     &execution_payload,
                     &versioned_hashes,
-                    crate::sync_handler::ValidationTimeouts {
-                        timeout: Duration::from_millis(malaketh_config.sync_timeout_ms),
-                        initial_delay: Duration::from_millis(malaketh_config.sync_initial_delay_ms),
-                    },
+                    &malaketh_config.retry_config,
                     height,
                     round,
                 )

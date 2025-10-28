@@ -13,11 +13,16 @@ engine_authrpc_address = "http://localhost:8551"
 # Path of the JWT token file
 jwt_token_path = "./assets/jwtsecret"
 
-# Maximum time to wait for execution client to sync before crashing
-sync_timeout_ms = 10000
-
-# Initial retry delay for execution client sync validation
-sync_initial_delay_ms = 100
+# Retry configuration for execution client sync operations
+[retry_config]
+# Initial delay between retry attempts (in milliseconds)
+initial_delay = 100
+# Maximum delay between retry attempts (in milliseconds)
+max_delay = 2000
+# Total timeout - maximum time to keep retrying (in milliseconds)
+max_elapsed_time = 10000
+# Exponential backoff multiplier (e.g., 2.0 for doubling)
+multiplier = 2.0
 
 # Type of execution layer node (archive, full, or custom)
 el_node_type = "archive"

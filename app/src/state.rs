@@ -606,50 +606,6 @@ impl State {
     pub fn set_validator_set(&mut self, validator_set: ValidatorSet) {
         self.validator_set = Some(validator_set);
     }
-
-    // /// Verifies the signature of the proposal.
-    // /// Returns `Ok(())` if the signature is valid, or an appropriate `SignatureVerificationError`.
-    // fn verify_proposal_signature(
-    //     &self,
-    //     parts: &ProposalParts,
-    // ) -> Result<(), SignatureVerificationError> {
-    //     let mut hasher = sha3::Keccak256::new();
-    //     let mut signature = None;
-
-    //     // Recreate the hash and extract the signature during traversal
-    //     for part in &parts.parts {
-    //         match part {
-    //             ProposalPart::Init(init) => {
-    //                 hasher.update(init.height.as_u64().to_be_bytes());
-    //                 hasher.update(init.round.as_i64().to_be_bytes());
-    //             }
-    //             ProposalPart::Data(data) => {
-    //                 hasher.update(data.bytes.as_ref());
-    //             }
-    //             ProposalPart::Fin(fin) => {
-    //                 signature = Some(&fin.signature);
-    //             }
-    //         }
-    //     }
-
-    //     let hash = hasher.finalize();
-    //     let signature = signature.ok_or(SignatureVerificationError::MissingFinPart)?;
-
-    //     // Retrieve the public key of the proposer
-    //     let public_key = self
-    //         .get_validator_set()
-    //         .get_by_address(&parts.proposer)
-    //         .map(|v| v.public_key);
-
-    //     let public_key = public_key.ok_or(SignatureVerificationError::ProposerNotFound)?;
-
-    //     // Verify the signature
-    //     if !self.signing_provider.verify(&hash, signature, &public_key) {
-    //         return Err(SignatureVerificationError::InvalidSignature);
-    //     }
-
-    //     Ok(())
-    // }
 }
 
 /// Re-assemble a [`ProposedValue`] from its [`ProposalParts`].

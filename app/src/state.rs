@@ -1,19 +1,21 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
+use std::fmt;
+
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use color_eyre::eyre;
 use malachitebft_app_channel::app::streaming::{StreamContent, StreamId, StreamMessage};
 use malachitebft_app_channel::app::types::codec::Codec;
-use malachitebft_app_channel::app::types::core::{CommitCertificate, Round, Validity};
+use malachitebft_app_channel::app::types::core::{CommitCertificate, Context, Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::secp256k1::K256Provider;
 use malachitebft_eth_types::{
     Address, Genesis, Height, MalakethContext, ProposalData, ProposalFin, ProposalInit,
-    ProposalPart, ValidatorSet, Value,
+    ProposalPart, ValidatorSet, Value, ValueId,
 };
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -70,15 +72,37 @@ pub struct State {
 
 /// Represents errors that can occur during the verification of a proposal's signature.
 #[derive(Debug)]
-enum SignatureVerificationError {
-    /// Indicates that the `Fin` part of the proposal is missing.
+pub enum SignatureVerificationError {
+    /// Indicates that the `Init` part of the proposal is unexpectedly missing.
+    MissingInitPart,
+    /// Indicates that the `Fin` part of the proposal is unexpectedly missing.
     MissingFinPart,
-
     /// Indicates that the proposer was not found in the validator set.
     ProposerNotFound,
-
     /// Indicates that the signature in the `Fin` part is invalid.
     InvalidSignature,
+}
+
+/// Represents errors that can occur during proposal validation.
+#[derive(Debug)]
+pub enum ProposalValidationError {
+    /// Proposer doesn't match the expected proposer for the given round
+    WrongProposer { actual: Address, expected: Address },
+    /// Signature verification errors
+    Signature(SignatureVerificationError),
+}
+
+impl fmt::Display for ProposalValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ProposalValidationError::WrongProposer { actual, expected } => {
+                write!(f, "Wrong proposer: got {actual}, expected {expected}")
+            }
+            ProposalValidationError::Signature(err) => {
+                write!(f, "Signature verification failed: {err:?}")
+            }
+        }
+    }
 }
 
 // Make up a seed for the rng based on our address in
@@ -150,7 +174,7 @@ impl State {
         let certificate = decided_value.certificate;
 
         let raw_block_data = self
-            .get_block_data(certificate.height, certificate.round)
+            .get_block_data(certificate.height, certificate.round, certificate.value_id)
             .await
             .expect("state: certificate should have associated block data");
         debug!(
@@ -177,6 +201,81 @@ impl State {
             .unwrap_or_default()
     }
 
+    /// Validates a proposal by checking both proposer and signature
+    pub fn validate_proposal_parts(
+        &self,
+        parts: &ProposalParts,
+    ) -> Result<(), ProposalValidationError> {
+        let height = parts.height;
+        let round = parts.round;
+
+        // Get the expected proposer for this height and round
+        let validator_set = self.get_validator_set(); // TODO: Should pass height as a parameter
+        let expected_proposer = self
+            .ctx
+            .select_proposer(validator_set, height, round)
+            .address;
+
+        // Check if the proposer matches the expected proposer
+        if parts.proposer != expected_proposer {
+            return Err(ProposalValidationError::WrongProposer {
+                actual: parts.proposer,
+                expected: expected_proposer,
+            });
+        }
+
+        // If proposer is correct, verify the signature
+        self.verify_proposal_parts_signature(parts)
+            .map_err(ProposalValidationError::Signature)?;
+
+        Ok(())
+    }
+
+    /// Verify proposal signature
+    fn verify_proposal_parts_signature(
+        &self,
+        parts: &ProposalParts,
+    ) -> Result<(), SignatureVerificationError> {
+        let mut hasher = sha3::Keccak256::new();
+
+        let init = parts
+            .init()
+            .ok_or(SignatureVerificationError::MissingInitPart)?;
+
+        let fin = parts
+            .fin()
+            .ok_or(SignatureVerificationError::MissingFinPart)?;
+
+        let hash = {
+            hasher.update(init.height.as_u64().to_be_bytes());
+            hasher.update(init.round.as_i64().to_be_bytes());
+
+            // The correctness of the hash computation relies on the parts being ordered by sequence
+            // number, which is guaranteed by the `PartStreamsMap`.
+            for part in parts.parts.iter().filter_map(|part| part.as_data()) {
+                hasher.update(part.bytes.as_ref());
+            }
+
+            hasher.finalize()
+        };
+
+        // Retrieve the proposer from the validator set for the given height
+        let validator_set = self.get_validator_set(); // TODO: Should pass height as a parameter
+        let proposer = validator_set
+            .get_by_address(&parts.proposer)
+            .ok_or(SignatureVerificationError::ProposerNotFound)?;
+
+        // Verify the signature
+        if !self
+            .signing_provider
+            .verify(&hash, &fin.signature, &proposer.public_key)
+        {
+            return Err(SignatureVerificationError::InvalidSignature);
+        }
+
+        Ok(())
+    }
+
     /// Processes and adds a new proposal to the state if it's valid
     /// Returns Some(ProposedValue) if the proposal was accepted, None otherwise
     pub async fn received_proposal_part(
@@ -186,7 +285,7 @@ impl State {
     ) -> eyre::Result<Option<ProposedValue<MalakethContext>>> {
         let sequence = part.sequence;
 
-        // Check if we have a full proposal - for now we are assuming that the network layer will stop spam/DOS
+        // Check if we have a full proposal
         let Some(parts) = self.streams_map.insert(from, part) else {
             return Ok(None);
         };
@@ -205,54 +304,76 @@ impl State {
             return Ok(None);
         }
 
-        if let Err(e) = self.verify_proposal_signature(&parts) {
-            error!(
-                height = %self.current_height,
-                round = %self.current_round,
-                error = ?e,
-                "Received proposal with invalid signature, ignoring"
-            );
-
+        // Store future proposals parts in pending without validation
+        if parts.height > self.current_height {
+            info!(%parts.height, %parts.round, "Storing proposal parts for a future height in pending");
+            self.store.store_pending_proposal_parts(parts).await?;
             return Ok(None);
         }
 
-        // Re-assemble the proposal from its parts
-        let (value, data) = assemble_value_from_parts(parts);
+        // For current height, validate proposal (proposer + signature)
+        match self.validate_proposal_parts(&parts) {
+            Ok(()) => {
+                // Validation passed - assemble and store as undecided
+                // Re-assemble the proposal from its parts
+                let (value, data) = assemble_value_from_parts(parts);
 
-        // Log first 32 bytes of proposal data and total size
-        if data.len() >= 32 {
-            info!(
-                "Proposal data[0..32]: {}, total_size: {} bytes, id: {:x}",
-                hex::encode(&data[..32]),
-                data.len(),
-                value.value.id().as_u64()
-            );
+                // Log first 32 bytes of proposal data and total size
+                if data.len() >= 32 {
+                    info!(
+                        "Proposal data[0..32]: {}, total_size: {} bytes, id: {:x}",
+                        hex::encode(&data[..32]),
+                        data.len(),
+                        value.value.id().as_u64()
+                    );
+                }
+                info!(%value.height, %value.round, %value.proposer, "Storing validated proposal as undecided");
+                self.store.store_undecided_proposal(value.clone()).await?;
+                self.store_undecided_proposal_data(
+                    value.height,
+                    value.round,
+                    value.value.id(),
+                    data,
+                )
+                .await?;
+
+                Ok(Some(value))
+            }
+            Err(error) => {
+                // Any validation error indicates invalid proposal - log and reject
+                error!(
+                    height = %parts.height,
+                    round = %parts.round,
+                    proposer = %parts.proposer,
+                    error = ?error,
+                    "Rejecting invalid proposal"
+                );
+                Ok(None)
+            }
         }
-
-        // Store the proposal and its data
-        self.store.store_undecided_proposal(value.clone()).await?;
-        self.store_undecided_proposal_data(value.height, value.round, data)
-            .await?;
-
-        Ok(Some(value))
     }
-
     pub async fn store_undecided_proposal_data(
         &mut self,
         height: Height,
         round: Round,
+        value_id: ValueId,
         data: Bytes,
     ) -> eyre::Result<()> {
         self.store
-            .store_undecided_block_data(height, round, data)
+            .store_undecided_block_data(height, round, value_id, data)
             .await
             .map_err(|e| eyre::Report::new(e))
     }
 
     /// Retrieves a decided block data at the given height
-    pub async fn get_block_data(&self, height: Height, round: Round) -> Option<Bytes> {
+    pub async fn get_block_data(
+        &self,
+        height: Height,
+        round: Round,
+        value_id: ValueId,
+    ) -> Option<Bytes> {
         self.store
-            .get_block_data(height, round)
+            .get_block_data(height, round, value_id)
             .await
             .ok()
             .flatten()
@@ -273,7 +394,7 @@ impl State {
 
         let proposal = self
             .store
-            .get_undecided_proposal(certificate.height, certificate.round)
+            .get_undecided_proposal(certificate.height, certificate.round, certificate.value_id)
             .await;
 
         let proposal = match proposal {
@@ -297,7 +418,7 @@ impl State {
         // Store block data for decided value
         let block_data = self
             .store
-            .get_block_data(certificate.height, certificate.round)
+            .get_block_data(certificate.height, certificate.round, certificate.value_id)
             .await?;
 
         // Log first 32 bytes of block data with JNT prefix
@@ -324,22 +445,30 @@ impl State {
         Ok(())
     }
 
-    // /// Retrieves a previously built proposal value for the given height
-    // pub async fn get_previously_built_value(
-    //     &self,
-    //     height: Height,
-    //     round: Round,
-    // ) -> eyre::Result<Option<LocallyProposedValue<TestContext>>> {
-    //     let Some(proposal) = self.store.get_undecided_proposal(height, round).await? else {
-    //         return Ok(None);
-    //     };
-    //
-    //     Ok(Some(LocallyProposedValue::new(
-    //         proposal.height,
-    //         proposal.round,
-    //         proposal.value,
-    //     )))
-    // }
+    /// Retrieves a previously built proposal value for the given height and round.
+    /// Called by the consensus engine to re-use a previously built value.
+    /// There should be at most one proposal for a given height and round when the proposer is not byzantine.
+    /// We assume this implementation is not byzantine and we are the proposer for the given height and round.
+    /// Therefore there must be a single proposal for the rounds where we are the proposer, with the proposer address matching our own.
+    pub async fn get_previously_built_value(
+        &self,
+        height: Height,
+        round: Round,
+    ) -> eyre::Result<Option<LocallyProposedValue<MalakethContext>>> {
+        let proposals = self.store.get_undecided_proposals(height, round).await?;
+
+        assert!(
+            proposals.len() <= 1,
+            "There should be at most one proposal for a given height and round"
+        );
+
+        proposals
+            .first()
+            .map(|p| LocallyProposedValue::new(p.height, p.round, p.value.clone()))
+            .map(Some)
+            .map(Ok)
+            .unwrap_or(Ok(None))
+    }
 
     // /// Make up a new value to propose
     // /// A real application would have a more complex logic here,
@@ -477,56 +606,12 @@ impl State {
     pub fn set_validator_set(&mut self, validator_set: ValidatorSet) {
         self.validator_set = Some(validator_set);
     }
-
-    /// Verifies the signature of the proposal.
-    /// Returns `Ok(())` if the signature is valid, or an appropriate `SignatureVerificationError`.
-    fn verify_proposal_signature(
-        &self,
-        parts: &ProposalParts,
-    ) -> Result<(), SignatureVerificationError> {
-        let mut hasher = sha3::Keccak256::new();
-        let mut signature = None;
-
-        // Recreate the hash and extract the signature during traversal
-        for part in &parts.parts {
-            match part {
-                ProposalPart::Init(init) => {
-                    hasher.update(init.height.as_u64().to_be_bytes());
-                    hasher.update(init.round.as_i64().to_be_bytes());
-                }
-                ProposalPart::Data(data) => {
-                    hasher.update(data.bytes.as_ref());
-                }
-                ProposalPart::Fin(fin) => {
-                    signature = Some(&fin.signature);
-                }
-            }
-        }
-
-        let hash = hasher.finalize();
-        let signature = signature.ok_or(SignatureVerificationError::MissingFinPart)?;
-
-        // Retrieve the public key of the proposer
-        let public_key = self
-            .get_validator_set()
-            .get_by_address(&parts.proposer)
-            .map(|v| v.public_key.clone());
-
-        let public_key = public_key.ok_or(SignatureVerificationError::ProposerNotFound)?;
-
-        // Verify the signature
-        if !self.signing_provider.verify(&hash, signature, &public_key) {
-            return Err(SignatureVerificationError::InvalidSignature);
-        }
-
-        Ok(())
-    }
 }
 
 /// Re-assemble a [`ProposedValue`] from its [`ProposalParts`].
 ///
 /// This is done by multiplying all the factors in the parts.
-fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<MalakethContext>, Bytes) {
+pub fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<MalakethContext>, Bytes) {
     // Get the init part to extract pol_round
     let init = parts
         .parts

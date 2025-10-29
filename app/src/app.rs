@@ -26,7 +26,7 @@ alloy_sol_types::sol!(
     "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
 );
 
-use crate::state::{decode_value, extract_block_header, State};
+use crate::state::{assemble_value_from_parts, decode_value, extract_block_header, State};
 use crate::sync_handler::{get_decided_value_for_sync, validate_synced_payload};
 
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
@@ -202,29 +202,48 @@ pub async fn run(
                 state.current_round = round;
                 state.current_proposer = Some(proposer);
 
-                // TODO: Add pending parts validation
-                // Try to get undecided proposals from storage, or use empty vector
-                let proposals: Vec<ProposedValue<MalakethContext>> = match state
+                let pending_parts = state
                     .store
-                    .get_undecided_proposal(height, round)
-                    .await
-                {
-                    Ok(Some(proposal)) => {
-                        vec![proposal]
-                    }
-                    Ok(None) => {
-                        info!(%height, %round, "📭 Found 0 undecided proposals");
-                        Vec::new()
-                    }
-                    Err(e) => {
-                        error!(%height, %round, error = %e, "Failed to get undecided proposal from store");
-                        return Err(e.into());
-                    }
-                };
+                    .get_pending_proposal_parts(height, round)
+                    .await?;
+                info!(%height, %round, "Found {} pending proposal parts, validating...", pending_parts.len());
 
-                if !proposals.is_empty() {
-                    info!(%height, %round, "📬 Found {} undecided proposals", proposals.len());
+                for parts in &pending_parts {
+                    // Remove the parts from pending
+                    state
+                        .store
+                        .remove_pending_proposal_parts(parts.clone())
+                        .await?;
+
+                    match state.validate_proposal_parts(parts) {
+                        Ok(()) => {
+                            // Validation passed - convert to ProposedValue and move to undecided
+                            let (value, _) = assemble_value_from_parts(parts.clone());
+                            state.store.store_undecided_proposal(value).await?;
+                            info!(
+                                height = %parts.height,
+                                round = %parts.round,
+                                proposer = %parts.proposer,
+                                "Moved valid pending proposal to undecided after validation"
+                            );
+                        }
+                        Err(error) => {
+                            // Validation failed, log error
+                            error!(
+                                height = %parts.height,
+                                round = %parts.round,
+                                proposer = %parts.proposer,
+                                error = ?error,
+                                "Removed invalid pending proposal"
+                            );
+                        }
+                    }
                 }
+
+                // If we have already built or seen values for this height and round,
+                // send them all back to consensus. This may happen when we are restarting after a crash.
+                let proposals = state.store.get_undecided_proposals(height, round).await?;
+                info!(%height, %round, "Found {} undecided proposals", proposals.len());
 
                 if reply_value.send(proposals).is_err() {
                     error!("Failed to send undecided proposals");
@@ -245,29 +264,60 @@ pub async fn run(
 
                 info!(%height, %round, "🟢🟢 Consensus is requesting a value to propose");
 
-                // We need to ask the execution engine for a new value to
-                // propose. Then we send it back to consensus.
+                // Here it is important that, if we have previously built a value for this height and round,
+                // we send back the very same value.
+                let (proposal, bytes) =
+                    match state.get_previously_built_value(height, round).await? {
+                        Some(proposal) => {
+                            info!(value = %proposal.value.id(), "Re-using previously built value");
+                            // Fetch the block data for the previously built value
+                            let bytes = state
+                                .store
+                                .get_block_data(height, round, proposal.value.id())
+                                .await?
+                                .ok_or_else(|| {
+                                    eyre!("Block data not found for previously built value")
+                                })?;
+                            (proposal, bytes)
+                        }
+                        None => {
+                            // If we have not previously built a value for that very same height and round,
+                            // we need to create a new value to propose and send it back to consensus.
+                            info!("Building a new value to propose");
 
-                let latest_block = state.latest_block.expect("Head block hash is not set");
-                let execution_payload = engine
-                    .generate_block(&Some(latest_block), &malaketh_config.retry_config)
-                    .await?;
+                            // We need to ask the execution engine for a new value to
+                            // propose. Then we send it back to consensus.
 
-                debug!("🌈 Got execution payload: {:?}", execution_payload);
+                            let latest_block =
+                                state.latest_block.expect("Head block hash is not set");
+                            let execution_payload = engine
+                                .generate_block(&Some(latest_block), &malaketh_config.retry_config)
+                                .await?;
 
-                // Store block in state and propagate to peers.
-                let bytes = Bytes::from(execution_payload.as_ssz_bytes());
-                debug!("🎁 block size: {:?}, height: {}", bytes.len(), height);
+                            debug!("🌈 Got execution payload: {:?}", execution_payload);
 
-                // Prepare block proposal.
-                let proposal: LocallyProposedValue<MalakethContext> =
-                    state.propose_value(height, round, bytes.clone()).await?;
+                            // Store block in state and propagate to peers.
+                            let bytes = Bytes::from(execution_payload.as_ssz_bytes());
+                            debug!("🎁 block size: {:?}, height: {}", bytes.len(), height);
 
-                // Store the block data at the proposal's height/round,
-                // which will be passed to the execution client (EL) on commit.
-                state
-                    .store_undecided_proposal_data(height, round, bytes.clone())
-                    .await?;
+                            // Prepare block proposal.
+                            let proposal: LocallyProposedValue<MalakethContext> =
+                                state.propose_value(height, round, bytes.clone()).await?;
+
+                            // Store the block data at the proposal's height/round,
+                            // which will be passed to the execution client (EL) on commit.
+                            state
+                                .store_undecided_proposal_data(
+                                    height,
+                                    round,
+                                    proposal.value.id(),
+                                    bytes.clone(),
+                                )
+                                .await?;
+
+                            (proposal, bytes)
+                        }
+                    };
 
                 // Send it to consensus
                 if reply.send(proposal.clone()).is_err() {
@@ -325,13 +375,14 @@ pub async fn run(
             } => {
                 let height = certificate.height;
                 let round = certificate.round;
+                let value_id = certificate.value_id;
                 info!(
                     %height, %round, value = %certificate.value_id,
                     "🟢🟢 Consensus has decided on value"
                 );
 
                 let block_bytes = state
-                    .get_block_data(height, round)
+                    .get_block_data(height, round, value_id)
                     .await
                     .ok_or_eyre("app: certificate should have associated block data")?;
                 debug!("🎁 block size: {:?}, height: {}", block_bytes.len(), height);
@@ -553,7 +604,12 @@ pub async fn run(
 
                 if let Err(e) = state
                     .store
-                    .store_undecided_block_data(height, round, block_bytes)
+                    .store_undecided_block_data(
+                        height,
+                        round,
+                        proposed_value.value.id(),
+                        block_bytes,
+                    )
                     .await
                 {
                     error!(%height, %round, error = %e, "Failed to store synced block data");

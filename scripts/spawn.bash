@@ -38,7 +38,8 @@ if [[ -z "$APP_BINARY" ]]; then
     APP_BINARY="malachitebft-eth-app"
 fi
 
-echo "Compiling '$APP_BINARY'..."cargo build --release -p $APP_BINARY
+echo "Compiling '$APP_BINARY'..."
+cargo build --release -p $APP_BINARY
 
 export RUST_BACKTRACE=full
 

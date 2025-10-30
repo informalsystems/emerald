@@ -348,7 +348,18 @@ impl State {
         };
 
         // Extract versioned hashes for blob transactions
-        let block: Block = execution_payload.clone().try_into_block().unwrap();
+        let block: Block = match execution_payload.clone().try_into_block() {
+            Ok(block) => block,
+            Err(e) => {
+                error!(
+                    height = %height,
+                    round = %round,
+                    error = ?e,
+                    "Failed to convert ExecutionPayloadV3 to Block"
+                );
+                return Ok(Validity::Invalid);
+            }
+        };
         let versioned_hashes: Vec<BlockHash> =
             block.body.blob_versioned_hashes_iter().copied().collect();
 

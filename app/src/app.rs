@@ -498,7 +498,13 @@ pub async fn run(
                 let block_header_bytes = Bytes::from(block_header.as_ssz_bytes());
 
                 // Collect hashes from blob transactions
-                let block: Block = execution_payload.clone().try_into_block().unwrap();
+                let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
+                    eyre::eyre!(
+                        "Failed to convert decided ExecutionPayloadV3 to Block at height {}: {}",
+                        height,
+                        e
+                    )
+                })?;
                 let versioned_hashes: Vec<BlockHash> =
                     block.body.blob_versioned_hashes_iter().copied().collect();
 
@@ -599,11 +605,24 @@ pub async fn run(
 
                 // Extract execution payload from the synced value for validation
                 let block_bytes = value.extensions.clone();
-                let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_bytes).unwrap();
+                let execution_payload =
+                    ExecutionPayloadV3::from_ssz_bytes(&block_bytes).map_err(|e| {
+                        eyre::eyre!(
+                            "Failed to decode synced ExecutionPayloadV3 at height {}: {}",
+                            height,
+                            e
+                        )
+                    })?;
                 let new_block_hash = execution_payload.payload_inner.payload_inner.block_hash;
 
                 // Collect hashes from blob transactions
-                let block: Block = execution_payload.clone().try_into_block().unwrap();
+                let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
+                    eyre::eyre!(
+                        "Failed to convert synced ExecutionPayloadV3 to Block at height {}: {}",
+                        height,
+                        e
+                    )
+                })?;
                 let versioned_hashes: Vec<BlockHash> =
                     block.body.blob_versioned_hashes_iter().copied().collect();
 

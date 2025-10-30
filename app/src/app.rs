@@ -220,7 +220,7 @@ pub async fn run(
                             // Validate execution payload with the execution engine before storing it as undecided proposal
                             let (value, data) = assemble_value_from_parts(parts.clone());
 
-                            let validity = state 
+                            let validity = state
                                 .validate_execution_payload(
                                     &data,
                                     parts.height,
@@ -240,12 +240,15 @@ pub async fn run(
                             }
 
                             state.store.store_undecided_proposal(value.clone()).await?;
-                            state.store.store_undecided_block_data(
-                                value.height,
-                                value.round,
-                                value.value.id(),
-                                data,
-                            ).await?;
+                            state
+                                .store
+                                .store_undecided_block_data(
+                                    value.height,
+                                    value.round,
+                                    value.value.id(),
+                                    data,
+                                )
+                                .await?;
                             info!(
                                 height = %parts.height,
                                 round = %parts.round,

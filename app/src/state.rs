@@ -421,7 +421,13 @@ impl State {
 
                 // Validate the execution payload with the execution engine
                 let validity = self
-                    .validate_execution_payload(&data, value.height, value.round, engine, retry_config)
+                    .validate_execution_payload(
+                        &data,
+                        value.height,
+                        value.round,
+                        engine,
+                        retry_config,
+                    )
                     .await?;
 
                 if validity == Validity::Invalid {
@@ -434,13 +440,8 @@ impl State {
                 }
                 info!(%value.height, %value.round, %value.proposer, "Storing validated proposal as undecided");
                 self.store.store_undecided_proposal(value.clone()).await?;
-                self.store_undecided_block_data(
-                    value.height,
-                    value.round,
-                    value.value.id(),
-                    data,
-                )
-                .await?;
+                self.store_undecided_block_data(value.height, value.round, value.value.id(), data)
+                    .await?;
 
                 Ok(Some(value))
             }

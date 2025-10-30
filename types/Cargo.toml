@@ -19,16 +19,16 @@ malachitebft-signing-ed25519 = { workspace = true, features = [ "rand", "serde" 
 malachitebft-signing-ecdsa   = { workspace = true, features = [ "rand", "serde" ] }
 malachitebft-sync            = { workspace = true }
 
-async-trait      = { workspace = true }
-bytes            = { workspace = true }
-hex              = { workspace = true }
-humantime-serde  = "1.1"
-prost            = { workspace = true }
-prost-types      = { workspace = true }
-rand             = { workspace = true }
-serde            = { workspace = true, features = [ "derive", "rc" ] }
-serde_json       = { workspace = true }
-signature        = { workspace = true }
+async-trait     = { workspace = true }
+bytes           = { workspace = true }
+hex             = { workspace = true }
+humantime-serde = "1.1"
+prost           = { workspace = true }
+prost-types     = { workspace = true }
+rand            = { workspace = true }
+serde           = { workspace = true, features = [ "derive", "rc" ] }
+serde_json      = { workspace = true }
+signature       = { workspace = true }
 
 alloy-consensus  = { workspace = true }
 alloy-primitives = { version = "0.8.21", default-features = false }

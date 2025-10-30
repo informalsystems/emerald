@@ -10,7 +10,7 @@ use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::{BlockHash, Height, MalakethContext, RetryConfig, Value};
 use ssz::{Decode, Encode};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::state::{reconstruct_execution_payload, ValidatedPayloadCache};
 use crate::store::Store;
@@ -31,7 +31,7 @@ pub async fn validate_payload(
 
     // Check if we've already called newPayload for this block
     if let Some(cached_validity) = cache.get(&block_hash) {
-        warn!(
+        debug!(
             %height, %round, %block_hash, validity = ?cached_validity,
             "Skipping duplicate newPayload call, returning cached result"
         );

@@ -1,11 +1,12 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
-use std::collections::VecDeque;
 use std::fmt;
 
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
+use caches::lru::AdaptiveCache;
+use caches::Cache;
 use color_eyre::eyre;
 use malachitebft_app_channel::app::streaming::{StreamContent, StreamId, StreamMessage};
 use malachitebft_app_channel::app::types::codec::Codec;
@@ -24,7 +25,7 @@ use rand::{Rng, SeedableRng};
 use sha3::Digest;
 use ssz::Decode;
 use tokio::time::Instant;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::metrics::Metrics;
 use crate::store::Store;
@@ -32,36 +33,26 @@ use crate::streaming::{PartStreamsMap, ProposalParts};
 
 /// Cache for tracking recently validated execution payloads to avoid redundant validation.
 /// Stores both the block hash and its validity result (Valid or Invalid).
-/// Uses a bounded VecDeque to maintain a sliding window of validated blocks.
-/// Memory usage: ~40 bytes per entry (32 for hash + 8 for validity), so 10 entries = ~400 bytes.
 pub struct ValidatedPayloadCache {
-    validated_blocks: VecDeque<(BlockHash, Validity)>,
-    max_size: usize,
+    cache: AdaptiveCache<BlockHash, Validity>,
 }
 
 impl ValidatedPayloadCache {
     pub fn new(max_size: usize) -> Self {
         Self {
-            validated_blocks: VecDeque::with_capacity(max_size),
-            max_size,
+            cache: AdaptiveCache::new(max_size)
+                .expect("Failed to create AdaptiveCache: invalid cache size"),
         }
     }
 
     /// Check if a block hash has been validated and return its cached validity
-    pub fn get(&self, block_hash: &BlockHash) -> Option<Validity> {
-        self.validated_blocks
-            .iter()
-            .find(|(hash, _)| hash == block_hash)
-            .map(|(_, validity)| *validity)
+    pub fn get(&mut self, block_hash: &BlockHash) -> Option<Validity> {
+        self.cache.get(block_hash).copied()
     }
 
     /// Insert a block hash and its validity result into the cache
     pub fn insert(&mut self, block_hash: BlockHash, validity: Validity) {
-        // Evict oldest entry if cache is full
-        if self.validated_blocks.len() >= self.max_size {
-            self.validated_blocks.pop_front();
-        }
-        self.validated_blocks.push_back((block_hash, validity));
+        self.cache.put(block_hash, validity);
     }
 }
 use crate::sync_handler::validate_payload;
@@ -337,7 +328,7 @@ impl State {
         let execution_payload = match ExecutionPayloadV3::from_ssz_bytes(data) {
             Ok(payload) => payload,
             Err(e) => {
-                error!(
+                warn!(
                     height = %height,
                     round = %round,
                     error = ?e,
@@ -351,7 +342,7 @@ impl State {
         let block: Block = match execution_payload.clone().try_into_block() {
             Ok(block) => block,
             Err(e) => {
-                error!(
+                warn!(
                     height = %height,
                     round = %round,
                     error = ?e,
@@ -442,7 +433,7 @@ impl State {
                     .await?;
 
                 if validity == Validity::Invalid {
-                    error!(
+                    warn!(
                         height = %self.current_height,
                         round = %self.current_round,
                         "Received proposal with invalid execution payload, ignoring"

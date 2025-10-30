@@ -14,7 +14,7 @@ use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::secp256k1::PublicKey;
 use malachitebft_eth_types::{Block, BlockHash, Height, MalakethContext, Validator, ValidatorSet};
 use ssz::{Decode, Encode};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 const GENESIS_VALIDATOR_MANAGER_ACCOUNT: Address =
     address!("0x0000000000000000000000000000000000002000");
@@ -231,7 +231,7 @@ pub async fn run(
                                 .await?;
 
                             if validity == Validity::Invalid {
-                                error!(
+                                warn!(
                                     height = %parts.height,
                                     round = %parts.round,
                                     "Pending proposal has invalid execution payload, rejecting"

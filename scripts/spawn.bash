@@ -38,9 +38,7 @@ if [[ -z "$APP_BINARY" ]]; then
     APP_BINARY="malachitebft-eth-app"
 fi
 
-# Skip compilation - Makefile already builds in release mode
-# echo "Compiling '$APP_BINARY'..."
-# cargo build --release -p $APP_BINARY
+echo "Compiling '$APP_BINARY'..."cargo build --release -p $APP_BINARY
 
 export RUST_BACKTRACE=full
 
@@ -106,7 +104,7 @@ function spawn_node {
     rm -rf "$NODES_HOME/$NODE/traces"
     mkdir -p "$NODES_HOME/$NODE/traces"
     echo "[Node $NODE] Spawning node..."
-    target/release/$APP_BINARY start --home "$NODES_HOME/$NODE" --log-level info --config ".testnet/config/$NODE"/config.toml > "$NODES_HOME/$NODE/logs/node.log" 2>&1 &
+    cargo run --bin $APP_BINARY -q -- start --home "$NODES_HOME/$NODE" --log-level info --config ".testnet/config/$NODE"/config.toml > "$NODES_HOME/$NODE/logs/node.log" 2>&1 &
     echo $! > "$NODES_HOME/$NODE/node.pid"
     echo "[Node $NODE] Logs are available at: $NODES_HOME/$NODE/logs/node.log"
 }

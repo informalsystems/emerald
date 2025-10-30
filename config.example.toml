@@ -15,12 +15,15 @@ jwt_token_path = "./assets/jwtsecret"
 
 # Retry configuration for execution client sync operations
 [retry_config]
-# Initial delay between retry attempts (in milliseconds)
-initial_delay = 100
-# Maximum delay between retry attempts (in milliseconds)
-max_delay = 2000
-# Total timeout - maximum time to keep retrying (in milliseconds)
-max_elapsed_time = 10000
+# Initial delay between retry attempts
+# Supports human-readable format: "100ms", "1s", "500ms", etc.
+initial_delay = "100ms"
+# Maximum delay between retry attempts
+# Supports human-readable format: "2s", "5s", "10s", etc.
+max_delay = "2s"
+# Total timeout - maximum time to keep retrying
+# Supports human-readable format: "10s", "1m", "30s", etc.
+max_elapsed_time = "10s"
 # Exponential backoff multiplier (e.g., 2.0 for doubling)
 multiplier = 2.0
 

@@ -4435,6 +4435,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "hex",
+ "humantime-serde",
  "informalsystems-malachitebft-app",
  "informalsystems-malachitebft-codec",
  "informalsystems-malachitebft-config",

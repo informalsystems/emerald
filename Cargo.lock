@@ -3406,6 +3406,7 @@ dependencies = [
  "bytes",
  "derive-where",
  "informalsystems-malachitebft-peer",
+ "serde",
  "thiserror 2.0.12",
 ]
 

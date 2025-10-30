@@ -83,9 +83,10 @@ rev     = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 git     = "https://github.com/informalsystems/malachite.git"
 
 [workspace.dependencies.malachitebft-core-types]
-package = "informalsystems-malachitebft-core-types"
-rev     = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
-git     = "https://github.com/informalsystems/malachite.git"
+package  = "informalsystems-malachitebft-core-types"
+rev      = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
+git      = "https://github.com/informalsystems/malachite.git"
+features = [ "serde" ]
 
 [workspace.dependencies.malachitebft-core-consensus]
 package = "informalsystems-malachitebft-core-consensus"

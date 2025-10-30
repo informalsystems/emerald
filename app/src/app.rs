@@ -608,7 +608,7 @@ pub async fn run(
                 let execution_payload =
                     ExecutionPayloadV3::from_ssz_bytes(&block_bytes).map_err(|e| {
                         eyre::eyre!(
-                            "Failed to decode synced ExecutionPayloadV3 at height {}: {}",
+                            "Failed to decode synced ExecutionPayloadV3 at height {}: {:?}",
                             height,
                             e
                         )

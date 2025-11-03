@@ -168,7 +168,7 @@ impl Node for App {
             tokio::spawn(metrics::serve(config.metrics.listen_addr));
         }
 
-        let store = Store::open(self.get_home_dir().join("store.db"), metrics.db.clone())?;
+        let store = Store::open(self.get_home_dir().join("store.db"), metrics.db.clone()).await?;
         let start_height = self.start_height.unwrap_or_default();
 
         // Load cumulative metrics from database for crash recovery

@@ -521,7 +521,7 @@ dependencies = [
  "alloy-rlp",
  "alloy-serde",
  "alloy-sol-types",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
@@ -1413,6 +1413,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "caches"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9988519e5f642c7ea3db4b6a31a50667ec61a26344e9c0bce3f8124931d8bb3f"
+dependencies = [
+ "bitvec",
+ "cfg-if",
+ "getrandom 0.2.15",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "cbor4ii"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1961,7 +1973,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "18e4fdb82bd54a12e42fb58a800dcae6b9e13982238ce2296dc3570b92148e1f"
 dependencies = [
  "data-encoding",
- "syn 1.0.109",
+ "syn 2.0.99",
 ]
 
 [[package]]
@@ -3406,6 +3418,7 @@ dependencies = [
  "bytes",
  "derive-where",
  "informalsystems-malachitebft-peer",
+ "serde",
  "thiserror 2.0.12",
 ]
 
@@ -4351,6 +4364,7 @@ dependencies = [
  "alloy-sol-types",
  "async-trait",
  "bytes",
+ "caches",
  "color-eyre",
  "derive-where",
  "ethereum_ssz",
@@ -4435,6 +4449,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "hex",
+ "humantime-serde",
  "informalsystems-malachitebft-app",
  "informalsystems-malachitebft-codec",
  "informalsystems-malachitebft-config",
@@ -5445,7 +5460,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
  "heck",
- "itertools 0.10.5",
+ "itertools 0.14.0",
  "log",
  "multimap",
  "once_cell",
@@ -5465,7 +5480,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.99",

@@ -1,7 +1,5 @@
 //! Sync handler functions for processing synced payloads
 
-use std::time::Duration;
-
 use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre};
@@ -10,74 +8,66 @@ use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::sync::RawDecidedValue;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::{BlockHash, Height, MalakethContext, Value};
+use malachitebft_eth_types::{BlockHash, Height, MalakethContext, RetryConfig, Value};
 use ssz::{Decode, Encode};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
-use crate::state::reconstruct_execution_payload;
+use crate::state::{reconstruct_execution_payload, ValidatedPayloadCache};
 use crate::store::Store;
 
-/// Validates execution payload with retry mechanism for SYNCING status.
+/// Generic function to validate execution payload with retry mechanism for SYNCING status.
 /// Returns the validity of the payload or an error if timeout is exceeded.
-pub async fn validate_synced_payload(
+/// Uses cache to avoid duplicate validation
+pub async fn validate_payload(
+    cache: &mut ValidatedPayloadCache,
     engine: &Engine,
     execution_payload: &ExecutionPayloadV3,
     versioned_hashes: &[BlockHash],
-    sync_timeout: Duration,
-    sync_initial_delay: Duration,
+    retry_config: &RetryConfig,
     height: Height,
     round: Round,
 ) -> eyre::Result<Validity> {
-    let validation_future = async {
-        let mut retry_delay = sync_initial_delay;
+    let block_hash = execution_payload.payload_inner.payload_inner.block_hash;
 
-        loop {
-            let result = engine
-                .notify_new_block(execution_payload.clone(), versioned_hashes.to_vec())
-                .await;
+    // Check if we've already called newPayload for this block
+    if let Some(cached_validity) = cache.get(&block_hash) {
+        debug!(
+            %height, %round, %block_hash, validity = ?cached_validity,
+            "Skipping duplicate newPayload call, returning cached result"
+        );
+        return Ok(cached_validity);
+    }
 
-            match result {
-                Ok(payload_status) => match payload_status.status {
-                    PayloadStatusEnum::Valid => {
-                        return Ok(Validity::Valid);
-                    }
-                    PayloadStatusEnum::Syncing => {
-                        warn!(
-                            %height, %round,
-                            "⚠️  Execution client SYNCING, retrying in {:?}",
-                            retry_delay
-                        );
+    let payload_status = engine
+        .notify_new_block_with_retry(
+            execution_payload.clone(),
+            versioned_hashes.to_vec(),
+            retry_config,
+        )
+        .await
+        .map_err(|e| {
+            eyre!(
+                "Execution client stuck in SYNCING for {:?} at height {}: {}",
+                retry_config.max_elapsed_time,
+                height,
+                e
+            )
+        })?;
 
-                        tokio::time::sleep(retry_delay).await;
-                        retry_delay = std::cmp::min(retry_delay * 2, Duration::from_secs(2));
-                        continue;
-                    }
-                    PayloadStatusEnum::Accepted => {
-                        warn!(%height, %round, "⚠️  Synced block ACCEPTED: {:?}", payload_status.status);
-                        return Ok(Validity::Invalid);
-                    }
-                    PayloadStatusEnum::Invalid { validation_error } => {
-                        error!(%height, %round, validation_error = ?validation_error, "🔴 Synced block INVALID");
-                        return Ok(Validity::Invalid);
-                    }
-                },
-                Err(e) => {
-                    error!(%height, %round, "🔴 Payload validation RPC error: {}", e);
-                    return Err(e);
-                }
-            }
+    match payload_status.status {
+        PayloadStatusEnum::Valid => Ok(Validity::Valid),
+        PayloadStatusEnum::Accepted => {
+            warn!(%height, %round, "⚠️  Synced block ACCEPTED: {:?}, this shouldn't happen", payload_status.status);
+            Ok(Validity::Invalid)
         }
-    };
-
-    let Ok(result) = tokio::time::timeout(sync_timeout, validation_future).await else {
-        return Err(eyre!(
-            "Execution client stuck in SYNCING for {:?} at height {}",
-            sync_timeout,
-            height
-        ));
-    };
-
-    result
+        PayloadStatusEnum::Invalid { validation_error } => {
+            error!(%height, %round, validation_error = ?validation_error, "🔴 Synced block INVALID");
+            Ok(Validity::Invalid)
+        }
+        PayloadStatusEnum::Syncing => {
+            unreachable!("SYNCING status should be handled by notify_new_block_with_retry")
+        }
+    }
 }
 
 /// Retrieves a decided value for sync at the given height.

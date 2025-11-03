@@ -3,9 +3,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use alloy_rpc_types_engine::{
     ExecutionPayloadV3, ForkchoiceUpdated, PayloadAttributes, PayloadStatus, PayloadStatusEnum,
 };
-use color_eyre::eyre::{self, Ok};
-use malachitebft_eth_types::{Address, BlockHash, B256};
-use tracing::debug;
+use color_eyre::eyre;
+use malachitebft_eth_types::{Address, BlockHash, RetryConfig, B256};
+use tracing::{debug, error, warn};
 
 use crate::engine_rpc::EngineRPC;
 use crate::ethereum_rpc::EthereumRPC;
@@ -35,30 +35,76 @@ impl Engine {
         Ok(())
     }
 
+    async fn forkchoice_updated_with_retry(
+        &self,
+        head_block_hash: BlockHash,
+        payload_attributes: Option<PayloadAttributes>,
+        retry_config: &RetryConfig,
+    ) -> eyre::Result<ForkchoiceUpdated> {
+        let fcu_future = async {
+            let mut retry_delay = retry_config.initial_delay;
+
+            loop {
+                let result = self
+                    .api
+                    .forkchoice_updated(head_block_hash, payload_attributes.clone())
+                    .await;
+
+                match result {
+                    Ok(forkchoice_updated) => {
+                        if forkchoice_updated.payload_status.status.is_syncing() {
+                            warn!(
+                                "⚠️  Execution client SYNCING, retrying in {:?}",
+                                retry_delay
+                            );
+
+                            tokio::time::sleep(retry_delay).await;
+                            retry_delay = retry_config.next_delay(retry_delay);
+                            continue;
+                        }
+
+                        return Ok(forkchoice_updated);
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+        };
+
+        tokio::time::timeout(retry_config.max_elapsed_time, fcu_future)
+            .await
+            .map_err(|_| {
+                eyre::eyre!(
+                    "Timeout after {:?} waiting for execution client to sync",
+                    retry_config.max_elapsed_time
+                )
+            })?
+    }
+
     pub async fn send_forkchoice_updated(
         &self,
         head_block_hash: BlockHash,
+        retry_config: &RetryConfig,
     ) -> eyre::Result<PayloadStatus> {
-        debug!("🟠 set_latest_forkchoice_state: {:?}", head_block_hash);
+        debug!("🟠 send_forkchoice_updated: {:?}", head_block_hash);
 
-        let ForkchoiceUpdated {
-            payload_status,
-            payload_id: _,
-        } = self.api.forkchoice_updated(head_block_hash, None).await?;
-
-        Ok(payload_status)
+        self.forkchoice_updated_with_retry(head_block_hash, None, retry_config)
+            .await
+            .map(|ForkchoiceUpdated { payload_status, .. }| payload_status)
     }
 
     pub async fn set_latest_forkchoice_state(
         &self,
         head_block_hash: BlockHash,
+        retry_config: &RetryConfig,
     ) -> eyre::Result<BlockHash> {
         debug!("🟠 set_latest_forkchoice_state: {:?}", head_block_hash);
 
         let ForkchoiceUpdated {
             payload_status,
             payload_id,
-        } = self.api.forkchoice_updated(head_block_hash, None).await?;
+        } = self
+            .forkchoice_updated_with_retry(head_block_hash, None, retry_config)
+            .await?;
 
         assert!(payload_id.is_none(), "Payload ID should be None!");
 
@@ -66,27 +112,27 @@ impl Engine {
 
         match payload_status.status {
             PayloadStatusEnum::Valid => Ok(payload_status.latest_valid_hash.unwrap()),
-            PayloadStatusEnum::Syncing if payload_status.latest_valid_hash.is_none() => {
-                // From the Engine API spec:
-                // 8. Client software MUST respond to this method call in the
-                //    following way:
-                //   * {payloadStatus: {status: SYNCING, latestValidHash: null,
-                //   * validationError: null}, payloadId: null} if
-                //     forkchoiceState.headBlockHash references an unknown
-                //     payload or a payload that can't be validated because
-                //     requisite data for the validation is missing
+            PayloadStatusEnum::Accepted => {
+                warn!(block_hash = ?head_block_hash, "⚠️  Forkchoice update ACCEPTED, this shouldn't happen");
+                Err(eyre::eyre!("Forkchoice update returned ACCEPTED status"))
+            }
+            PayloadStatusEnum::Invalid { validation_error } => {
+                error!(block_hash = ?head_block_hash, validation_error = ?validation_error, "🔴 Forkchoice update INVALID");
                 Err(eyre::eyre!(
-                    "headBlockHash={:?} references an unknown payload or a payload that can't be validated",
-                    head_block_hash
+                    "Forkchoice update returned INVALID: {:?}",
+                    validation_error
                 ))
             }
-            status => Err(eyre::eyre!("Invalid payload status: {}", status)),
+            PayloadStatusEnum::Syncing => {
+                unreachable!("SYNCING status should be handled by forkchoice_updated_with_retry")
+            }
         }
     }
 
     pub async fn generate_block(
         &self,
         latest_block: &Option<ExecutionBlock>,
+        retry_config: &RetryConfig,
     ) -> eyre::Result<ExecutionPayloadV3> {
         debug!("🟠 generate_block on top of {:?}", latest_block);
         let payload_attributes: PayloadAttributes;
@@ -127,8 +173,7 @@ impl Engine {
             payload_status,
             payload_id,
         } = self
-            .api
-            .forkchoice_updated(block_hash, Some(payload_attributes))
+            .forkchoice_updated_with_retry(block_hash, Some(payload_attributes), retry_config)
             .await?;
 
         assert_eq!(payload_status.latest_valid_hash, Some(block_hash));
@@ -140,8 +185,22 @@ impl Engine {
                 // See how payload is constructed: https://github.com/ethereum/consensus-specs/blob/v1.1.5/specs/merge/validator.md#block-proposal
                 Ok(self.api.get_payload(payload_id).await?)
             }
-            // TODO: Handle other statuses.
-            status => Err(eyre::eyre!("Invalid payload status: {}", status)),
+            PayloadStatusEnum::Accepted => {
+                warn!(block_hash = ?block_hash, "⚠️  Block generation forkchoice update ACCEPTED, this shouldn't happen");
+                Err(eyre::eyre!(
+                    "Block generation forkchoice update returned ACCEPTED status"
+                ))
+            }
+            PayloadStatusEnum::Invalid { validation_error } => {
+                error!(block_hash = ?block_hash, validation_error = ?validation_error, "🔴 Block generation forkchoice update INVALID");
+                Err(eyre::eyre!(
+                    "Block generation forkchoice update returned INVALID: {:?}",
+                    validation_error
+                ))
+            }
+            PayloadStatusEnum::Syncing => {
+                unreachable!("SYNCING status should be handled by forkchoice_updated_with_retry")
+            }
         }
     }
 
@@ -184,6 +243,54 @@ impl Engine {
         self.api
             .get_payload_bodies_by_range(start_block, count)
             .await
+    }
+
+    /// Notifies the execution client of a new block with retry mechanism for SYNCING status.
+    /// Returns the payload status or an error if timeout is exceeded.
+    pub async fn notify_new_block_with_retry(
+        &self,
+        execution_payload: ExecutionPayloadV3,
+        versioned_hashes: Vec<BlockHash>,
+        retry_config: &RetryConfig,
+    ) -> eyre::Result<PayloadStatus> {
+        let validation_future = async {
+            let mut retry_delay = retry_config.initial_delay;
+
+            loop {
+                let result = self
+                    .notify_new_block(execution_payload.clone(), versioned_hashes.clone())
+                    .await;
+
+                match result {
+                    Ok(payload_status) => {
+                        if payload_status.status.is_syncing() {
+                            warn!(
+                                "⚠️  Execution client SYNCING, retrying in {:?}",
+                                retry_delay
+                            );
+
+                            tokio::time::sleep(retry_delay).await;
+                            retry_delay = retry_config.next_delay(retry_delay);
+                            continue;
+                        }
+
+                        return Ok(payload_status);
+                    }
+                    Err(e) => {
+                        return Err(e);
+                    }
+                }
+            }
+        };
+
+        tokio::time::timeout(retry_config.max_elapsed_time, validation_future)
+            .await
+            .map_err(|_| {
+                eyre::eyre!(
+                    "Timeout after {:?} waiting for execution client to sync",
+                    retry_config.max_elapsed_time
+                )
+            })?
     }
 
     /// Returns the duration since the unix epoch.

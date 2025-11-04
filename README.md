@@ -189,7 +189,7 @@ Check out the metrics in the Grafana dashboards at http://localhost:3000.
 In a separate terminal, run the following command to send transactions during 60 seconds at a rate
 of 1000 tx/s to one of Reth RPC endpoints.
 ```
-cargo run --bin malachitebft-eth-utils spam --time=60 --rate=1000
+cargo run --bin emerald-utils spam --time=60 --rate=1000
 ```
 
 > [!TIP]

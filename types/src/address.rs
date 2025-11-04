@@ -1,11 +1,12 @@
 use core::fmt;
 
-use alloy_primitives::Address as AlloyAddress;
+use alloy_primitives::{keccak256, Address as AlloyAddress};
+use k256::ecdsa::VerifyingKey;
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 use serde::{Deserialize, Serialize};
 
+use crate::proto;
 use crate::signing::secp256k1::PublicKey;
-use crate::{proto, Hashable};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -28,9 +29,28 @@ impl Address {
 
     #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn from_public_key(public_key: &PublicKey) -> Self {
-        let hash = public_key.hash();
+        // Ethereum address derivation requires uncompressed public key
+        // 1. Get public key bytes (compressed format from to_vec())
+        // 2. Parse as k256 VerifyingKey to get uncompressed format
+        // 3. Hash the uncompressed key (64 bytes without 0x04 prefix)
+        // 4. Take the last 20 bytes
+
+        let compressed_bytes = public_key.to_vec();
+
+        // Parse the compressed key and get uncompressed encoding
+        let verifying_key = VerifyingKey::from_sec1_bytes(&compressed_bytes)
+            .expect("PublicKey to_vec() should always return valid SEC1 bytes");
+
+        // Get uncompressed point (65 bytes: 0x04 || x || y)
+        let uncompressed_point = verifying_key.to_encoded_point(false);
+        let uncompressed_bytes = uncompressed_point.as_bytes();
+
+        // Hash the x,y coordinates (skip the 0x04 prefix)
+        let hash = keccak256(&uncompressed_bytes[1..]);
+
+        // Take the last 20 bytes for Ethereum address
         let mut address = [0; Self::LENGTH];
-        address.copy_from_slice(&hash[..Self::LENGTH]);
+        address.copy_from_slice(&hash[12..]);
         Self(AlloyAddress::new(address))
     }
 

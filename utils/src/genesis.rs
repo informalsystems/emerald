@@ -9,16 +9,15 @@ use chrono::NaiveDate;
 use color_eyre::eyre::{eyre, Result};
 use hex::decode;
 use k256::ecdsa::VerifyingKey;
+// Malachite types for Emerald genesis
+use malachitebft_eth_types::secp256k1::PublicKey as EmeraldPublicKey;
+use malachitebft_eth_types::{
+    Genesis as EmeraldGenesis, Validator as EmeraldValidator, ValidatorSet as EmeraldValidatorSet,
+};
 use tracing::debug;
 
 use crate::validator_manager::contract::{ValidatorManager, GENESIS_VALIDATOR_MANAGER_ACCOUNT};
 use crate::validator_manager::{generate_storage_data, Validator};
-
-// Malachite types for Emerald genesis
-use malachitebft_eth_types::{
-    Genesis as EmeraldGenesis, Validator as EmeraldValidator, ValidatorSet as EmeraldValidatorSet,
-};
-use malachitebft_eth_types::secp256k1::PublicKey as EmeraldPublicKey;
 
 /// EIP-4788 Beacon Roots Contract address
 const BEACON_ROOTS_ADDRESS: Address = address!("0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02");
@@ -91,12 +90,12 @@ pub(crate) fn generate_evm_genesis(
             );
         }
 
-        let balance = U256::from(*testnet_balance) * U256::from(10).pow(U256::from(18));
+        let amount = U256::from(*testnet_balance) * U256::from(10).pow(U256::from(18));
         for addr in &signer_addresses {
             alloc.insert(
                 *addr,
                 GenesisAccount {
-                    balance: balance,
+                    balance: amount,
                     ..Default::default()
                 },
             );
@@ -290,10 +289,7 @@ pub(crate) fn generate_emerald_genesis(
     }
 
     if validators.is_empty() {
-        return Err(eyre!(
-            "no valid validators found in {}",
-            public_keys_file
-        ));
+        return Err(eyre!("no valid validators found in {}", public_keys_file));
     }
 
     // Create validator set and genesis

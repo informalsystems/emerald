@@ -131,7 +131,7 @@ pub(crate) fn generate_genesis(
         Address::ZERO
     };
 
-    if !*testnet {
+    if *testnet {
         poa_address_owner = signers[0].address();
     }
 

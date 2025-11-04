@@ -20,8 +20,19 @@ impl Cli {
         match &self.command {
             Commands::Genesis {
                 public_keys_file,
+                poa_owner_address,
+                testnet,
+                testnet_balance,
+                chain_id,
                 output,
-            } => generate_genesis(public_keys_file, output),
+            } => generate_genesis(
+                public_keys_file,
+                poa_owner_address,
+                testnet,
+                testnet_balance,
+                chain_id,
+                output,
+            ),
             Commands::Spam(spam_cmd) => spam_cmd.run().await,
         }
     }
@@ -31,10 +42,50 @@ impl Cli {
 pub enum Commands {
     /// Generate genesis file
     Genesis {
-        #[clap(short, long)]
+        #[clap(
+            short,
+            long,
+            help = "File containing validator public keys (one per line)"
+        )]
         public_keys_file: String,
 
-        #[clap(long, default_value = "./assets/genesis.json")]
+        #[clap(
+            long,
+            short = 'a',
+            required_unless_present = "testnet",
+            help = "Address of the Proof-of-Authority owner"
+        )]
+        poa_owner_address: Option<String>,
+
+        #[clap(
+            long,
+            short = 'c',
+            help = "Chain ID for the genesis file (default: 12345)",
+            default_value_t = 12345
+        )]
+        chain_id: u64,
+
+        #[clap(
+            short,
+            long,
+            default_value_t = false,
+            help = "Generate test addresses in genesis using mnemonic: 'test test test test test test test test test test test junk'"
+        )]
+        testnet: bool,
+
+        #[clap(
+            long,
+            short = 'b',
+            default_value_t = 15_000u64,
+            help = "Balance for each testnet wallet (default: 15000)"
+        )]
+        testnet_balance: u64,
+
+        #[clap(
+            long,
+            default_value = "./assets/genesis.json",
+            help = "Output path for the generated genesis file"
+        )]
         output: String,
     },
 

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use alloy_genesis::{ChainConfig, Genesis, GenesisAccount};
-use alloy_primitives::{Address, B256, U256};
+use alloy_primitives::{address, Address, B256, U256};
 use alloy_signer_local::coins_bip39::English;
 use alloy_signer_local::{MnemonicBuilder, PrivateKeySigner};
 use chrono::NaiveDate;
@@ -13,6 +13,13 @@ use tracing::debug;
 
 use crate::validator_manager::contract::{ValidatorManager, GENESIS_VALIDATOR_MANAGER_ACCOUNT};
 use crate::validator_manager::{generate_storage_data, Validator};
+
+/// EIP-4788 Beacon Roots Contract address
+const BEACON_ROOTS_ADDRESS: Address = address!("0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02");
+
+/// EIP-4788 Beacon Roots Contract bytecode
+/// See: https://eips.ethereum.org/EIPS/eip-4788
+const BEACON_ROOTS_CODE: &str = "0x3373fffffffffffffffffffffffffffffffffffffffe14604d57602036146024575f5ffd5b5f35801560495762001fff810690815414603c575f5ffd5b62001fff01545f5260205ff35b5f5ffd5b62001fff42064281555f359062001fff015500";
 
 /// Test mnemonic for wallet generation
 const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
@@ -31,29 +38,40 @@ pub(crate) fn make_signers() -> Vec<PrivateKeySigner> {
     (0..10).map(make_signer).collect()
 }
 
-pub(crate) fn generate_genesis(public_keys_file: &str, genesis_output_file: &str) -> Result<()> {
-    // Create signers and get their addresses
-    let signers = make_signers();
-    let signer_addresses: Vec<Address> = signers.iter().map(|signer| signer.address()).collect();
-
-    debug!("Using signer addresses:");
-    for (i, (signer, addr)) in signers.iter().zip(signer_addresses.iter()).enumerate() {
-        debug!(
-            "Signer {i}: {addr} ({})",
-            B256::from_slice(&signer.credential().to_bytes())
-        );
-    }
-
-    // Create genesis configuration with pre-funded accounts
+pub(crate) fn generate_genesis(
+    public_keys_file: &str,
+    poa_address_owner: &Option<String>,
+    testnet: &bool,
+    testnet_balance: &u64,
+    chain_id: &u64,
+    genesis_output_file: &str,
+) -> Result<()> {
     let mut alloc = BTreeMap::new();
-    for addr in &signer_addresses {
-        alloc.insert(
-            *addr,
-            GenesisAccount {
-                balance: U256::from_str("15000000000000000000000").unwrap(), // 15000 ETH
-                ..Default::default()
-            },
-        );
+    let signers = make_signers();
+    // If test addresses are requested, create them and pre-fund them
+    if *testnet {
+        // Create signers and get their addresses
+        let signer_addresses: Vec<Address> =
+            signers.iter().map(|signer| signer.address()).collect();
+
+        debug!("Using signer addresses:");
+        for (i, (signer, addr)) in signers.iter().zip(signer_addresses.iter()).enumerate() {
+            debug!(
+                "Signer {i}: {addr} ({})",
+                B256::from_slice(&signer.credential().to_bytes())
+            );
+        }
+
+        let balance = U256::from(*testnet_balance) * U256::from(10).pow(U256::from(18));
+        for addr in &signer_addresses {
+            alloc.insert(
+                *addr,
+                GenesisAccount {
+                    balance: balance,
+                    ..Default::default()
+                },
+            );
+        }
     }
 
     let mut initial_validators = Vec::new();
@@ -105,13 +123,37 @@ pub(crate) fn generate_genesis(public_keys_file: &str, genesis_output_file: &str
         initial_validators.push(Validator::from_public_key(key, 100));
     }
 
-    let storage = generate_storage_data(initial_validators, signer_addresses[0])?;
+    // Parse PoA owner address or override with first test address
+    let mut poa_address_owner = if let Some(addr_str) = poa_address_owner {
+        Address::from_str(addr_str)
+            .map_err(|e| eyre!("invalid PoA owner address '{}': {}", addr_str, e))?
+    } else {
+        Address::ZERO
+    };
 
+    if !*testnet {
+        poa_address_owner = signers[0].address();
+    }
+
+    let storage = generate_storage_data(initial_validators, poa_address_owner)?;
     alloc.insert(
         GENESIS_VALIDATOR_MANAGER_ACCOUNT,
         GenesisAccount {
             code: Some(ValidatorManager::DEPLOYED_BYTECODE.clone()),
             storage: Some(storage),
+            ..Default::default()
+        },
+    );
+
+    // Deploy EIP-4788 Beacon Roots Contract
+    // Required for Engine API V3 compliance when parent_beacon_block_root is set
+    // reth deploys this contract at genesis but only for chain-id 1 so we add it here manually in
+    // order to support arbitrary chain-ids
+    let beacon_roots_bytecode = hex::decode(BEACON_ROOTS_CODE.strip_prefix("0x").unwrap())?;
+    alloc.insert(
+        BEACON_ROOTS_ADDRESS,
+        GenesisAccount {
+            code: Some(beacon_roots_bytecode.into()),
             ..Default::default()
         },
     );
@@ -127,7 +169,7 @@ pub(crate) fn generate_genesis(public_keys_file: &str, genesis_output_file: &str
     // Create genesis configuration
     let genesis = Genesis {
         config: ChainConfig {
-            chain_id: 1,
+            chain_id: *chain_id,
             homestead_block: Some(0),
             eip150_block: Some(0),
             eip155_block: Some(0),

@@ -14,6 +14,12 @@ use tracing::debug;
 use crate::validator_manager::contract::{ValidatorManager, GENESIS_VALIDATOR_MANAGER_ACCOUNT};
 use crate::validator_manager::{generate_storage_data, Validator};
 
+// Malachite types for Emerald genesis
+use malachitebft_eth_types::{
+    Genesis as EmeraldGenesis, Validator as EmeraldValidator, ValidatorSet as EmeraldValidatorSet,
+};
+use malachitebft_eth_types::secp256k1::PublicKey as EmeraldPublicKey;
+
 /// EIP-4788 Beacon Roots Contract address
 const BEACON_ROOTS_ADDRESS: Address = address!("0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02");
 
@@ -39,6 +45,29 @@ pub(crate) fn make_signers() -> Vec<PrivateKeySigner> {
 }
 
 pub(crate) fn generate_genesis(
+    public_keys_file: &str,
+    poa_address_owner: &Option<String>,
+    testnet: &bool,
+    testnet_balance: &u64,
+    chain_id: &u64,
+    evm_genesis_output_file: &str,
+    emerald_genesis_output_file: &str,
+) -> Result<()> {
+    generate_evm_genesis(
+        public_keys_file,
+        poa_address_owner,
+        testnet,
+        testnet_balance,
+        chain_id,
+        evm_genesis_output_file,
+    )?;
+
+    generate_emerald_genesis(public_keys_file, emerald_genesis_output_file)?;
+
+    Ok(())
+}
+
+pub(crate) fn generate_evm_genesis(
     public_keys_file: &str,
     poa_address_owner: &Option<String>,
     testnet: &bool,
@@ -200,6 +229,81 @@ pub(crate) fn generate_genesis(
     let genesis_json = serde_json::to_string_pretty(&genesis)?;
     std::fs::write(genesis_output_file, genesis_json)?;
     debug!("Genesis configuration written to {genesis_output_file}");
+
+    Ok(())
+}
+
+/// Generate Malachite/Emerald genesis file from validator public keys
+pub(crate) fn generate_emerald_genesis(
+    public_keys_file: &str,
+    emerald_genesis_output_file: &str,
+) -> Result<()> {
+    debug!("Generating Emerald genesis file from {public_keys_file}");
+
+    let mut validators = Vec::new();
+
+    for (idx, raw_line) in std::fs::read_to_string(public_keys_file)?
+        .lines()
+        .enumerate()
+    {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        // Parse hex-encoded public key (64 bytes without 0x04 prefix)
+        let hex_str = line.strip_prefix("0x").unwrap_or(line);
+        let bytes = decode(hex_str).map_err(|e| {
+            eyre!(
+                "invalid hex-encoded validator key at line {} in {}: {}",
+                idx + 1,
+                public_keys_file,
+                e
+            )
+        })?;
+
+        if bytes.len() != 64 {
+            return Err(eyre!(
+                "expected 64-byte uncompressed secp256k1 payload (sans 0x04 prefix) at line {} in {}, got {} bytes",
+                idx + 1,
+                public_keys_file,
+                bytes.len()
+            ));
+        }
+
+        // Convert to uncompressed SEC1 format (65 bytes with 0x04 prefix)
+        let mut uncompressed = [0u8; 65];
+        uncompressed[0] = 0x04;
+        uncompressed[1..].copy_from_slice(&bytes);
+
+        // Validate and create public key
+        let pub_key = EmeraldPublicKey::from_sec1_bytes(&uncompressed).map_err(|_| {
+            eyre!(
+                "invalid secp256k1 public key material at line {} in {}",
+                idx + 1,
+                public_keys_file
+            )
+        })?;
+
+        // Create validator with voting power of 1
+        validators.push(EmeraldValidator::new(pub_key, 1));
+    }
+
+    if validators.is_empty() {
+        return Err(eyre!(
+            "no valid validators found in {}",
+            public_keys_file
+        ));
+    }
+
+    // Create validator set and genesis
+    let validator_set = EmeraldValidatorSet::new(validators);
+    let genesis = EmeraldGenesis { validator_set };
+
+    // Write emerald genesis to file
+    let genesis_json = serde_json::to_string_pretty(&genesis)?;
+    std::fs::write(emerald_genesis_output_file, genesis_json)?;
+    debug!("Emerald genesis configuration written to {emerald_genesis_output_file}");
 
     Ok(())
 }

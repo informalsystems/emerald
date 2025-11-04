@@ -24,14 +24,16 @@ impl Cli {
                 testnet,
                 testnet_balance,
                 chain_id,
-                output,
+                evm_genesis_output,
+                emerald_genesis_output,
             } => generate_genesis(
                 public_keys_file,
                 poa_owner_address,
                 testnet,
                 testnet_balance,
                 chain_id,
-                output,
+                evm_genesis_output,
+                emerald_genesis_output,
             ),
             Commands::Spam(spam_cmd) => spam_cmd.run().await,
         }
@@ -83,10 +85,19 @@ pub enum Commands {
 
         #[clap(
             long,
+            short = 'g',
             default_value = "./assets/genesis.json",
             help = "Output path for the generated genesis file"
         )]
-        output: String,
+        evm_genesis_output: String,
+
+        #[clap(
+            long,
+            short = 'e',
+            default_value = "./assets/emerald_genesis.json",
+            help = "Output path for the generated Emerald genesis file"
+        )]
+        emerald_genesis_output: String,
     },
 
     /// Spam transactions

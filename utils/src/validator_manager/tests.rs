@@ -1,22 +1,17 @@
-use std::io::ErrorKind;
-use std::net::TcpListener;
-use std::process::{Child, Command, Stdio};
 use std::str::FromStr;
 
-use crate::validator_manager::contract::ValidatorManager;
+use alloy_network::EthereumWallet;
+use alloy_node_bindings::anvil::Anvil;
+use alloy_primitives::{address, Address, U256};
+use alloy_provider::{Provider, ProviderBuilder};
+use alloy_signer_local::coins_bip39::English;
+use alloy_signer_local::{MnemonicBuilder, PrivateKeySigner};
+use color_eyre::eyre;
+use reqwest::Url;
+use tracing::debug;
 
 use super::{generate_storage_data, Validator};
-use alloy_network::EthereumWallet;
-use alloy_primitives::{address, keccak256, Address, U256};
-use alloy_provider::{Provider, ProviderBuilder};
-use alloy_signer_local::PrivateKeySigner;
-use color_eyre::eyre;
-use ethers_signers::coins_bip39::English;
-use ethers_signers::{LocalWallet, MnemonicBuilder};
-use reqwest::Url;
-use tempfile::TempDir;
-use tokio::time::{sleep, Duration};
-use tracing::debug;
+use crate::validator_manager::contract::ValidatorManager;
 
 /// Generate validators from "test test ... junk" mnemonic using sequential derivation paths.
 ///
@@ -33,29 +28,28 @@ fn generate_validators_from_mnemonic(count: usize) -> eyre::Result<Vec<Validator
 
     for i in 0..count {
         let derivation_path = format!("m/44'/60'/0'/0/{}", i);
-        let wallet: LocalWallet = MnemonicBuilder::<English>::default()
+        let wallet = MnemonicBuilder::<English>::default()
             .phrase(mnemonic)
             .derivation_path(&derivation_path)?
             .build()?;
 
-        let signing_key_hex = format!("0x{}", hex::encode(wallet.signer().to_bytes().as_slice()));
-        let signer = PrivateKeySigner::from_str(&signing_key_hex)?;
-        let address = signer.address();
+        let verifying_key = wallet.credential().verifying_key();
+        let encoded = verifying_key.to_encoded_point(false);
+        let pubkey_bytes = encoded.as_bytes();
+        debug_assert_eq!(
+            pubkey_bytes.len(),
+            65,
+            "secp256k1 uncompressed key must be 65 bytes"
+        );
 
-        // Derive deterministic Ed25519 key by hashing the address and index together.
-        let ed25519_key = {
-            let mut entropy = Vec::with_capacity(Address::len_bytes() + 8);
-            entropy.extend_from_slice(address.as_slice());
-            entropy.extend_from_slice(&(i as u64).to_be_bytes());
-            keccak256(entropy)
-        };
+        let mut x_bytes = [0u8; 32];
+        x_bytes.copy_from_slice(&pubkey_bytes[1..33]);
+        let mut y_bytes = [0u8; 32];
+        y_bytes.copy_from_slice(&pubkey_bytes[33..]);
+        let validator_key = (U256::from_be_bytes(x_bytes), U256::from_be_bytes(y_bytes));
+        let power = (1000 * (i + 1)) as u64;
 
-        let power = U256::from(1000 * (i + 1));
-
-        derived.push(Validator::from_public_key(
-            U256::from_be_slice(ed25519_key.as_slice()),
-            power,
-        ));
+        derived.push(Validator::from_public_key(validator_key, power));
     }
 
     Ok(derived)
@@ -75,7 +69,8 @@ fn generate_validators_from_mnemonic(count: usize) -> eyre::Result<Vec<Validator
 async fn test_anvil_storage_comparison() -> eyre::Result<()> {
     tracing_subscriber::fmt::init();
 
-    let anvil = spawn_anvil().await?;
+    let anvil = Anvil::new().spawn();
+    let rpc_url: Url = anvil.endpoint().parse()?;
 
     debug!("🚀 Starting Anvil storage comparison test");
 
@@ -83,7 +78,10 @@ async fn test_anvil_storage_comparison() -> eyre::Result<()> {
     let validators = generate_validators_from_mnemonic(5)?;
     debug!("✅ Generated {} validators from mnemonic", validators.len());
     for (i, validator) in validators.iter().enumerate() {
-        debug!("   Validator {} key: {}", i, validator.validatorKey);
+        debug!(
+            "   Validator {} key: ({:#x}, {:#x})",
+            i, validator.validator_key.0, validator.validator_key.1
+        );
     }
 
     let expected_storage = generate_storage_data(validators.clone(), TEST_OWNER_ADDRESS)?;
@@ -93,7 +91,6 @@ async fn test_anvil_storage_comparison() -> eyre::Result<()> {
     );
 
     // Deploy contract and register validators on Anvil
-    let rpc_url = anvil.rpc_url().clone();
     let contract_address =
         deploy_and_register_validators(&validators, TEST_OWNER_ADDRESS, &rpc_url).await?;
     debug!(
@@ -163,95 +160,25 @@ async fn deploy_and_register_validators(
 
     let owner_contract = ValidatorManager::new(contract_address, deployer_provider.clone());
     for (i, validator) in validators.iter().enumerate() {
+        let info: ValidatorManager::ValidatorInfo = validator.clone().into();
         let pending_tx = owner_contract
-            .register(validator.validatorKey, validator.power)
+            .register(info.validatorKey, info.power)
             .send()
             .await?;
 
         let receipt = pending_tx.get_receipt().await?;
         if !receipt.status() {
             return Err(eyre::anyhow!(
-                "Failed to register validator {}: {:#x}",
+                "Failed to register validator {}: ({:#x}, {:#x})",
                 i,
-                validator.validatorKey
+                validator.validator_key.0,
+                validator.validator_key.1
             ));
         }
     }
 
+    let onchain_total_power = owner_contract.getTotalPower().call().await?;
+    debug!("✅ On-chain total power after registration: {onchain_total_power:?}",);
+
     Ok(contract_address)
-}
-
-struct AnvilInstance {
-    process: Child,
-    rpc_url: Url,
-    _work_dir: TempDir,
-}
-
-impl AnvilInstance {
-    fn rpc_url(&self) -> &Url {
-        &self.rpc_url
-    }
-}
-
-impl Drop for AnvilInstance {
-    fn drop(&mut self) {
-        if let Err(err) = self.process.kill() {
-            if err.kind() != ErrorKind::InvalidInput {
-                tracing::error!("warning: failed to kill anvil process: {err}");
-            }
-        }
-        let _ = self.process.wait();
-    }
-}
-
-async fn spawn_anvil() -> eyre::Result<AnvilInstance> {
-    let temp_dir = TempDir::new()?;
-    let port = reserve_port()?;
-
-    let mut command = Command::new("anvil");
-    command
-        .arg("--host")
-        .arg("127.0.0.1")
-        .arg("--port")
-        .arg(port.to_string())
-        .arg("--accounts")
-        .arg("200")
-        .arg("--quiet")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    command.current_dir(temp_dir.path());
-
-    let mut process = command.spawn()?;
-
-    let rpc_url = Url::parse(&format!("http://127.0.0.1:{port}"))?;
-    let provider = ProviderBuilder::new().on_http(rpc_url.clone());
-
-    // Wait for Anvil to accept connections
-    const MAX_ATTEMPTS: usize = 50;
-    for attempt in 0..MAX_ATTEMPTS {
-        match provider.get_block_number().await {
-            Ok(_) => {
-                return Ok(AnvilInstance {
-                    process,
-                    rpc_url,
-                    _work_dir: temp_dir,
-                })
-            }
-            Err(err) if attempt + 1 == MAX_ATTEMPTS => {
-                let _ = process.kill();
-                let _ = process.wait();
-                return Err(err.into());
-            }
-            Err(_) => sleep(Duration::from_millis(100)).await,
-        }
-    }
-
-    unreachable!("wait loop should return or error out")
-}
-
-fn reserve_port() -> eyre::Result<u16> {
-    let listener = TcpListener::bind(("127.0.0.1", 0))?;
-    let port = listener.local_addr()?.port();
-    drop(listener);
-    Ok(port)
 }

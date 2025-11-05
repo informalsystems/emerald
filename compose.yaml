@@ -1,18 +1,17 @@
+volumes:
+  reth0:
+  reth1:
+  reth2:
+  reth3:
+
 services:
   reth0:
+    network_mode: host
     image: ghcr.io/paradigmxyz/reth:v1.7.0
     container_name: reth0
     volumes:
-      - ./rethdata/0:/data/reth/execution-data
+      - reth0:/data
       - ./assets:/root/assets/
-    ports:
-      - "8545:8545"
-      - "8551:8551"
-      - "9100:9001"
-      - "30303:30303"
-      - "30303:30303/udp"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     command:
@@ -25,13 +24,14 @@ services:
       - "--http.port=8545"
       - "--http.addr=0.0.0.0"
       - "--http.corsdomain=*"
-      - "--http.api=admin,net,eth,web3,debug,txpool,trace"
+      - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
       - "--authrpc.addr=0.0.0.0"
       - "--authrpc.port=8551"
       - "--authrpc.jwtsecret=/root/assets/jwtsecret"
-      - "--metrics=0.0.0.0:9001"
+      - "--metrics=127.0.0.1:9000"
       - "--discovery.port=30303"
       - "--port=30303"
+      - "--nat=extip:127.0.0.1"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -41,19 +41,12 @@ services:
       # - "--txpool.pending-max-count=50000" # default=10000
       # - "--txpool.queued-max-count=50000" # default=10000
   reth1:
+    network_mode: host
     image: ghcr.io/paradigmxyz/reth:v1.7.0
     container_name: reth1
     volumes:
-      - ./rethdata/1:/data/reth/execution-data
+      - reth1:/data
       - ./assets:/root/assets/
-    ports:
-      - "18545:8545"
-      - "18551:8551"
-      - "9101:9001"
-      - "40303:40303"
-      - "40303:40303/udp"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     command:
@@ -63,16 +56,17 @@ services:
       - "--datadir=/data/reth/execution-data"
       - "--chain=/root/assets/genesis.json"
       - "--http"
-      - "--http.port=8545"
+      - "--http.port=18545"
       - "--http.addr=0.0.0.0"
       - "--http.corsdomain=*"
-      - "--http.api=admin,net,eth,web3,debug,txpool,trace"
+      - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
       - "--authrpc.addr=0.0.0.0"
-      - "--authrpc.port=8551"
+      - "--authrpc.port=18551"
       - "--authrpc.jwtsecret=/root/assets/jwtsecret"
-      - "--metrics=0.0.0.0:9001"
+      - "--metrics=127.0.0.1:9001"
       - "--discovery.port=40303"
       - "--port=40303"
+      - "--nat=extip:127.0.0.1"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -82,19 +76,12 @@ services:
       # - "--txpool.pending-max-count=50000" # default=10000
       # - "--txpool.queued-max-count=50000" # default=10000
   reth2:
+    network_mode: host
     image: ghcr.io/paradigmxyz/reth:v1.7.0
     container_name: reth2
     volumes:
-      - ./rethdata/2:/data/reth/execution-data
+      - reth2:/data
       - ./assets:/root/assets/
-    ports:
-      - "28545:8545"
-      - "28551:8551"
-      - "9102:9001"
-      - "50303:50303"
-      - "50303:50303/udp"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     command:
@@ -104,16 +91,52 @@ services:
       - "--datadir=/data/reth/execution-data"
       - "--chain=/root/assets/genesis.json"
       - "--http"
-      - "--http.port=8545"
+      - "--http.port=28545"
       - "--http.addr=0.0.0.0"
       - "--http.corsdomain=*"
-      - "--http.api=admin,net,eth,web3,debug,txpool,trace"
+      - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
       - "--authrpc.addr=0.0.0.0"
-      - "--authrpc.port=8551"
+      - "--authrpc.port=28551"
       - "--authrpc.jwtsecret=/root/assets/jwtsecret"
-      - "--metrics=0.0.0.0:9001"
+      - "--metrics=127.0.0.1:9002"
       - "--discovery.port=50303"
       - "--port=50303"
+      - "--nat=extip:127.0.0.1"
+      # - "--builder.gaslimit=3600000000" # default * 100
+      # - "--builder.interval=10ms"
+      # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
+      # - "--builder.max-tasks=10" # default=3
+      # - "--txpool.gas-limit=300000000" # default * 10
+      # - "--blobpool.pricebump=1"
+      # - "--txpool.pending-max-count=50000" # default=10000
+      # - "--txpool.queued-max-count=50000" # default=10000
+  reth3:
+    network_mode: host
+    image: ghcr.io/paradigmxyz/reth:v1.7.0
+    container_name: reth3
+    volumes:
+      - reth3:/data
+      - ./assets:/root/assets/
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    command:
+      - "node"
+      - "-vvvvv"
+      - "-d"
+      - "--datadir=/data/reth/execution-data"
+      - "--chain=/root/assets/genesis.json"
+      - "--http"
+      - "--http.port=38545"
+      - "--http.addr=0.0.0.0"
+      - "--http.corsdomain=*"
+      - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+      - "--authrpc.addr=0.0.0.0"
+      - "--authrpc.port=38551"
+      - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+      - "--metrics=127.0.0.1:9003"
+      - "--discovery.port=60303"
+      - "--port=60303"
+      - "--nat=extip:127.0.0.1"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -123,36 +146,15 @@ services:
       # - "--txpool.pending-max-count=50000" # default=10000
       # - "--txpool.queued-max-count=50000" # default=10000
   prometheus:
-    image: prom/prometheus
-    #image: prom/prometheus:v2.42.0 # Debian 12 seems to use a fairly old version of prometheus
-    ports:
-      - 127.0.0.1:9090:9090
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./monitoring/data-prometheus:/prometheus
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-  #    command:
-  #      - "--config.file=/etc/prometheus/prometheus.yml"
-  #      - "--storage.tsdb.path=/prometheus"
-  #      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
-  #      - "--web.console.templates=/usr/share/prometheus/consoles"
-  #      - "--no-storage.tsdb.wal-compression"
-  #      - "--storage.tsdb.retention.time=1y"
-  #      - "--storage.tsdb.no-lockfile"
+    network_mode: host
+    build:
+      dockerfile: Dockerfile.prometheus
+    user: "65534"
   grafana:
-    image: grafana/grafana-oss
-    # if you are running as root then set it to 0
-    # else find the right id with the id -u command
-    user: '501'
-    ports:
-      - 127.0.0.1:3000:3000
-    volumes:
-      - ./monitoring/data-grafana:/var/lib/grafana
-      - ./monitoring/config-grafana/provisioning:/etc/grafana/provisioning
-      - ./monitoring/config-grafana/grafana.ini:/etc/grafana/grafana.ini
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    network_mode: host
+    build:
+      dockerfile: Dockerfile.grafana
+    user: "501"
     environment:
       GF_LOG_LEVEL: info
       GF_ANALYTICS_ENABLED: false
@@ -168,3 +170,10 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: Editor
       GF_AUTH_BASIC_ENABLED: false
       GF_NEWS_NEWS_FEED_ENABLED: false
+  otterscan:
+    image: otterscan/otterscan:develop
+    depends_on:
+      - reth0
+    network_mode: host # frontend is at http://127.0.0.1:80
+    environment:
+      ERIGON_URL: "http://127.0.0.1:8545"

@@ -1,34 +1,34 @@
 [package]
-name = "malachitebft-eth-utils"
-version.workspace = true
-edition.workspace = true
-repository.workspace = true
-license.workspace = true
-rust-version.workspace = true
-publish.workspace = true
+name         = "malachitebft-eth-utils"
+version      = { workspace = true }
+edition      = { workspace = true }
+repository   = { workspace = true }
+license      = { workspace = true }
+rust-version = { workspace = true }
+publish      = { workspace = true }
 
 [lints]
 workspace = true
 
 [dependencies]
-rand = { workspace = true }
-color-eyre = { workspace = true }
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-serde_yaml = "0.9.33"
-tracing        = { workspace = true }
+rand               = { workspace = true }
+color-eyre         = { workspace = true }
+tokio              = { version = "1", features = [ "full" ] }
+serde              = { version = "1", features = [ "derive" ] }
+serde_json         = "1"
+serde_yaml         = "0.9.33"
+tracing            = { workspace = true }
 tracing-subscriber = { workspace = true }
-async-trait = "0.1"
-hex = "0.4"
-clap = { version = "4.5", features = ["derive"] }
-chrono = "0.4.41"
-k256 = "0.13"
-jsonwebtoken = "9"
-thiserror = "2.0.11"
-reqwest = { version = "0.12.2", default-features = false, features = ["blocking", "json", "stream", "rustls-tls", "native-tls-vendored"] }
+async-trait        = "0.1"
+hex                = "0.4"
+clap               = { version = "4.5", features = [ "derive" ] }
+chrono             = "0.4.41"
+k256               = { workspace = true }
+jsonwebtoken       = "9"
+thiserror          = "2.0.11"
+reqwest            = { version = "0.12.2", default-features = false, features = [ "blocking", "json", "stream", "rustls-tls", "native-tls-vendored" ] }
 
-ethereum_serde_utils = "0.8"
+ethereum_serde_utils   = "0.8"
 malachitebft-eth-types = { workspace = true }
 
 alloy-consensus        = { workspace = true }
@@ -43,15 +43,19 @@ alloy-sol-types        = { workspace = true }
 alloy-rpc-types-engine = { workspace = true }
 alloy-rpc-types-txpool = "0.11.1"
 alloy-signer           = "0.11.1"
-alloy-signer-local     = { version = "0.11.1", features = ["keystore", "mnemonic"]}
-alloy-transport-http   = { version = "0.11.1", features = ["jwt-auth"] }
+alloy-signer-local     = { version = "0.11.1", features = [ "keystore", "mnemonic" ] }
+alloy-transport-http   = { version = "0.11.1", features = [ "jwt-auth" ] }
+
+jsonrpsee-core        = { version = "0.25.0" }
+jsonrpsee-http-client = { version = "0.25.0" }
 
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.2.0" }
 
 [dev-dependencies]
 reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", tag = "v1.2.0" }
-alloy-eips = "0.11.1"
-alloy-provider = "0.11.1"
-ethers-signers = "2"
-tempfile = "3"
-alloy-contract = "0.11.1"
+alloy-eips            = "0.11.1"
+alloy-provider        = "0.11.1"
+alloy-signer-local    = "0.11.1"
+tempfile              = "3"
+alloy-contract        = "0.11.1"
+alloy-node-bindings   = "0.11.1"

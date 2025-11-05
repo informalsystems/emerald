@@ -308,6 +308,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "alloy-node-bindings"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81a3906afb50446392eb798dae4b918ba4ffcca47542efda7215776ddc8b5037"
+dependencies = [
+ "alloy-genesis",
+ "alloy-network",
+ "alloy-primitives 0.8.22",
+ "alloy-signer",
+ "alloy-signer-local",
+ "k256",
+ "rand 0.8.5",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "alloy-primitives"
 version = "0.8.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -556,8 +576,8 @@ dependencies = [
  "alloy-primitives 0.8.22",
  "alloy-signer",
  "async-trait",
- "coins-bip32 0.12.0",
- "coins-bip39 0.12.0",
+ "coins-bip32",
+ "coins-bip39",
  "eth-keystore",
  "k256",
  "rand 0.8.5",
@@ -954,6 +974,12 @@ dependencies = [
  "quote",
  "syn 2.0.99",
 ]
+
+[[package]]
+name = "asn1_der"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "155a5a185e42c6b77ac7b88a15143d930a9e9727a5b7b77eed417404ab15c247"
 
 [[package]]
 name = "async-channel"
@@ -1387,6 +1413,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "caches"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9988519e5f642c7ea3db4b6a31a50667ec61a26344e9c0bce3f8124931d8bb3f"
+dependencies = [
+ "bitvec",
+ "cfg-if",
+ "getrandom 0.2.15",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "cbor4ii"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1405,6 +1443,12 @@ dependencies = [
  "libc",
  "shlex",
 ]
+
+[[package]]
+name = "cesu8"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d43a04d8753f35258c91f8ec639f792891f748a1edbd759cf1dcea3382ad83c"
 
 [[package]]
 name = "cfg-if"
@@ -1510,48 +1554,16 @@ checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
 name = "coins-bip32"
-version = "0.8.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b6be4a5df2098cd811f3194f64ddb96c267606bffd9689ac7b0160097b01ad3"
-dependencies = [
- "bs58",
- "coins-core 0.8.7",
- "digest 0.10.7",
- "hmac",
- "k256",
- "serde",
- "sha2 0.10.8",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "coins-bip32"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2073678591747aed4000dd468b97b14d7007f7936851d3f2f01846899f5ebf08"
 dependencies = [
  "bs58",
- "coins-core 0.12.0",
+ "coins-core",
  "digest 0.10.7",
  "hmac",
  "k256",
  "serde",
- "sha2 0.10.8",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "coins-bip39"
-version = "0.8.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3db8fba409ce3dc04f7d804074039eb68b960b0829161f8e06c95fea3f122528"
-dependencies = [
- "bitvec",
- "coins-bip32 0.8.7",
- "hmac",
- "once_cell",
- "pbkdf2 0.12.2",
- "rand 0.8.5",
  "sha2 0.10.8",
  "thiserror 1.0.69",
 ]
@@ -1563,32 +1575,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74b169b26623ff17e9db37a539fe4f15342080df39f129ef7631df7683d6d9d4"
 dependencies = [
  "bitvec",
- "coins-bip32 0.12.0",
+ "coins-bip32",
  "hmac",
  "once_cell",
  "pbkdf2 0.12.2",
  "rand 0.8.5",
  "sha2 0.10.8",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "coins-core"
-version = "0.8.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5286a0843c21f8367f7be734f89df9b822e0321d8bcce8d6e735aadff7d74979"
-dependencies = [
- "base64 0.21.7",
- "bech32",
- "bs58",
- "digest 0.10.7",
- "generic-array",
- "hex",
- "ripemd",
- "serde",
- "serde_derive",
- "sha2 0.10.8",
- "sha3",
  "thiserror 1.0.69",
 ]
 
@@ -1643,6 +1635,16 @@ name = "colorchoice"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
+
+[[package]]
+name = "combine"
+version = "4.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
+dependencies = [
+ "bytes",
+ "memchr",
+]
 
 [[package]]
 name = "concurrent-queue"
@@ -1718,6 +1720,16 @@ name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91e195e091a93c46f7102ec7818a2aa394e1e1771c3ab4825963fa03e45afb8f"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+]
+
+[[package]]
+name = "core-foundation"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6"
 dependencies = [
  "core-foundation-sys",
  "libc",
@@ -2278,54 +2290,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ethabi"
-version = "18.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7413c5f74cc903ea37386a8965a936cbeb334bd270862fdece542c1b2dcbc898"
-dependencies = [
- "ethereum-types",
- "hex",
- "once_cell",
- "regex",
- "serde",
- "serde_json",
- "sha3",
- "thiserror 1.0.69",
- "uint 0.9.5",
-]
-
-[[package]]
-name = "ethbloom"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c22d4b5885b6aa2fe5e8b9329fb8d232bf739e434e6b87347c63bdd00c120f60"
-dependencies = [
- "crunchy",
- "fixed-hash",
- "impl-codec",
- "impl-rlp",
- "impl-serde",
- "scale-info",
- "tiny-keccak",
-]
-
-[[package]]
-name = "ethereum-types"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02d215cbf040552efcbe99a38372fe80ab9d00268e20012b79fcd0f073edd8ee"
-dependencies = [
- "ethbloom",
- "fixed-hash",
- "impl-codec",
- "impl-rlp",
- "impl-serde",
- "primitive-types",
- "scale-info",
- "uint 0.9.5",
-]
-
-[[package]]
 name = "ethereum_serde_utils"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2376,52 +2340,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.99",
-]
-
-[[package]]
-name = "ethers-core"
-version = "2.0.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82d80cc6ad30b14a48ab786523af33b37f28a8623fc06afd55324816ef18fb1f"
-dependencies = [
- "arrayvec",
- "bytes",
- "chrono",
- "const-hex",
- "elliptic-curve",
- "ethabi",
- "generic-array",
- "k256",
- "num_enum",
- "open-fastrlp",
- "rand 0.8.5",
- "rlp",
- "serde",
- "serde_json",
- "strum 0.26.3",
- "tempfile",
- "thiserror 1.0.69",
- "tiny-keccak",
- "unicode-xid",
-]
-
-[[package]]
-name = "ethers-signers"
-version = "2.0.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "228875491c782ad851773b652dd8ecac62cda8571d3bc32a5853644dd26766c2"
-dependencies = [
- "async-trait",
- "coins-bip32 0.8.7",
- "coins-bip39 0.8.7",
- "const-hex",
- "elliptic-curve",
- "eth-keystore",
- "ethers-core",
- "rand 0.8.5",
- "sha2 0.10.8",
- "thiserror 1.0.69",
- "tracing",
 ]
 
 [[package]]
@@ -3052,6 +2970,7 @@ dependencies = [
  "http",
  "hyper",
  "hyper-util",
+ "log",
  "rustls",
  "rustls-pki-types",
  "tokio",
@@ -3280,7 +3199,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdf9d64cfcf380606e64f9a0bcf493616b65331199f984151a6fa11a7b3cde38"
 dependencies = [
  "async-io",
- "core-foundation",
+ "core-foundation 0.9.4",
  "fnv",
  "futures",
  "if-addrs",
@@ -3324,24 +3243,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba6a270039626615617f3f36d15fc827041df3b78c439da2cadfa47455a77f2f"
 dependencies = [
  "parity-scale-codec",
-]
-
-[[package]]
-name = "impl-rlp"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f28220f89297a075ddc7245cd538076ee98b01f2a9c23a53a4f1105d5a322808"
-dependencies = [
- "rlp",
-]
-
-[[package]]
-name = "impl-serde"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebc88fc67028ae3db0c853baa36269d398d5f45b6982f95549ff5def78c935cd"
-dependencies = [
- "serde",
 ]
 
 [[package]]
@@ -3405,7 +3306,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-app"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "async-trait",
  "derive-where",
@@ -3418,6 +3319,7 @@ dependencies = [
  "informalsystems-malachitebft-metrics",
  "informalsystems-malachitebft-network",
  "informalsystems-malachitebft-peer",
+ "informalsystems-malachitebft-signing",
  "informalsystems-malachitebft-sync",
  "informalsystems-malachitebft-wal",
  "libp2p-identity",
@@ -3431,7 +3333,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-app-channel"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "bytes",
  "derive-where",
@@ -3440,6 +3342,7 @@ dependencies = [
  "informalsystems-malachitebft-config",
  "informalsystems-malachitebft-engine",
  "ractor",
+ "thiserror 2.0.12",
  "tokio",
  "tracing",
 ]
@@ -3447,7 +3350,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-codec"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "bytes",
 ]
@@ -3455,7 +3358,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-config"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "bytesize",
  "config",
@@ -3468,7 +3371,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-core-consensus"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "async-recursion",
  "derive-where",
@@ -3487,7 +3390,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-core-driver"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "derive-where",
  "informalsystems-malachitebft-core-state-machine",
@@ -3499,7 +3402,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-core-state-machine"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "derive-where",
  "displaydoc",
@@ -3509,19 +3412,20 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-core-types"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "async-trait",
  "bytes",
  "derive-where",
  "informalsystems-malachitebft-peer",
+ "serde",
  "thiserror 2.0.12",
 ]
 
 [[package]]
 name = "informalsystems-malachitebft-core-votekeeper"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "derive-where",
  "informalsystems-malachitebft-core-types",
@@ -3531,7 +3435,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-discovery"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "either",
  "eyre",
@@ -3546,7 +3450,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-engine"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "async-recursion",
  "async-trait",
@@ -3563,6 +3467,7 @@ dependencies = [
  "informalsystems-malachitebft-core-votekeeper",
  "informalsystems-malachitebft-metrics",
  "informalsystems-malachitebft-network",
+ "informalsystems-malachitebft-signing",
  "informalsystems-malachitebft-sync",
  "informalsystems-malachitebft-wal",
  "libp2p",
@@ -3575,7 +3480,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-metrics"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "informalsystems-malachitebft-core-state-machine",
  "prometheus-client",
@@ -3584,7 +3489,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-network"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "bytes",
  "either",
@@ -3606,7 +3511,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-peer"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "bs58",
  "multihash",
@@ -3616,7 +3521,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-proto"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "prost",
  "prost-types",
@@ -3624,9 +3529,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "informalsystems-malachitebft-signing"
+version = "0.6.0-pre"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
+dependencies = [
+ "async-trait",
+ "informalsystems-malachitebft-core-types",
+ "signature",
+]
+
+[[package]]
+name = "informalsystems-malachitebft-signing-ecdsa"
+version = "0.6.0-pre"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
+dependencies = [
+ "base64 0.22.1",
+ "informalsystems-malachitebft-core-types",
+ "k256",
+ "rand 0.8.5",
+ "serde",
+ "signature",
+]
+
+[[package]]
 name = "informalsystems-malachitebft-signing-ed25519"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "base64 0.22.1",
  "ed25519-consensus",
@@ -3639,7 +3567,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-sync"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3661,7 +3589,7 @@ dependencies = [
 [[package]]
 name = "informalsystems-malachitebft-wal"
 version = "0.6.0-pre"
-source = "git+https://github.com/informalsystems/malachite.git?rev=3f225bd581230820dc1a36ca5801f07a7720fc50#3f225bd581230820dc1a36ca5801f07a7720fc50"
+source = "git+https://github.com/informalsystems/malachite.git?rev=bcac2b2dbd369a6c29b9151fcd0889b133d7221a#bcac2b2dbd369a6c29b9151fcd0889b133d7221a"
 dependencies = [
  "advisory-lock",
  "bytes",
@@ -3747,6 +3675,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
+name = "jni"
+version = "0.21.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a87aa2bb7d2af34197c04845522473242e1aa17c12f4935d5856491a7fb8c97"
+dependencies = [
+ "cesu8",
+ "cfg-if",
+ "combine",
+ "jni-sys",
+ "log",
+ "thiserror 1.0.69",
+ "walkdir",
+ "windows-sys 0.45.0",
+]
+
+[[package]]
+name = "jni-sys"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8eaf4bc02d17cbdd7ff4c7438cafcdf7fb9a4613313ad11b4f8fefe7d3fa0130"
+
+[[package]]
 name = "jobserver"
 version = "0.1.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3763,6 +3713,63 @@ checksum = "1cfaf33c695fc6e08064efbc1f72ec937429614f25eef83af942d0e227c3a28f"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "jsonrpsee-core"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "693c93cbb7db25f4108ed121304b671a36002c2db67dff2ee4391a688c738547"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures-util",
+ "http",
+ "http-body",
+ "http-body-util",
+ "jsonrpsee-types",
+ "pin-project",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
+ "tower",
+ "tracing",
+]
+
+[[package]]
+name = "jsonrpsee-http-client"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6962d2bd295f75e97dd328891e58fce166894b974c1f7ce2e7597f02eeceb791"
+dependencies = [
+ "base64 0.22.1",
+ "http-body",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
+ "jsonrpsee-core",
+ "jsonrpsee-types",
+ "rustls",
+ "rustls-platform-verifier",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
+ "tower",
+ "url",
+]
+
+[[package]]
+name = "jsonrpsee-types"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66df7256371c45621b3b7d2fb23aea923d577616b9c0e9c0b950a6ea5c2be0ca"
+dependencies = [
+ "http",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -3992,9 +3999,11 @@ version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3104e13b51e4711ff5738caa1fb54467c8604c2e94d607e27745bcf709068774"
 dependencies = [
+ "asn1_der",
  "bs58",
  "ed25519-dalek",
  "hkdf",
+ "k256",
  "multihash",
  "p256",
  "quick-protobuf",
@@ -4230,7 +4239,7 @@ dependencies = [
  "rcgen",
  "ring",
  "rustls",
- "rustls-webpki 0.103.3",
+ "rustls-webpki",
  "thiserror 2.0.12",
  "x509-parser",
  "yasna",
@@ -4355,13 +4364,15 @@ dependencies = [
  "alloy-sol-types",
  "async-trait",
  "bytes",
+ "caches",
  "color-eyre",
  "derive-where",
- "ed25519-consensus",
  "ethereum_ssz",
  "hex",
  "informalsystems-malachitebft-app-channel",
  "informalsystems-malachitebft-proto",
+ "k256",
+ "libp2p-identity",
  "malachitebft-eth-cli",
  "malachitebft-eth-engine",
  "malachitebft-eth-types",
@@ -4393,8 +4404,8 @@ dependencies = [
  "informalsystems-malachitebft-config",
  "informalsystems-malachitebft-core-types",
  "informalsystems-malachitebft-metrics",
- "informalsystems-malachitebft-signing-ed25519",
  "itertools 0.14.0",
+ "malachitebft-eth-types",
  "rand 0.8.5",
  "serde",
  "serde_json",
@@ -4435,16 +4446,18 @@ version = "0.0.1"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives 0.8.22",
- "alloy-rpc-types-eth",
  "async-trait",
  "bytes",
  "hex",
+ "humantime-serde",
  "informalsystems-malachitebft-app",
  "informalsystems-malachitebft-codec",
  "informalsystems-malachitebft-config",
  "informalsystems-malachitebft-core-consensus",
  "informalsystems-malachitebft-core-types",
  "informalsystems-malachitebft-proto",
+ "informalsystems-malachitebft-signing",
+ "informalsystems-malachitebft-signing-ecdsa",
  "informalsystems-malachitebft-signing-ed25519",
  "informalsystems-malachitebft-sync",
  "prost",
@@ -4453,7 +4466,6 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_json",
- "sha3",
  "signature",
 ]
 
@@ -4466,6 +4478,7 @@ dependencies = [
  "alloy-eips",
  "alloy-genesis",
  "alloy-network",
+ "alloy-node-bindings",
  "alloy-primitives 0.8.22",
  "alloy-provider",
  "alloy-rlp",
@@ -4481,8 +4494,9 @@ dependencies = [
  "clap",
  "color-eyre",
  "ethereum_serde_utils 0.8.0",
- "ethers-signers",
  "hex",
+ "jsonrpsee-core",
+ "jsonrpsee-http-client",
  "jsonwebtoken",
  "k256",
  "malachitebft-eth-types",
@@ -4703,7 +4717,7 @@ dependencies = [
  "openssl-probe",
  "openssl-sys",
  "schannel",
- "security-framework",
+ "security-framework 2.11.1",
  "security-framework-sys",
  "tempfile",
 ]
@@ -4922,7 +4936,6 @@ version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af1844ef2428cc3e1cb900be36181049ef3d3193c63e43026cfe202983b27a56"
 dependencies = [
- "proc-macro-crate",
  "proc-macro2",
  "quote",
  "syn 2.0.99",
@@ -4990,31 +5003,6 @@ name = "opaque-debug"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
-
-[[package]]
-name = "open-fastrlp"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "786393f80485445794f6043fd3138854dd109cc6c4bd1a6383db304c9ce9b9ce"
-dependencies = [
- "arrayvec",
- "auto_impl",
- "bytes",
- "ethereum-types",
- "open-fastrlp-derive",
-]
-
-[[package]]
-name = "open-fastrlp-derive"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "003b2be5c6c53c1cfeb0a238b8a1c3915cd410feb684457a36c10038f764bb1c"
-dependencies = [
- "bytes",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
 
 [[package]]
 name = "openssl"
@@ -5363,9 +5351,6 @@ checksum = "0b34d9fd68ae0b74a41b21c03c2f62847aa0ffea044eee893b4c140b37e244e2"
 dependencies = [
  "fixed-hash",
  "impl-codec",
- "impl-rlp",
- "impl-serde",
- "scale-info",
  "uint 0.9.5",
 ]
 
@@ -6513,19 +6498,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb919243f34364b6bd2fc10ef797edbfa75f33c252e7998527479c6d6b47e1ec"
 dependencies = [
  "bytes",
- "rlp-derive",
  "rustc-hex",
-]
-
-[[package]]
-name = "rlp-derive"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e33d7b2abe0c340d8797fe2907d3f20d3b5ea5908683618bfe80df7f621f672a"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -6658,16 +6631,29 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.23"
+version = "0.23.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47796c98c480fce5406ef69d1c76378375492c3b0a0de587be0c1d9feb12f395"
+checksum = "7160e3e10bf4535308537f3c4e1641468cd0e485175d6163087c0393c7d46643"
 dependencies = [
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
- "rustls-webpki 0.102.8",
+ "rustls-webpki",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "rustls-native-certs"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9980d917ebb0c0536119ba501e90834767bffc3d60641457fd84a1f3fd337923"
+dependencies = [
+ "openssl-probe",
+ "rustls-pki-types",
+ "schannel",
+ "security-framework 3.5.1",
 ]
 
 [[package]]
@@ -6689,15 +6675,31 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustls-webpki"
-version = "0.102.8"
+name = "rustls-platform-verifier"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64ca1bc8749bd4cf37b5ce386cc146580777b4e8572c7b97baf22c83f444bee9"
+checksum = "19787cda76408ec5404443dc8b31795c87cd8fec49762dc75fa727740d34acc1"
 dependencies = [
- "ring",
- "rustls-pki-types",
- "untrusted",
+ "core-foundation 0.10.1",
+ "core-foundation-sys",
+ "jni",
+ "log",
+ "once_cell",
+ "rustls",
+ "rustls-native-certs",
+ "rustls-platform-verifier-android",
+ "rustls-webpki",
+ "security-framework 3.5.1",
+ "security-framework-sys",
+ "webpki-root-certs 0.26.11",
+ "windows-sys 0.59.0",
 ]
+
+[[package]]
+name = "rustls-platform-verifier-android"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
 
 [[package]]
 name = "rustls-webpki"
@@ -6755,27 +6757,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "scale-info"
-version = "2.11.6"
+name = "same-file"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "346a3b32eba2640d17a9cb5927056b08f3de90f65b72fe09402c2ad07d684d0b"
+checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
- "cfg-if",
- "derive_more 1.0.0",
- "parity-scale-codec",
- "scale-info-derive",
-]
-
-[[package]]
-name = "scale-info-derive"
-version = "2.11.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6630024bf739e2179b91fb424b28898baf819414262c5d376677dbff1fe7ebf"
-dependencies = [
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "syn 2.0.99",
+ "winapi-util",
 ]
 
 [[package]]
@@ -6870,7 +6857,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "897b2245f0b511c87893af39b033e5ca9cce68824c4d7e7630b5a1d339658d02"
 dependencies = [
  "bitflags 2.9.0",
- "core-foundation",
+ "core-foundation 0.9.4",
+ "core-foundation-sys",
+ "libc",
+ "security-framework-sys",
+]
+
+[[package]]
+name = "security-framework"
+version = "3.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3297343eaf830f66ede390ea39da1d462b6b0c1b000f420d0a83f898bbbe6ef"
+dependencies = [
+ "bitflags 2.9.0",
+ "core-foundation 0.10.1",
  "core-foundation-sys",
  "libc",
  "security-framework-sys",
@@ -6878,9 +6878,9 @@ dependencies = [
 
 [[package]]
 name = "security-framework-sys"
-version = "2.14.0"
+version = "2.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49db231d56a190491cb4aeda9527f1ad45345af50b0851622a7adb8c03b01c32"
+checksum = "cc1f0cbffaac4852523ce30d8bd3c5cdc873501d96ff467ca09b6767bb8cd5c0"
 dependencies = [
  "core-foundation-sys",
  "libc",
@@ -7349,7 +7349,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c879d448e9d986b661742763247d3693ed13609438cf3d006f51f5368a5ba6b"
 dependencies = [
  "bitflags 2.9.0",
- "core-foundation",
+ "core-foundation 0.9.4",
  "system-configuration-sys",
 ]
 
@@ -7965,6 +7965,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "walkdir"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
+dependencies = [
+ "same-file",
+ "winapi-util",
+]
+
+[[package]]
 name = "want"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8107,6 +8117,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "webpki-root-certs"
+version = "0.26.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75c7f0ef91146ebfb530314f5f1d24528d7f0767efbfd31dce919275413e393e"
+dependencies = [
+ "webpki-root-certs 1.0.3",
+]
+
+[[package]]
+name = "webpki-root-certs"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05d651ec480de84b762e7be71e6efa7461699c19d9e2c272c8d93455f567786e"
+dependencies = [
+ "rustls-pki-types",
+]
+
+[[package]]
 name = "webpki-roots"
 version = "0.26.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8136,6 +8164,15 @@ name = "winapi-i686-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
+
+[[package]]
+name = "winapi-util"
+version = "0.1.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
+dependencies = [
+ "windows-sys 0.59.0",
+]
 
 [[package]]
 name = "winapi-x86_64-pc-windows-gnu"
@@ -8308,6 +8345,15 @@ dependencies = [
 
 [[package]]
 name = "windows-sys"
+version = "0.45.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75283be5efb2831d37ea142365f009c02ec203cd29a3ebecbc093d52315b66d0"
+dependencies = [
+ "windows-targets 0.42.2",
+]
+
+[[package]]
+name = "windows-sys"
 version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "677d2418bec65e3338edb076e806bc1ec15693c5d0104683f2efe857f61056a9"
@@ -8331,6 +8377,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets 0.52.6",
+]
+
+[[package]]
+name = "windows-targets"
+version = "0.42.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e5180c00cd44c9b1c88adb3693291f1cd93605ded80c250a75d472756b4d071"
+dependencies = [
+ "windows_aarch64_gnullvm 0.42.2",
+ "windows_aarch64_msvc 0.42.2",
+ "windows_i686_gnu 0.42.2",
+ "windows_i686_msvc 0.42.2",
+ "windows_x86_64_gnu 0.42.2",
+ "windows_x86_64_gnullvm 0.42.2",
+ "windows_x86_64_msvc 0.42.2",
 ]
 
 [[package]]
@@ -8366,6 +8427,12 @@ dependencies = [
 
 [[package]]
 name = "windows_aarch64_gnullvm"
+version = "0.42.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "597a5118570b68bc08d8d59125332c54f1ba9d9adeedeef5b99b02ba2b0698f8"
+
+[[package]]
+name = "windows_aarch64_gnullvm"
 version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b38e32f0abccf9987a4e3079dfb67dcd799fb61361e53e2882c3cbaf0d905d8"
@@ -8378,6 +8445,12 @@ checksum = "32a4622180e7a0ec044bb555404c800bc9fd9ec262ec147edd5989ccd0c02cd3"
 
 [[package]]
 name = "windows_aarch64_msvc"
+version = "0.42.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e08e8864a60f06ef0d0ff4ba04124db8b0fb3be5776a5cd47641e942e58c4d43"
+
+[[package]]
+name = "windows_aarch64_msvc"
 version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc35310971f3b2dbbf3f0690a219f40e2d9afcf64f9ab7cc1be722937c26b4bc"
@@ -8387,6 +8460,12 @@ name = "windows_aarch64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09ec2a7bb152e2252b53fa7803150007879548bc709c039df7627cabbd05d469"
+
+[[package]]
+name = "windows_i686_gnu"
+version = "0.42.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c61d927d8da41da96a81f029489353e68739737d3beca43145c8afec9a31a84f"
 
 [[package]]
 name = "windows_i686_gnu"
@@ -8408,6 +8487,12 @@ checksum = "0eee52d38c090b3caa76c563b86c3a4bd71ef1a819287c19d586d7334ae8ed66"
 
 [[package]]
 name = "windows_i686_msvc"
+version = "0.42.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44d840b6ec649f480a41c8d80f9c65108b92d89345dd94027bfe06ac444d1060"
+
+[[package]]
+name = "windows_i686_msvc"
 version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f55c233f70c4b27f66c523580f78f1004e8b5a8b659e05a4eb49d4166cca406"
@@ -8417,6 +8502,12 @@ name = "windows_i686_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "240948bc05c5e7c6dabba28bf89d89ffce3e303022809e73deaefe4f6ec56c66"
+
+[[package]]
+name = "windows_x86_64_gnu"
+version = "0.42.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8de912b8b8feb55c064867cf047dda097f92d51efad5b491dfb98f6bbb70cb36"
 
 [[package]]
 name = "windows_x86_64_gnu"
@@ -8432,6 +8523,12 @@ checksum = "147a5c80aabfbf0c7d901cb5895d1de30ef2907eb21fbbab29ca94c5b08b1a78"
 
 [[package]]
 name = "windows_x86_64_gnullvm"
+version = "0.42.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26d41b46a36d453748aedef1486d5c7a85db22e56aff34643984ea85514e94a3"
+
+[[package]]
+name = "windows_x86_64_gnullvm"
 version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b7b52767868a23d5bab768e390dc5f5c55825b6d30b86c844ff2dc7414044cc"
@@ -8441,6 +8538,12 @@ name = "windows_x86_64_gnullvm"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24d5b23dc417412679681396f2b49f3de8c1473deb516bd34410872eff51ed0d"
+
+[[package]]
+name = "windows_x86_64_msvc"
+version = "0.42.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9aec5da331524158c6d1a4ac0ab1541149c0b9505fde06423b02f5ef0106b9f0"
 
 [[package]]
 name = "windows_x86_64_msvc"

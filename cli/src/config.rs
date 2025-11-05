@@ -1,13 +1,50 @@
-use color_eyre::eyre;
-use malachitebft_app::node::NodeConfig;
-use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+use color_eyre::eyre;
+use malachitebft_app::node::NodeConfig;
 pub use malachitebft_config::{
     BootstrapProtocol, ConsensusConfig, DiscoveryConfig, LoggingConfig, MempoolConfig,
     MempoolLoadConfig, MetricsConfig, P2pConfig, PubSubProtocol, RuntimeConfig, ScoringStrategy,
     Selector, TestConfig, TimeoutConfig, TransportProtocol, ValuePayload, ValueSyncConfig,
 };
+use malachitebft_eth_types::RetryConfig;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[derive(Default)]
+pub enum ElNodeType {
+    /// No pruning - keeps all historical data
+    #[default]
+    Archive,
+    /// Standard pruning - keeps recent data based on distance
+    Full,
+    /// Custom pruning configuration
+    Custom,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MalakethConfig {
+    /// A custom human-readable name for this node
+    pub moniker: String,
+
+    /// RPC endpoint of Ethereum execution client
+    pub execution_authrpc_address: String,
+
+    /// RPC endpoint of Ethereum Engine API
+    pub engine_authrpc_address: String,
+
+    /// Path of the JWT token file
+    pub jwt_token_path: String,
+
+    /// Retry configuration for execution client sync operations
+    #[serde(default)]
+    pub retry_config: RetryConfig,
+
+    /// Type of execution layer node (archive, full, or custom)
+    #[serde(default)]
+    pub el_node_type: ElNodeType,
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Config {
@@ -45,8 +82,16 @@ impl NodeConfig for Config {
         &self.consensus
     }
 
+    fn consensus_mut(&mut self) -> &mut ConsensusConfig {
+        &mut self.consensus
+    }
+
     fn value_sync(&self) -> &ValueSyncConfig {
         &self.value_sync
+    }
+
+    fn value_sync_mut(&mut self) -> &mut ValueSyncConfig {
+        &mut self.value_sync
     }
 }
 
@@ -59,12 +104,4 @@ pub fn load_config(path: impl AsRef<Path>, prefix: Option<&str>) -> eyre::Result
         .build()?
         .try_deserialize()
         .map_err(Into::into)
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MalakethConfig {
-    pub moniker: String,
-    pub execution_authrpc_address: String,
-    pub engine_authrpc_address: String,
-    pub jwt_token_path: String,
 }

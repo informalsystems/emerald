@@ -1,0 +1,68 @@
+global:
+  scrape_interval: 1s
+scrape_configs:
+  - job_name: "reth0"
+    metrics_path: "/"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ['host.docker.internal:9100']
+        labels:
+          client_name: "reth"
+          client_type: "execution"
+  - job_name: "reth1"
+    metrics_path: "/"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ['host.docker.internal:9101']
+        labels:
+          client_name: "reth"
+          client_type: "execution"
+  - job_name: "reth2"
+    metrics_path: "/"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ['host.docker.internal:9102']
+        labels:
+          client_name: "reth"
+          client_type: "execution"
+  - job_name: "reth3"
+    metrics_path: "/"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ['host.docker.internal:9103']
+        labels:
+          client_name: "reth"
+          client_type: "execution"
+
+  - job_name: "malachite0"
+    metrics_path: "/metrics"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ['host.docker.internal:29000']
+        labels:
+          client_name: "malachite"
+          client_type: "consensus"
+  - job_name: "malachite1"
+    metrics_path: "/metrics"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ['host.docker.internal:29001']
+        labels:
+          client_name: "malachite"
+          client_type: "consensus"
+  - job_name: "malachite2"
+    metrics_path: "/metrics"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ['host.docker.internal:29002']
+        labels:
+          client_name: "malachite"
+          client_type: "consensus"
+  - job_name: "malachite3"
+    metrics_path: "/metrics"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ['host.docker.internal:29003']
+        labels:
+          client_name: "malachite"
+          client_type: "consensus"

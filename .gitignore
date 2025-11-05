@@ -14,8 +14,11 @@ example/out/
 example/broadcast/*/31337/
 example/broadcast/**/dry-run/
 assets
+.testnet
 
 # Docs and env
 example/docs/
 .env
 .example.env
+
+cache/

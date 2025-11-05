@@ -10,7 +10,6 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use directories::BaseDirs;
-
 use malachitebft_config::{LogFormat, LogLevel};
 
 use crate::cmd::distributed_testnet::DistributedTestnetCmd;
@@ -41,7 +40,7 @@ pub struct Args {
     #[arg(long, global = true, value_name = "LOG_FORMAT")]
     pub log_format: Option<LogFormat>,
 
-    /// Malaketch configuration file (default: `~/.malaketh/config/config.toml`)
+    /// Malaketh configuration file (default: `~/.malaketh/config/config.toml`)
     #[arg(long, global = true, value_name = "CONFIG_FILE")]
     pub config: Option<PathBuf>,
 
@@ -63,7 +62,7 @@ pub enum Commands {
     /// Generate distributed testnet configuration
     DistributedTestnet(DistributedTestnetCmd),
 
-    /// Extract Ed25519 public key from Tendermint private key file
+    /// Extract secp256k1 public key from a file containing a Secp256k1 private key
     ShowPubkey(ShowPubkeyCmd),
 }
 

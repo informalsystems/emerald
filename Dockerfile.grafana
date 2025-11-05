@@ -1,0 +1,14 @@
+# Start from the official Grafana image
+FROM grafana/grafana:latest
+USER root
+# Ensure all directories are owned by the Grafana user (UID 501)
+RUN chown -R 501:501 /var/lib/grafana /etc/grafana /var/log/grafana
+COPY --chown=501:501 ./monitoring/config-grafana/provisioning/dashboards /var/lib/grafana/dashboards/
+COPY --chown=501:501 ./monitoring/config-grafana/provisioning /etc/grafana/provisioning/
+
+# Switch to Grafana’s default UID
+USER 501
+
+# Keep the default Grafana entrypoint
+ENTRYPOINT ["/run.sh"]
+

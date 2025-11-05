@@ -15,8 +15,9 @@ while [[ "$#" -gt 0 ]]; do
         --nodes) NODES_COUNT="$2"; shift ;;
         --home) NODES_HOME="$2"; shift ;;
         --app) APP_BINARY="$2"; shift ;;
-        --no-reset) NO_RESET=1; shift ;;
-        --no-wait) NO_WAIT=1; shift ;;
+        --no-reset) NO_RESET=1 ;;
+        --no-delay) NO_DELAY=1 ;;
+        --no-wait) NO_WAIT=1 ;;
         *) echo "Unknown parameter passed: $1"; help; exit 1 ;;
     esac
     shift
@@ -38,31 +39,9 @@ if [[ -z "$APP_BINARY" ]]; then
 fi
 
 echo "Compiling '$APP_BINARY'..."
-cargo build -p $APP_BINARY
+cargo build --release -p $APP_BINARY
 
 export RUST_BACKTRACE=full
-
-# Create nodes and logs directories, run nodes
-for NODE in $(seq 0 $((NODES_COUNT - 1))); do
-    if [[ -z "$NO_RESET" ]]; then
-        echo "[Node $NODE] Resetting the database..."
-        rm -rf "$NODES_HOME/$NODE/db"
-        mkdir -p "$NODES_HOME/$NODE/db"
-        rm -rf "$NODES_HOME/$NODE/wal"
-        mkdir -p "$NODES_HOME/$NODE/wal"
-    fi
-
-    rm -rf "$NODES_HOME/$NODE/logs"
-    mkdir -p "$NODES_HOME/$NODE/logs"
-
-    rm -rf "$NODES_HOME/$NODE/traces"
-    mkdir -p "$NODES_HOME/$NODE/traces"
-
-    echo "[Node $NODE] Spawning node..."
-    cargo run --bin $APP_BINARY -q -- start --home "$NODES_HOME/$NODE" --config ".testnet/config/$NODE"/config.toml > "$NODES_HOME/$NODE/logs/node.log" 2>&1 &
-    echo $! > "$NODES_HOME/$NODE/node.pid"
-    echo "[Node $NODE] Logs are available at: $NODES_HOME/$NODE/logs/node.log"
-done
 
 # Function to handle cleanup on interrupt
 function exit_and_cleanup {
@@ -101,7 +80,7 @@ function wait_for_reth {
 function check_reth_progress {
     NODE_PORT=$1
     INITIAL_BLOCK=$(cast block-number --rpc-url 127.0.0.1:$NODE_PORT)
-    sleep 3
+    sleep 5
     NEW_BLOCK=$(cast block-number --rpc-url 127.0.0.1:$NODE_PORT)
     if [[ ! $INITIAL_BLOCK -lt $NEW_BLOCK ]]; then
         echo "No new blocks mined on node at port $NODE_PORT. Exiting with error."
@@ -111,11 +90,67 @@ function check_reth_progress {
     fi
 }
 
+# Function to spawn a node
+function spawn_node {
+    NODE=$1
+    if [[ -z "$NO_RESET" ]]; then
+        echo "[Node $NODE] Resetting the database..."
+        rm -rf "$NODES_HOME/$NODE/db"
+        mkdir -p "$NODES_HOME/$NODE/db"
+        rm -rf "$NODES_HOME/$NODE/wal"
+        mkdir -p "$NODES_HOME/$NODE/wal"
+    fi
+    rm -rf "$NODES_HOME/$NODE/logs"
+    mkdir -p "$NODES_HOME/$NODE/logs"
+    rm -rf "$NODES_HOME/$NODE/traces"
+    mkdir -p "$NODES_HOME/$NODE/traces"
+    echo "[Node $NODE] Spawning node..."
+    cargo run --bin $APP_BINARY -q -- start --home "$NODES_HOME/$NODE" --log-level info --config ".testnet/config/$NODE"/config.toml > "$NODES_HOME/$NODE/logs/node.log" 2>&1 &
+    echo $! > "$NODES_HOME/$NODE/node.pid"
+    echo "[Node $NODE] Logs are available at: $NODES_HOME/$NODE/logs/node.log"
+}
+
+# Spawn nodes based on delay setting
+if [[ -z "$NO_DELAY" ]]; then
+    # Spawn all nodes except the last one
+    for NODE in $(seq 0 $((NODES_COUNT - 2))); do
+        spawn_node $NODE
+    done
+    
+    # Wait for first node to reach height 10
+    NODE=$((NODES_COUNT - 1))
+    echo "[Node $NODE] Waiting for first node (port 8545) to reach height 100 before starting the last node..."
+    for i in $(seq 1 100); do
+        BLOCK_NUMBER=$(cast block-number --rpc-url 127.0.0.1:8545 2>/dev/null || echo "0")
+        if [[ $BLOCK_NUMBER -ge 100 ]]; then
+            echo "First node has reached height $BLOCK_NUMBER."
+            break
+        else
+            echo "Current block number: $BLOCK_NUMBER. Waiting... (attempt $i/100)"
+            sleep 2
+        fi
+    done
+    echo "[Node $NODE] 🛸 Starting the last node..."
+    
+    # Spawn the last node
+    spawn_node $NODE
+else
+    # Spawn all nodes at once
+    for NODE in $(seq 0 $((NODES_COUNT - 1))); do
+        spawn_node $NODE
+    done
+fi
+
 wait_for_reth 8545
 
 for NODE_PORT in 8545 18545 28545; do
     check_reth_progress $NODE_PORT || exit_and_cleanup 1
 done
+
+# Check progress for additional node only if 4 nodes and not in sync mode
+if [[ $NODES_COUNT -ge 4 ]] && [[ -n "$NO_DELAY" ]]; then
+    check_reth_progress 38545 || exit_and_cleanup 1
+fi
 
 # Trap the INT signal (Ctrl+C) to run the cleanup function
 trap exit_and_cleanup INT

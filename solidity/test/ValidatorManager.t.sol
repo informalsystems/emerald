@@ -280,6 +280,19 @@ contract ValidatorManagerTest is Test {
         assertEq(validatorManager.getValidatorCount(), 2);
     }
 
+    function testGetValidatorAddressesReturnsAllRegistered() public {
+        bytes memory alicePublicKey = ALICE_UNCOMPRESSED;
+        bytes memory bobPublicKey = BOB_COMPRESSED;
+        validatorManager.register(alicePublicKey, INITIAL_POWER);
+        validatorManager.register(bobPublicKey, SECOND_POWER);
+
+        address[] memory addresses = validatorManager.getValidatorAddresses();
+
+        assertEq(addresses.length, 2);
+        assertEq(addresses[0], aliceValidatorAddress);
+        assertEq(addresses[1], bobValidatorAddress);
+    }
+
     function testTransferOwnershipGivesControlToNewOwner() public {
         validatorManager.transferOwnership(NEW_OWNER);
         assertEq(validatorManager.owner(), NEW_OWNER);

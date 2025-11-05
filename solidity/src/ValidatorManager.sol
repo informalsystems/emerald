@@ -280,6 +280,22 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     }
 
     /**
+     * @dev Get the list of registered validator addresses.
+     * @return addresses Array containing each registered validator address.
+     */
+    function getValidatorAddresses() external view returns (address[] memory addresses) {
+        uint256 length = _validatorAddresses.length();
+        addresses = new address[](length);
+
+        for (uint256 i = 0; i < length;) {
+            addresses[i] = _validatorAddresses.at(i);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /**
      * @dev Get the total number of validators
      * @return count The number of registered validators
      */

@@ -8,12 +8,6 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 contract ValidatorManagerTest is Test {
     ValidatorManager internal validatorManager;
 
-    uint256 internal constant ALICE_KEY_X = 0x8318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75;
-    uint256 internal constant ALICE_KEY_Y = 0x3547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5;
-    uint256 internal constant BOB_KEY_X = 0xba5734d8f7091719471e7f7ed6b9df170dc70cc661ca05e688601ad984f068b0;
-    uint256 internal constant BOB_KEY_Y = 0xd67351e5f06073092499336ab0839ef8a521afd334e53807205fa2f08eec74f4;
-    uint256 internal constant COFFEE_KEY_X = 0x9d9031e97dd78ff8c15aa86939de9b1e791066a0224e331bc962a2099a7b1f04;
-    uint256 internal constant COFFEE_KEY_Y = 0x64b8bbafe1535f2301c72c2cb3535b172da30b02686ab0393d348614f157fbdb;
     uint64 internal constant INITIAL_POWER = 100;
     uint64 internal constant UPDATED_POWER = 200;
     uint64 internal constant SECOND_POWER = 150;
@@ -25,20 +19,27 @@ contract ValidatorManagerTest is Test {
     uint256 internal constant DERIVED_PUBLIC_KEY_Y = 0x3547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5;
     uint256 internal constant DERIVED_PRIVATE_KEY = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
 
+    bytes constant ALICE_COMPRESSED = hex"038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75";
+    bytes constant BOB_COMPRESSED = hex"02ba5734d8f7091719471e7f7ed6b9df170dc70cc661ca05e688601ad984f068b0";
+    bytes constant COFFEE_UNCOMPRESSED =
+        hex"049d9031e97dd78ff8c15aa86939de9b1e791066a0224e331bc962a2099a7b1f0464b8bbafe1535f2301c72c2cb3535b172da30b02686ab0393d348614f157fbdb";
+    bytes constant ZERO_UNCOMPRESSED =
+        hex"0400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+
+    address internal aliceValidatorAddress;
+    address internal bobValidatorAddress;
+    address internal coffeeValidatorAddress;
+
     function aliceKey() internal pure returns (ValidatorManager.Secp256k1Key memory) {
-        return ValidatorManager.Secp256k1Key({x: ALICE_KEY_X, y: ALICE_KEY_Y});
+        return ValidatorManager._secp256k1KeyFromBytes(ALICE_COMPRESSED);
     }
 
     function bobKey() internal pure returns (ValidatorManager.Secp256k1Key memory) {
-        return ValidatorManager.Secp256k1Key({x: BOB_KEY_X, y: BOB_KEY_Y});
+        return ValidatorManager._secp256k1KeyFromBytes(BOB_COMPRESSED);
     }
 
     function coffeeKey() internal pure returns (ValidatorManager.Secp256k1Key memory) {
-        return ValidatorManager.Secp256k1Key({x: COFFEE_KEY_X, y: COFFEE_KEY_Y});
-    }
-
-    function zeroKey() internal pure returns (ValidatorManager.Secp256k1Key memory) {
-        return ValidatorManager.Secp256k1Key({x: 0, y: 0});
+        return ValidatorManager._secp256k1KeyFromBytes(COFFEE_UNCOMPRESSED);
     }
 
     function keysEqual(ValidatorManager.Secp256k1Key memory a, ValidatorManager.Secp256k1Key memory b)
@@ -56,6 +57,11 @@ contract ValidatorManagerTest is Test {
         require(keysEqual(actual, expected), "validator key mismatch");
     }
 
+    function validatorAddressFromKeyBytes(bytes memory publicKey) internal pure returns (address) {
+        ValidatorManager.Secp256k1Key memory validatorKey = ValidatorManager._secp256k1KeyFromBytes(publicKey);
+        return ValidatorManager._validatorAddress(validatorKey);
+    }
+
     event ValidatorRegistered(
         address indexed validatorAddress, ValidatorManager.Secp256k1Key validatorKey, uint64 power
     );
@@ -66,21 +72,15 @@ contract ValidatorManagerTest is Test {
 
     function setUp() public {
         validatorManager = new ValidatorManager();
-    }
-
-    function validatorAddressFromKey(ValidatorManager.Secp256k1Key memory key) internal pure returns (address) {
-        bytes32 hash = keccak256(abi.encodePacked(key.x, key.y));
-        return address(uint160(uint256(hash)));
-    }
-
-    function uncompressedPublicKey(ValidatorManager.Secp256k1Key memory key) internal pure returns (bytes memory) {
-        return abi.encodePacked(uint8(0x04), key.x, key.y);
+        aliceValidatorAddress = validatorAddressFromKeyBytes(ALICE_COMPRESSED);
+        bobValidatorAddress = validatorAddressFromKeyBytes(BOB_COMPRESSED);
+        coffeeValidatorAddress = validatorAddressFromKeyBytes(COFFEE_UNCOMPRESSED);
     }
 
     function testOwnerCanRegisterValidator() public {
-        bytes memory alicePublicKey = uncompressedPublicKey(aliceKey());
+        bytes memory alicePublicKey = ALICE_COMPRESSED;
         vm.expectEmit(true, false, false, true);
-        emit ValidatorRegistered(validatorAddressFromKey(aliceKey()), aliceKey(), INITIAL_POWER);
+        emit ValidatorRegistered(aliceValidatorAddress, aliceKey(), INITIAL_POWER);
 
         validatorManager.register(alicePublicKey, INITIAL_POWER);
 
@@ -97,10 +97,10 @@ contract ValidatorManagerTest is Test {
     }
 
     function testRegisterWithCompressedKey() public {
-        bytes memory compressed = abi.encodePacked(uint8(0x03), DERIVED_PUBLIC_KEY_X);
+        bytes memory compressed = ALICE_COMPRESSED;
 
         vm.expectEmit(true, false, false, true);
-        emit ValidatorRegistered(validatorAddressFromKey(mnemonicDerivedKey()), mnemonicDerivedKey(), INITIAL_POWER);
+        emit ValidatorRegistered(aliceValidatorAddress, mnemonicDerivedKey(), INITIAL_POWER);
 
         validatorManager.register(compressed, INITIAL_POWER);
 
@@ -111,16 +111,16 @@ contract ValidatorManagerTest is Test {
 
     function testOwnerCanRegisterSetOfValidators() public {
         vm.expectEmit(true, false, false, true);
-        emit ValidatorRegistered(validatorAddressFromKey(aliceKey()), aliceKey(), INITIAL_POWER);
+        emit ValidatorRegistered(aliceValidatorAddress, aliceKey(), INITIAL_POWER);
 
         vm.expectEmit(true, false, false, true);
-        emit ValidatorRegistered(validatorAddressFromKey(bobKey()), bobKey(), SECOND_POWER);
+        emit ValidatorRegistered(bobValidatorAddress, bobKey(), SECOND_POWER);
 
-        ValidatorManager.ValidatorInfo[] memory addValidators = new ValidatorManager.ValidatorInfo[](2);
-        addValidators[0] = ValidatorManager.ValidatorInfo({validatorKey: aliceKey(), power: INITIAL_POWER});
-        addValidators[1] = ValidatorManager.ValidatorInfo({validatorKey: bobKey(), power: SECOND_POWER});
+        ValidatorManager.ValidatorRegistration[] memory registrations = new ValidatorManager.ValidatorRegistration[](2);
+        registrations[0] = ValidatorManager.ValidatorRegistration({publicKey: ALICE_COMPRESSED, power: INITIAL_POWER});
+        registrations[1] = ValidatorManager.ValidatorRegistration({publicKey: BOB_COMPRESSED, power: SECOND_POWER});
 
-        validatorManager.registerSet(addValidators);
+        validatorManager.registerSet(registrations);
 
         assertEq(validatorManager.getValidatorCount(), 2);
         assertEq(validatorManager.getTotalPower(), INITIAL_POWER + SECOND_POWER);
@@ -142,24 +142,24 @@ contract ValidatorManagerTest is Test {
     }
 
     function testNonOwnerCannotRegisterValidator() public {
-        bytes memory alicePublicKey = uncompressedPublicKey(aliceKey());
+        bytes memory alicePublicKey = ALICE_COMPRESSED;
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, NON_OWNER));
         vm.prank(NON_OWNER);
         validatorManager.register(alicePublicKey, INITIAL_POWER);
     }
 
     function testRegisterRejectsInvalidInputs() public {
-        bytes memory zeroPublicKey = uncompressedPublicKey(zeroKey());
+        bytes memory zeroPublicKey = ZERO_UNCOMPRESSED;
         vm.expectRevert(ValidatorManager.InvalidKey.selector);
         validatorManager.register(zeroPublicKey, INITIAL_POWER);
 
-        bytes memory alicePublicKey = uncompressedPublicKey(aliceKey());
+        bytes memory alicePublicKey = ALICE_COMPRESSED;
         vm.expectRevert(ValidatorManager.InvalidPower.selector);
         validatorManager.register(alicePublicKey, 0);
     }
 
     function testRegisterRejectsDuplicateKey() public {
-        bytes memory alicePublicKey = uncompressedPublicKey(aliceKey());
+        bytes memory alicePublicKey = ALICE_COMPRESSED;
         validatorManager.register(alicePublicKey, INITIAL_POWER);
 
         vm.expectRevert(ValidatorManager.ValidatorAlreadyExists.selector);
@@ -167,11 +167,11 @@ contract ValidatorManagerTest is Test {
     }
 
     function testOwnerCanUpdatePower() public {
-        bytes memory alicePublicKey = uncompressedPublicKey(aliceKey());
+        bytes memory alicePublicKey = ALICE_COMPRESSED;
         validatorManager.register(alicePublicKey, INITIAL_POWER);
 
         vm.expectEmit(true, false, false, true);
-        emit ValidatorPowerUpdated(validatorAddressFromKey(aliceKey()), aliceKey(), INITIAL_POWER, UPDATED_POWER);
+        emit ValidatorPowerUpdated(aliceValidatorAddress, aliceKey(), INITIAL_POWER, UPDATED_POWER);
 
         validatorManager.updatePower(aliceKey(), UPDATED_POWER);
 
@@ -181,7 +181,7 @@ contract ValidatorManagerTest is Test {
     }
 
     function testNonOwnerCannotUpdatePower() public {
-        bytes memory alicePublicKey = uncompressedPublicKey(aliceKey());
+        bytes memory alicePublicKey = ALICE_COMPRESSED;
         validatorManager.register(alicePublicKey, INITIAL_POWER);
 
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, NON_OWNER));
@@ -195,13 +195,13 @@ contract ValidatorManagerTest is Test {
     }
 
     function testOwnerCanUnregisterValidator() public {
-        bytes memory alicePublicKey = uncompressedPublicKey(aliceKey());
+        bytes memory alicePublicKey = ALICE_COMPRESSED;
         validatorManager.register(alicePublicKey, INITIAL_POWER);
 
         vm.expectEmit(true, false, false, true);
-        emit ValidatorUnregistered(validatorAddressFromKey(aliceKey()), aliceKey());
+        emit ValidatorUnregistered(aliceValidatorAddress, aliceKey());
 
-        validatorManager.unregister(validatorAddressFromKey(aliceKey()));
+        validatorManager.unregister(aliceValidatorAddress);
 
         vm.expectRevert(ValidatorManager.ValidatorDoesNotExist.selector);
         validatorManager.getValidator(aliceKey());
@@ -211,22 +211,22 @@ contract ValidatorManagerTest is Test {
     }
 
     function testOwnerCanUnregisterSetOfValidators() public {
-        bytes memory alicePublicKey = uncompressedPublicKey(aliceKey());
-        bytes memory bobPublicKey = uncompressedPublicKey(bobKey());
+        bytes memory alicePublicKey = ALICE_COMPRESSED;
+        bytes memory bobPublicKey = BOB_COMPRESSED;
         validatorManager.register(alicePublicKey, INITIAL_POWER);
         validatorManager.register(bobPublicKey, SECOND_POWER);
 
         vm.expectEmit(true, false, false, true);
-        emit ValidatorUnregistered(validatorAddressFromKey(aliceKey()), aliceKey());
+        emit ValidatorUnregistered(aliceValidatorAddress, aliceKey());
 
         vm.expectEmit(true, false, false, true);
-        emit ValidatorUnregistered(validatorAddressFromKey(bobKey()), bobKey());
+        emit ValidatorUnregistered(bobValidatorAddress, bobKey());
 
-        ValidatorManager.Secp256k1Key[] memory keys = new ValidatorManager.Secp256k1Key[](2);
-        keys[0] = aliceKey();
-        keys[1] = bobKey();
+        address[] memory addresses = new address[](2);
+        addresses[0] = aliceValidatorAddress;
+        addresses[1] = bobValidatorAddress;
 
-        validatorManager.unregisterSet(keys);
+        validatorManager.unregisterSet(addresses);
 
         assertEq(validatorManager.getValidatorCount(), 0);
         assertEq(validatorManager.getTotalPower(), 0);
@@ -241,19 +241,17 @@ contract ValidatorManagerTest is Test {
     }
 
     function testNonOwnerCannotUnregisterValidator() public {
-        bytes memory alicePublicKey = uncompressedPublicKey(aliceKey());
+        bytes memory alicePublicKey = ALICE_COMPRESSED;
         validatorManager.register(alicePublicKey, INITIAL_POWER);
 
-        address aliceAddress = validatorAddressFromKey(aliceKey());
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, NON_OWNER));
         vm.prank(NON_OWNER);
-        validatorManager.unregister(aliceAddress);
+        validatorManager.unregister(aliceValidatorAddress);
     }
 
     function testUnregisterRequiresExistingValidator() public {
-        address aliceAddress = validatorAddressFromKey(aliceKey());
         vm.expectRevert(ValidatorManager.ValidatorDoesNotExist.selector);
-        validatorManager.unregister(aliceAddress);
+        validatorManager.unregister(aliceValidatorAddress);
     }
 
     function testGetValidatorRevertsWhenMissing() public {
@@ -262,8 +260,8 @@ contract ValidatorManagerTest is Test {
     }
 
     function testGetValidatorsAggregatesAllEntries() public {
-        bytes memory alicePublicKey = uncompressedPublicKey(aliceKey());
-        bytes memory bobPublicKey = uncompressedPublicKey(bobKey());
+        bytes memory alicePublicKey = ALICE_COMPRESSED;
+        bytes memory bobPublicKey = BOB_COMPRESSED;
         validatorManager.register(alicePublicKey, INITIAL_POWER);
         validatorManager.register(bobPublicKey, SECOND_POWER);
 
@@ -297,13 +295,13 @@ contract ValidatorManagerTest is Test {
         vm.prank(NON_OWNER);
         validatorManager.transferOwnership(address(0xBAD));
 
-        bytes memory alicePublicKey = uncompressedPublicKey(aliceKey());
+        bytes memory alicePublicKey = ALICE_COMPRESSED;
         vm.expectEmit(true, false, false, true);
-        emit ValidatorRegistered(validatorAddressFromKey(aliceKey()), aliceKey(), INITIAL_POWER);
+        emit ValidatorRegistered(aliceValidatorAddress, aliceKey(), INITIAL_POWER);
         vm.prank(NEW_OWNER);
         validatorManager.register(alicePublicKey, INITIAL_POWER);
 
-        bytes memory bobPublicKey = uncompressedPublicKey(bobKey());
+        bytes memory bobPublicKey = BOB_COMPRESSED;
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(this)));
         validatorManager.register(bobPublicKey, SECOND_POWER);
     }
@@ -312,7 +310,7 @@ contract ValidatorManagerTest is Test {
         validatorManager.renounceOwnership();
         assertEq(validatorManager.owner(), address(0));
 
-        bytes memory alicePublicKey = uncompressedPublicKey(aliceKey());
+        bytes memory alicePublicKey = ALICE_COMPRESSED;
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(this)));
         validatorManager.register(alicePublicKey, INITIAL_POWER);
 
@@ -322,28 +320,29 @@ contract ValidatorManagerTest is Test {
     }
 
     function testOwnerCanAddAndRemoveValidators() public {
-        bytes memory alicePublicKey = uncompressedPublicKey(aliceKey());
-        bytes memory bobPublicKey = uncompressedPublicKey(bobKey());
+        bytes memory alicePublicKey = ALICE_COMPRESSED;
+        bytes memory bobPublicKey = BOB_COMPRESSED;
         validatorManager.register(alicePublicKey, INITIAL_POWER);
         validatorManager.register(bobPublicKey, SECOND_POWER);
 
         vm.expectEmit(true, false, false, true);
-        emit ValidatorRegistered(validatorAddressFromKey(coffeeKey()), coffeeKey(), THIRD_POWER);
+        emit ValidatorRegistered(coffeeValidatorAddress, coffeeKey(), THIRD_POWER);
 
         vm.expectEmit(true, false, false, true);
-        emit ValidatorUnregistered(validatorAddressFromKey(aliceKey()), aliceKey());
+        emit ValidatorUnregistered(aliceValidatorAddress, aliceKey());
 
         vm.expectEmit(true, false, false, true);
-        emit ValidatorUnregistered(validatorAddressFromKey(bobKey()), bobKey());
+        emit ValidatorUnregistered(bobValidatorAddress, bobKey());
 
-        ValidatorManager.ValidatorInfo[] memory addValidators = new ValidatorManager.ValidatorInfo[](1);
-        addValidators[0] = ValidatorManager.ValidatorInfo({validatorKey: coffeeKey(), power: THIRD_POWER});
+        ValidatorManager.ValidatorRegistration[] memory addRegistrations =
+            new ValidatorManager.ValidatorRegistration[](1);
+        addRegistrations[0] =
+            ValidatorManager.ValidatorRegistration({publicKey: COFFEE_UNCOMPRESSED, power: THIRD_POWER});
+        address[] memory removeAddresses = new address[](2);
+        removeAddresses[0] = aliceValidatorAddress;
+        removeAddresses[1] = bobValidatorAddress;
 
-        ValidatorManager.Secp256k1Key[] memory removeKeys = new ValidatorManager.Secp256k1Key[](2);
-        removeKeys[0] = aliceKey();
-        removeKeys[1] = bobKey();
-
-        validatorManager.addAndRemove(addValidators, removeKeys);
+        validatorManager.updateValidatorSet(addRegistrations, removeAddresses);
 
         assertEq(validatorManager.getValidatorCount(), 1);
         assertEq(validatorManager.getTotalPower(), THIRD_POWER);
@@ -370,9 +369,8 @@ contract ValidatorManagerTest is Test {
         return ValidatorManager.Secp256k1Key({x: DERIVED_PUBLIC_KEY_X, y: DERIVED_PUBLIC_KEY_Y});
     }
 
-    function testValidatorAddressMatchesDerivedFromPrivateKey() public pure {
-        address derived = validatorAddressFromKey(mnemonicDerivedKey());
-        address expected = vm.addr(DERIVED_PRIVATE_KEY);
-        assertEq(derived, expected);
+    function testValidatorAddressMatchesDerivedFromPrivateKey() public view {
+        address derived = vm.addr(DERIVED_PRIVATE_KEY);
+        assertEq(derived, aliceValidatorAddress);
     }
 }

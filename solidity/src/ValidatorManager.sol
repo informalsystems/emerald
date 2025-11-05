@@ -27,6 +27,11 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         uint64 power; // Voting power
     }
 
+    struct ValidatorRegistration {
+        bytes publicKey;
+        uint64 power;
+    }
+
     // State variables
     EnumerableSet.AddressSet private _validatorAddresses;
     mapping(address => ValidatorInfo) private _validators;
@@ -95,7 +100,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         view
         returns (address validatorAddress)
     {
-        validatorAddress = _validatorAddress(validatorKey);
+        validatorAddress = _validatorAddressInternal(validatorKey);
         if (!_validatorAddresses.contains(validatorAddress)) {
             revert ValidatorDoesNotExist();
         }
@@ -105,7 +110,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @dev Returns the validator address ensuring it does not exist yet.
      */
     function _validatedNewAddress(Secp256k1Key memory validatorKey) internal view returns (address validatorAddress) {
-        validatorAddress = _validatorAddress(validatorKey);
+        validatorAddress = _validatorAddressInternal(validatorKey);
         if (_validatorAddresses.contains(validatorAddress)) {
             revert ValidatorAlreadyExists();
         }
@@ -121,35 +126,35 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Batch register validators.
-     * @param addValidators Array of validator key identifiers and power to be added
-     * @param removeValidatorKeys Array of validator key identifiers to be removed
+     * @dev Batch update validators by adding new ones and removing existing ones.
+     * @param addValidators Array of validator registration payloads to add
+     * @param removeValidatorAddresses Array of validator addresses to remove
      */
-    function addAndRemove(ValidatorInfo[] memory addValidators, Secp256k1Key[] memory removeValidatorKeys)
-        external
-        nonReentrant
-        onlyOwner
-    {
+    function updateValidatorSet(
+        ValidatorRegistration[] calldata addValidators,
+        address[] calldata removeValidatorAddresses
+    ) external nonReentrant onlyOwner {
         _registerSet(addValidators);
-        _unregisterSet(removeValidatorKeys);
+        _unregisterAddresses(removeValidatorAddresses);
     }
 
     /**
      * @dev Batch register validators.
-     * @param addValidators Array of validator key identifiers and power to be added
+     * @param registrations Array of validator registration payloads
      */
-    function registerSet(ValidatorInfo[] memory addValidators) external nonReentrant onlyOwner {
-        _registerSet(addValidators);
+    function registerSet(ValidatorRegistration[] calldata registrations) external nonReentrant onlyOwner {
+        _registerSet(registrations);
     }
 
     /**
      * @dev Internal implementation of batch register validators
-     * @param addValidators Array of validator key identifiers and power to be added
+     * @param registrations Array of validator registration payloads
      */
-    function _registerSet(ValidatorInfo[] memory addValidators) internal {
-        uint256 length = addValidators.length;
+    function _registerSet(ValidatorRegistration[] calldata registrations) internal {
+        uint256 length = registrations.length;
         for (uint256 i = 0; i < length;) {
-            _register(addValidators[i]);
+            Secp256k1Key memory validatorKey = _secp256k1KeyFromBytesInternal(registrations[i].publicKey);
+            _register(ValidatorInfo({validatorKey: validatorKey, power: registrations[i].power}));
             unchecked {
                 ++i;
             }
@@ -163,7 +168,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @param power The voting power for the validator
      */
     function register(bytes calldata validatorPublicKey, uint64 power) external nonReentrant onlyOwner {
-        Secp256k1Key memory validatorKey = _secp256k1KeyFromBytes(validatorPublicKey);
+        Secp256k1Key memory validatorKey = _secp256k1KeyFromBytesInternal(validatorPublicKey);
         _register(ValidatorInfo({validatorKey: validatorKey, power: power}));
     }
 
@@ -185,24 +190,10 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
 
     /**
      * @dev Batch unregister validators.
-     * @param validatorKeys Array of validator key identifiers
+     * @param validatorAddresses Array of validator addresses
      */
-    function unregisterSet(Secp256k1Key[] memory validatorKeys) external nonReentrant onlyOwner {
-        _unregisterSet(validatorKeys);
-    }
-
-    /**
-     * @dev Internal implementation of batch unregister validators
-     * @param validatorKeys Array of validator key identifiers
-     */
-    function _unregisterSet(Secp256k1Key[] memory validatorKeys) internal {
-        uint256 length = validatorKeys.length;
-        for (uint256 i = 0; i < length;) {
-            _unregister(validatorKeys[i]);
-            unchecked {
-                ++i;
-            }
-        }
+    function unregisterSet(address[] calldata validatorAddresses) external nonReentrant onlyOwner {
+        _unregisterAddresses(validatorAddresses);
     }
 
     /**
@@ -210,18 +201,6 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      */
     function unregister(address validatorAddress) external nonReentrant onlyOwner {
         _unregisterByAddress(validatorAddress);
-    }
-
-    /**
-     * @dev Internal implementation to unregister a validator (only callable by the owner)
-     */
-    function _unregister(Secp256k1Key memory validatorKey) internal {
-        address validatorAddress = _validatedExistingAddress(validatorKey);
-
-        delete _validators[validatorAddress];
-        _validatorAddresses.remove(validatorAddress);
-
-        emit ValidatorUnregistered(validatorAddress, validatorKey);
     }
 
     /**
@@ -235,6 +214,19 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         _validatorAddresses.remove(validatorAddress);
 
         emit ValidatorUnregistered(validatorAddress, validator.validatorKey);
+    }
+
+    /**
+     * @dev Internal batch unregister by validator addresses.
+     */
+    function _unregisterAddresses(address[] calldata validatorAddresses) internal {
+        uint256 length = validatorAddresses.length;
+        for (uint256 i = 0; i < length;) {
+            _unregisterByAddress(validatorAddresses[i]);
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     /**
@@ -298,7 +290,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @return True if the key is a registered validator
      */
     function isValidator(Secp256k1Key memory validatorKey) external view returns (bool) {
-        return _validatorAddresses.contains(_validatorAddress(validatorKey));
+        return _validatorAddresses.contains(_validatorAddressInternal(validatorKey));
     }
 
     /**
@@ -342,7 +334,11 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     /**
      * @dev Computes the deterministic identifier for a validator key.
      */
-    function _validatorAddress(Secp256k1Key memory validatorKey) internal pure returns (address) {
+    function _validatorAddress(Secp256k1Key memory validatorKey) external pure returns (address) {
+        return _validatorAddressInternal(validatorKey);
+    }
+
+    function _validatorAddressInternal(Secp256k1Key memory validatorKey) internal pure returns (address) {
         bytes32 hash;
         assembly {
             let ptr := mload(0x40)
@@ -353,7 +349,15 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         return address(uint160(uint256(hash)));
     }
 
-    function _secp256k1KeyFromBytes(bytes calldata validatorPublicKey) internal view returns (Secp256k1Key memory) {
+    function _secp256k1KeyFromBytes(bytes calldata validatorPublicKey) external pure returns (Secp256k1Key memory) {
+        return _secp256k1KeyFromBytesInternal(validatorPublicKey);
+    }
+
+    function _secp256k1KeyFromBytesInternal(bytes calldata validatorPublicKey)
+        internal
+        pure
+        returns (Secp256k1Key memory)
+    {
         if (validatorPublicKey.length == 33) {
             uint8 prefix = uint8(validatorPublicKey[0]);
             if (prefix != 0x02 && prefix != 0x03) {

@@ -75,12 +75,16 @@ impl SpamCmd {
             blobs,
             signer_index,
         } = self;
-        // Parse URL directly - if no scheme is provided, default to http://
-        let url = if rpc_url.contains("://") {
-            rpc_url.parse()?
+        // check if url contains valid http/https scheme
+        let url = if rpc_url.starts_with("http://") || rpc_url.starts_with("https://") {
+            rpc_url.clone().parse::<url::Url>()?
         } else {
-            format!("http://{rpc_url}").parse()?
+            return Err(color_eyre::eyre::eyre!(
+                "Invalid RPC URL scheme. Please provide a valid http:// or https:// URL."
+            ));
         };
+
+        // Parse URL directly - if no scheme is provided, default to http://
         Spammer::new(url, *signer_index, *num_txs, *time, *rate, *blobs)?
             .run()
             .await

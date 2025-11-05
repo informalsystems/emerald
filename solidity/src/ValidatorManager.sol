@@ -54,7 +54,6 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     error InvalidPublicKeyLength();
     error InvalidPublicKeyFormat();
     error InvalidPublicKeyCoordinates();
-    error ModExpFailed();
 
     /**
      * @dev Modifier to check if power is valid (greater than 0)
@@ -249,13 +248,13 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Get validator information by key
-     * @param validatorKey The validator key
+     * @dev Get validator information by address
+     * @param validatorAddress The validator address derived from the key
      * @return info Complete validator info including key and power
-     * @dev Reverts with {ValidatorDoesNotExist} if the key is not registered
+     * @dev Reverts with {ValidatorDoesNotExist} if the address is not registered
      */
-    function getValidator(Secp256k1Key memory validatorKey) external view returns (ValidatorInfo memory info) {
-        address validatorAddress = _validatedExistingAddress(validatorKey);
+    function getValidator(address validatorAddress) external view returns (ValidatorInfo memory info) {
+        _requireValidatorAddressExists(validatorAddress);
         return _validators[validatorAddress];
     }
 
@@ -396,7 +395,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         }
     }
 
-    function _deriveYFromX(uint256 x, bool odd) internal view returns (uint256) {
+    function _deriveYFromX(uint256 x, bool odd) internal pure returns (uint256) {
         if (x >= SECP256K1_P) {
             revert InvalidPublicKeyCoordinates();
         }
@@ -417,23 +416,17 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         return y;
     }
 
-    function _modExp(uint256 base, uint256 exponent) internal view returns (uint256 result) {
+    function _modExp(uint256 base, uint256 exponent) internal pure returns (uint256 result) {
         uint256 modulus = SECP256K1_P;
-        bool success;
-        assembly {
-            let pointer := mload(0x40)
-            mstore(pointer, 0x20)
-            mstore(add(pointer, 0x20), 0x20)
-            mstore(add(pointer, 0x40), 0x20)
-            mstore(add(pointer, 0x60), base)
-            mstore(add(pointer, 0x80), exponent)
-            mstore(add(pointer, 0xa0), modulus)
-            success := staticcall(gas(), 0x05, pointer, 0xc0, pointer, 0x20)
-            result := mload(pointer)
-        }
-
-        if (!success) {
-            revert ModExpFailed();
+        result = 1;
+        uint256 x = base % modulus;
+        uint256 e = exponent;
+        while (e > 0) {
+            if (e & 1 == 1) {
+                result = mulmod(result, x, modulus);
+            }
+            x = mulmod(x, x, modulus);
+            e >>= 1;
         }
     }
 

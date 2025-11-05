@@ -21,7 +21,7 @@ pub struct InitCmd {
     pub overwrite: bool,
 
     /// Moniker for this node. If not provided and config doesn't exist, defaults to "node"
-    #[clap(long)]
+    #[clap(long, default_value = "node")]
     pub moniker: Option<String>,
 
     /// Enable peer discovery.

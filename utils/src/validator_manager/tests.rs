@@ -13,6 +13,14 @@ use tracing::debug;
 use super::{generate_storage_data, Validator};
 use crate::validator_manager::contract::ValidatorManager;
 
+fn encode_uncompressed_key(key: ValidatorManager::Secp256k1Key) -> Vec<u8> {
+    let mut out = Vec::with_capacity(65);
+    out.push(0x04);
+    out.extend_from_slice(&key.x.to_be_bytes::<32>());
+    out.extend_from_slice(&key.y.to_be_bytes::<32>());
+    out
+}
+
 /// Generate validators from "test test ... junk" mnemonic using sequential derivation paths.
 ///
 /// Each validator is derived from path `m/44'/60'/0'/0/{index}` and includes both
@@ -59,16 +67,9 @@ fn generate_validators_from_mnemonic(count: usize) -> eyre::Result<Vec<Validator
 ///
 /// This test attempts to deploy a ValidatorManager contract on a local Anvil node
 /// and compare the generated storage values with the actual contract storage.
-/// Currently disabled due to alloy v0.6 API changes requiring proper transaction
-/// construction for contract deployment.
-///
-/// To manually test:
-/// 1. Start Anvil: `anvil --host 0.0.0.0 --port 8545`
-/// 2. Run: `cargo test anvil_integration_tests::test_anvil_storage_comparison -- --ignored`
 #[tokio::test]
+#[test_log::test]
 async fn test_anvil_storage_comparison() -> eyre::Result<()> {
-    tracing_subscriber::fmt::init();
-
     let anvil = Anvil::new().spawn();
     let rpc_url: Url = anvil.endpoint().parse()?;
 
@@ -161,8 +162,9 @@ async fn deploy_and_register_validators(
     let owner_contract = ValidatorManager::new(contract_address, deployer_provider.clone());
     for (i, validator) in validators.iter().enumerate() {
         let info: ValidatorManager::ValidatorInfo = validator.clone().into();
+        let pubkey_bytes = encode_uncompressed_key(info.validatorKey);
         let pending_tx = owner_contract
-            .register(info.validatorKey, info.power)
+            .register(pubkey_bytes.into(), info.power)
             .send()
             .await?;
 

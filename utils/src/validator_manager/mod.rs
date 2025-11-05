@@ -17,7 +17,9 @@ pub use error::{Result, StorageError};
 pub use storage::StorageSlotCalculator;
 pub use types::{Validator, ValidatorKey, ValidatorSet};
 
-use crate::validator_manager::storage::{set_validator_entries_mapping, set_validator_keys_set};
+use crate::validator_manager::storage::{
+    set_validator_addresses_set, set_validator_entries_mapping,
+};
 
 /// Generate storage slots and values for a given validator list
 pub fn generate_storage_data(
@@ -63,9 +65,9 @@ pub fn generate_from_validator_set(
     // Storage layout for ValidatorManager contract:
     // Slot 0: Ownable._owner (set separately by deployment or genesis tooling)
     // Slot 1: ReentrancyGuard._status (set to 1)
-    // Slot 2: _validatorKeys._values (EnumerableSet internal storage)
-    // Slot 3: _validatorKeys._positions
-    // Slot 4: _validators mapping(bytes32 => ValidatorInfo)
+    // Slot 2: _validatorAddresses._values (EnumerableSet internal storage)
+    // Slot 3: _validatorAddresses._positions
+    // Slot 4: _validators mapping(address => ValidatorInfo)
 
     let mut storage = BTreeMap::new();
 
@@ -79,7 +81,7 @@ pub fn generate_from_validator_set(
         B256::from(U256::from(1u64).to_be_bytes::<32>()),
     );
 
-    set_validator_keys_set(&mut storage, validator_set, U256::from(2))?; // _validatorKeys base at slot 2
+    set_validator_addresses_set(&mut storage, validator_set, U256::from(2))?; // _validatorAddresses base at slot 2
     set_validator_entries_mapping(&mut storage, validator_set, U256::from(4))?; // _validators mapping at slot 4
 
     Ok(storage)

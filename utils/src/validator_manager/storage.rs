@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use alloy_primitives::{keccak256, B256, U256};
+use alloy_primitives::{keccak256, Address, B256, U256};
 
 use crate::validator_manager::error::Result;
 use crate::validator_manager::types::{ValidatorKey, ValidatorSet};
@@ -33,38 +33,39 @@ impl StorageSlotCalculator {
     }
 }
 
-/// Set up the EnumerableSet for validator keys
-pub(crate) fn set_validator_keys_set(
+/// Set up the EnumerableSet for validator addresses
+pub(crate) fn set_validator_addresses_set(
     storage: &mut BTreeMap<B256, B256>,
     validator_set: &ValidatorSet,
     base_slot: U256,
 ) -> Result<()> {
     let base_slot_b256 = B256::from(base_slot.to_be_bytes::<32>());
-    let validator_key_ids: Vec<B256> = validator_set
+    let validator_addresses: Vec<Address> = validator_set
         .validator_order
         .iter()
-        .map(validator_key_id)
+        .map(validator_address_from_key)
         .collect();
 
     // Slot stores the length of the dynamic array `_inner._values`
     let length_slot = StorageSlotCalculator::struct_field_slot(base_slot_b256, 0);
     storage.insert(
         length_slot,
-        B256::from(U256::from(validator_key_ids.len() as u64).to_be_bytes::<32>()),
+        B256::from(U256::from(validator_addresses.len() as u64).to_be_bytes::<32>()),
     );
 
     // `_inner._positions` mapping is located at slot + 1
     let positions_base_slot_b256 = StorageSlotCalculator::struct_field_slot(base_slot_b256, 1);
     let positions_base_slot = U256::from_be_slice(positions_base_slot_b256.as_slice());
 
-    for (index, key_id) in validator_key_ids.iter().enumerate() {
+    for (index, address) in validator_addresses.iter().enumerate() {
         // Write array element at base + index
         let element_slot =
             StorageSlotCalculator::array_element_slot(base_slot, U256::from(index as u64));
-        storage.insert(element_slot, *key_id);
+        storage.insert(element_slot, address.into_word());
 
         // Write mapping entry with 1-based index
-        let position_slot = StorageSlotCalculator::mapping_slot(*key_id, positions_base_slot);
+        let position_slot =
+            StorageSlotCalculator::mapping_slot(address.into_word(), positions_base_slot);
         storage.insert(
             position_slot,
             B256::from(U256::from((index as u64) + 1).to_be_bytes::<32>()),
@@ -81,8 +82,9 @@ pub(crate) fn set_validator_entries_mapping(
     base_slot: U256,
 ) -> Result<()> {
     for validator in validator_set.get_validators() {
-        let key_id = validator_key_id(&validator.validator_key);
-        let validator_slot = StorageSlotCalculator::mapping_slot(key_id, base_slot);
+        let address = validator_address_from_key(&validator.validator_key);
+        let address_word = address.into_word();
+        let validator_slot = StorageSlotCalculator::mapping_slot(address_word, base_slot);
 
         let mut slot_index = U256::from_be_slice(validator_slot.as_slice());
         let (x_limb, y_limb) = validator.validator_key;
@@ -107,9 +109,10 @@ pub(crate) fn set_validator_entries_mapping(
     Ok(())
 }
 
-fn validator_key_id(key: &ValidatorKey) -> B256 {
+fn validator_address_from_key(key: &ValidatorKey) -> Address {
     let mut raw = [0u8; 64];
     raw[..32].copy_from_slice(&key.0.to_be_bytes::<32>());
     raw[32..].copy_from_slice(&key.1.to_be_bytes::<32>());
-    B256::from(keccak256(raw))
+    let hash = keccak256(raw);
+    Address::from_slice(&hash[12..])
 }

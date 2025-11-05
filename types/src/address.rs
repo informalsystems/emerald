@@ -1,12 +1,11 @@
 use core::fmt;
 
-use alloy_primitives::{keccak256, Address as AlloyAddress};
-use k256::ecdsa::VerifyingKey;
+use alloy_primitives::Address as AlloyAddress;
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 use serde::{Deserialize, Serialize};
 
-use crate::proto;
 use crate::signing::secp256k1::PublicKey;
+use crate::{proto, Hashable};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -29,24 +28,8 @@ impl Address {
 
     #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn from_public_key(public_key: &PublicKey) -> Self {
-        // Ethereum address derivation requires uncompressed public key
-        // 1. Get public key bytes (compressed format from to_vec())
-        // 2. Parse as k256 VerifyingKey to get uncompressed format
-        // 3. Hash the uncompressed key (64 bytes without 0x04 prefix)
-        // 4. Take the last 20 bytes
-
-        let compressed_bytes = public_key.to_vec();
-
-        // Parse the compressed key and get uncompressed encoding
-        let verifying_key = VerifyingKey::from_sec1_bytes(&compressed_bytes)
-            .expect("PublicKey to_vec() should always return valid SEC1 bytes");
-
-        // Get uncompressed point (65 bytes: 0x04 || x || y)
-        let uncompressed_point = verifying_key.to_encoded_point(false);
-        let uncompressed_bytes = uncompressed_point.as_bytes();
-
-        // Hash the x,y coordinates (skip the 0x04 prefix)
-        let hash = keccak256(&uncompressed_bytes[1..]);
+        // Hash (keccak256) of the x and y coordinates of the public key
+        let hash = public_key.hash();
 
         // Take the last 20 bytes for Ethereum address
         let mut address = [0; Self::LENGTH];
@@ -115,5 +98,37 @@ impl Protobuf for Address {
 impl From<AlloyAddress> for Address {
     fn from(addr: AlloyAddress) -> Self {
         Self::new(addr.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy_primitives::{address, b256};
+
+    use super::*;
+    use crate::secp256k1::PrivateKey;
+
+    #[test]
+    fn test_ethereum_address_derivation_anvil_account() {
+        // Anvil test account #0
+        // Private key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+        // Expected address: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+
+        let private_key_bytes =
+            b256!("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
+        let expected_address = address!("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
+
+        // Create PrivateKey from bytes
+        let private_key = PrivateKey::from_slice(private_key_bytes.as_ref()).unwrap();
+        let public_key = private_key.public_key();
+
+        // Derive address
+        let derived_address = Address::from_public_key(&public_key);
+
+        assert_eq!(
+            derived_address.to_alloy_address(),
+            expected_address,
+            "Derived address doesn't match expected Anvil address",
+        );
     }
 }

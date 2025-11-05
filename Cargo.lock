@@ -4460,6 +4460,7 @@ dependencies = [
  "informalsystems-malachitebft-signing-ecdsa",
  "informalsystems-malachitebft-signing-ed25519",
  "informalsystems-malachitebft-sync",
+ "k256",
  "prost",
  "prost-build",
  "prost-types",

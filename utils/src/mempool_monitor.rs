@@ -1,10 +1,11 @@
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
 use alloy_rpc_types_txpool::TxpoolStatus;
 use color_eyre::eyre::Result;
 use reqwest::{Client, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::signal;
 use tokio::time::{interval, sleep};
 use tracing::{error, info, warn};

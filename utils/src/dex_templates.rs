@@ -1,8 +1,9 @@
+use std::fs;
+use std::path::Path;
+
 use alloy_primitives::{Address, Bytes, U256};
 use color_eyre::eyre::{eyre, Result};
 use serde::Deserialize;
-use std::fs;
-use std::path::Path;
 
 /// Root structure for deserializing transaction templates from YAML
 #[derive(Debug, Deserialize)]

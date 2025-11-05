@@ -2,9 +2,6 @@ use core::fmt;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::dex_templates::{RoundRobinSelector, TxTemplate};
-use crate::make_signers;
-use crate::tx::{make_signed_eip1559_tx, make_signed_eip4844_tx, make_signed_tx_from_template};
 use alloy_network::eip2718::Encodable2718;
 use alloy_primitives::Address;
 use alloy_rpc_types_txpool::TxpoolStatus;
@@ -19,6 +16,10 @@ use serde_json::json;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::time::{self, sleep, Duration, Instant};
 use tracing::debug;
+
+use crate::dex_templates::{RoundRobinSelector, TxTemplate};
+use crate::make_signers;
+use crate::tx::{make_signed_eip1559_tx, make_signed_eip4844_tx, make_signed_tx_from_template};
 
 /// A transaction spammer that sends Ethereum transactions at a controlled rate.
 /// Tracks and reports statistics on sent transactions.

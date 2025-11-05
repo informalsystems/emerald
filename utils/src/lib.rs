@@ -75,6 +75,7 @@ impl SpamCmd {
             blobs,
             signer_index,
         } = self;
+
         // check if url contains valid http/https scheme
         let url = if rpc_url.starts_with("http://") || rpc_url.starts_with("https://") {
             rpc_url.clone().parse::<url::Url>()?
@@ -84,7 +85,6 @@ impl SpamCmd {
             ));
         };
 
-        // Parse URL directly - if no scheme is provided, default to http://
         Spammer::new(url, *signer_index, *num_txs, *time, *rate, *blobs)?
             .run()
             .await

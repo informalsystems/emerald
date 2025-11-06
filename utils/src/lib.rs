@@ -102,15 +102,15 @@ pub struct SpamContractCmd {
     #[clap(long, default_value = "127.0.0.1:8545")]
     rpc_url: String,
     /// Number of transactions to send
-    #[clap(short, long, default_value = "0")]
+    #[clap(short, long, default_value_t = 0)]
     num_txs: u64,
     /// Rate of transactions per second
-    #[clap(short, long, default_value = "1000")]
+    #[clap(short, long, default_value_t = 1000)]
     rate: u64,
     /// Time to run the spammer for in seconds
-    #[clap(short, long, default_value = "0")]
+    #[clap(short, long, default_value_t = 0)]
     time: u64,
-    #[clap(long, default_value = "0")]
+    #[clap(long, default_value_t = 0)]
     signer_index: usize,
 }
 

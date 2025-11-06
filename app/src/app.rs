@@ -8,6 +8,7 @@ use malachitebft_app_channel::app::streaming::StreamContent;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
 use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
+use malachitebft_eth_cli::cmd::start;
 use malachitebft_eth_cli::config::MalakethConfig;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
@@ -159,6 +160,7 @@ pub async fn run(
                 // Get latest state from local store
                 let start_height_from_store = state.store.max_decided_value_height().await;
 
+                let mut start_height: Height = Height::default();
                 match start_height_from_store {
                     Some(s) => {
                         initialize_state_from_existing_block(state, &engine, s, &malaketh_config)
@@ -167,6 +169,11 @@ pub async fn run(
                             "Start height in state set to: {:?}; height in store is {s} ",
                             state.current_height
                         );
+                        start_height = state.current_height.increment();
+                        info!(
+                            "Start height in state set to: {:?}; height in store is {:?} ",
+                            start_height, state.current_height
+                        );
                     }
                     None => {
                         info!("Starting from genesis");
@@ -174,8 +181,10 @@ pub async fn run(
                         initialize_state_from_genesis(state, &engine).await?;
                     }
                 }
-                let start_height = state.current_height.increment();
 
+                if start_height == Height::new(1) {
+                    info!("start height {:?}", start_height);
+                }
                 // We can simply respond by telling the engine to start consensus
                 // at the current height, which is initially 1
                 if reply

@@ -44,6 +44,12 @@ pub struct MalakethConfig {
     /// Type of execution layer node (archive, full, or custom)
     #[serde(default)]
     pub el_node_type: ElNodeType,
+
+    // Number of blocks to retain. Default is retain all.
+    pub max_retain_blocks: u64,
+
+    // Try pruning every prune_at_interval_blocks
+    pub prune_at_block_interval: u64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

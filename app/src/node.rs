@@ -185,6 +185,9 @@ impl Node for App {
             metrics,
         };
 
+        let malaketh_config = self.load_malaketh_config()?;
+        let max_retain_blocks = malaketh_config.max_retain_blocks;
+
         let mut state = State::new(
             genesis,
             ctx,
@@ -193,9 +196,9 @@ impl Node for App {
             start_height,
             store,
             state_metrics,
+            max_retain_blocks,
+            malaketh_config.prune_at_block_interval,
         );
-
-        let malaketh_config = self.load_malaketh_config()?;
 
         let engine: Engine = {
             let engine_url = Url::parse(&malaketh_config.engine_authrpc_address)?;

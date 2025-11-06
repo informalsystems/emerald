@@ -392,7 +392,9 @@ impl Db {
         ValueId::new(u64::from_be_bytes(bytes))
     }
 
-    fn prune(&self, retain_height: Height) -> Result<(), StoreError> {
+    // All values except certificates can be retrieved from Reth (if the node has not been pruned)
+    // But if we prune certificates, other nodes will not be able to catchup.
+    fn prune(&self, retain_height: Height, prune_certificates: bool) -> Result<(), StoreError> {
         let start = Instant::now();
 
         let tx = self.db.begin_write().unwrap();
@@ -417,6 +419,12 @@ impl Db {
             // Remove all decided block data with height < retain_height
             let mut decided_block_data = tx.open_table(DECIDED_BLOCK_DATA_TABLE)?;
             decided_block_data.retain(|k, _| k >= retain_height)?;
+
+            if prune_certificates {
+                // We prune certificates only if pruning is set.
+                let mut certificate_data = tx.open_table(CERTIFICATES_TABLE)?;
+                certificate_data.retain(|k, _| k >= retain_height)?;
+            }
         }
 
         tx.commit()?;
@@ -806,9 +814,13 @@ impl Store {
 
     /// Prunes the store by removing all undecided proposals and decided values up to the retain height.
     /// Called by the application to clean up old data and free up space. This is done when a new value is committed.
-    pub async fn prune(&self, retain_height: Height) -> Result<(), StoreError> {
+    pub async fn prune(
+        &self,
+        retain_height: Height,
+        prune_certificates: bool,
+    ) -> Result<(), StoreError> {
         let db = Arc::clone(&self.db);
-        tokio::task::spawn_blocking(move || db.prune(retain_height)).await?
+        tokio::task::spawn_blocking(move || db.prune(retain_height, prune_certificates)).await?
     }
 
     pub async fn get_block_data(

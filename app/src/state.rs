@@ -100,6 +100,9 @@ pub struct State {
     pub chain_bytes: u64,
     pub start_time: Instant,
     pub metrics: Metrics,
+
+    pub max_retain_blocks: u64,
+    pub prune_at_block_interval: u64,
 }
 
 /// Represents errors that can occur during the verification of a proposal's signature.
@@ -171,6 +174,8 @@ impl State {
         height: Height,
         store: Store,
         state_metrics: StateMetrics,
+        max_retain_blocks: u64,
+        prune_at_interval: u64,
     ) -> Self {
         // Calculate start_time by subtracting elapsed_seconds from now.
         // It represents the start time of measuring metrics, not the actual node start time.
@@ -199,6 +204,8 @@ impl State {
             chain_bytes: state_metrics.chain_bytes,
             start_time,
             metrics: state_metrics.metrics,
+            max_retain_blocks: max_retain_blocks,
+            prune_at_block_interval: prune_at_interval,
         }
     }
 
@@ -543,8 +550,15 @@ impl State {
         }
 
         // Prune the store, keep the last 5 heights
-        let retain_height = Height::new(certificate.height.as_u64().saturating_sub(5));
-        self.store.prune(retain_height).await?;
+        let prune_certificates = self.max_retain_blocks == u64::MAX
+            && certificate.height.as_u64() % self.prune_at_block_interval == 0;
+        let retain_height = Height::new(
+            certificate
+                .height
+                .as_u64()
+                .saturating_sub(self.max_retain_blocks),
+        );
+        self.store.prune(retain_height, prune_certificates).await?;
 
         // Move to next height
         self.current_height = self.current_height.increment();

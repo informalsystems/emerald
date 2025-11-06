@@ -100,6 +100,10 @@ for ((i = 0; i < nodes; i++)); do
     fi
 done
 
+cp scripts/reth_pruned.toml assets/reth_pruned.toml
+
+PRUNING_NODES=(1 2)
+
 for ((i = 0; i < nodes; i++)); do
     mkdir -p "$TESTNET_DIR/config/$i"
     cat > "$TESTNET_DIR/config/$i/config.toml" <<EOF
@@ -110,5 +114,12 @@ jwt_token_path = "./assets/jwtsecret"
 sync_timeout_ms = 10000
 sync_initial_delay_ms = 100
 el_node_type = "archive"
+max_retain_blocks = 0
+prune_at_block_interval = 5
 EOF
+ # Set max_retain_blocks for pruning nodes
+      if [[ " ${PRUNING_NODES[@]} " =~ " ${i} " ]]; then
+          sed -i '' 's/max_retain_blocks = 0/max_retain_blocks = 10/' "$TESTNET_DIR/config/$i/config.toml"
+      fi
+
 done

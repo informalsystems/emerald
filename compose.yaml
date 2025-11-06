@@ -67,6 +67,7 @@ services:
       - "--discovery.port=40303"
       - "--port=40303"
       - "--nat=extip:127.0.0.1"
+      - "--config=assets/reth_pruned.toml"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -102,6 +103,7 @@ services:
       - "--discovery.port=50303"
       - "--port=50303"
       - "--nat=extip:127.0.0.1"
+      - "--config=assets/reth_pruned.toml"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -137,6 +139,7 @@ services:
       - "--discovery.port=60303"
       - "--port=60303"
       - "--nat=extip:127.0.0.1"
+      - "--config=assets/reth_pruned.toml"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve

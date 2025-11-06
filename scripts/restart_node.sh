@@ -13,6 +13,7 @@ APP_BINARY="malachitebft-eth-app"
 export RUST_BACKTRACE=full
 
 echo "[Node $NODE] Restarting node..."
+cargo build
 cargo run --bin $APP_BINARY -q -- start --home "$NODES_HOME/$NODE" --config ".testnet/config/$NODE/config.toml" > "$NODES_HOME/$NODE/logs/node.log" 2>&1 &
 echo $! > "$NODES_HOME/$NODE/node.pid"
 echo "[Node $NODE] Node restarted with PID $(cat $NODES_HOME/$NODE/node.pid)"

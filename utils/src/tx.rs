@@ -23,14 +23,18 @@ pub(crate) fn make_eip4844_tx(nonce: u64) -> Transaction {
     })
 }
 
+async fn sign_transaction(signer: &PrivateKeySigner, tx: Transaction) -> Result<TransactionSigned> {
+    let tx_sign_hash = tx.signature_hash();
+    let signature = signer.sign_hash(&tx_sign_hash).await?;
+    Ok(TransactionSigned::new_unhashed(tx, signature))
+}
+
 pub(crate) async fn make_signed_eip4844_tx(
     signer: &PrivateKeySigner,
     nonce: u64,
 ) -> Result<TransactionSigned> {
     let tx = make_eip4844_tx(nonce);
-    let tx_sign_hash = tx.signature_hash();
-    let signature = signer.sign_hash(&tx_sign_hash).await?;
-    Ok(TransactionSigned::new_unhashed(tx, signature))
+    sign_transaction(signer, tx).await
 }
 
 pub(crate) fn make_eip1559_tx(nonce: u64) -> Transaction {
@@ -52,9 +56,7 @@ pub(crate) async fn make_signed_eip1559_tx(
     nonce: u64,
 ) -> Result<TransactionSigned> {
     let tx = make_eip1559_tx(nonce);
-    let tx_sign_hash = tx.signature_hash();
-    let signature = signer.sign_hash(&tx_sign_hash).await?;
-    Ok(TransactionSigned::new_unhashed(tx, signature))
+    sign_transaction(signer, tx).await
 }
 
 pub(crate) fn make_contract_call_tx(
@@ -89,9 +91,7 @@ pub(crate) async fn make_signed_contract_call_tx(
     args: &str,
 ) -> Result<TransactionSigned> {
     let tx = make_contract_call_tx(nonce, contract_address, function_sig, args)?;
-    let tx_sign_hash = tx.signature_hash();
-    let signature = signer.sign_hash(&tx_sign_hash).await?;
-    Ok(TransactionSigned::new_unhashed(tx, signature))
+    sign_transaction(signer, tx).await
 }
 
 #[cfg(test)]

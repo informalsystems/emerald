@@ -96,7 +96,11 @@ impl MonitorMempoolCmd {
             poll_interval_ms,
         } = self;
 
-        let url = format!("http://{rpc_url}").parse()?;
+        let url = if rpc_url.starts_with("http://") || rpc_url.starts_with("https://") {
+            rpc_url.parse()?
+        } else {
+            format!("http://{rpc_url}").parse()?
+        };
         MempoolMonitor::new(url, *poll_interval_ms).run().await
     }
 }
@@ -112,7 +116,11 @@ impl SpamCmd {
             blobs,
             signer_index,
         } = self;
-        let url = format!("http://{rpc_url}").parse()?;
+        let url = if rpc_url.starts_with("http://") || rpc_url.starts_with("https://") {
+            rpc_url.parse()?
+        } else {
+            format!("http://{rpc_url}").parse()?
+        };
 
         // Load DEX templates if --dex flag is set
         let templates = if *dex {

@@ -20,7 +20,6 @@ use tracing::debug;
 use crate::make_signers;
 use crate::tx::{make_signed_contract_call_tx, make_signed_eip1559_tx, make_signed_eip4844_tx};
 
-#[derive(Clone)]
 struct ContractPayload {
     /// Contract address for contract call spamming.
     address: Address,

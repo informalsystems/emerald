@@ -24,10 +24,9 @@ echo "Done"
 CONTRACT_ADDR="$(
   jq -r '
     # emit any string field that looks like an address from either naming style
-    (.. | .contract_address? // empty),
-    (.. | .contractAddress? // empty)
-    | select(type=="string")
-    | select(test("^0x[0-9a-fA-F]{40}$"))
+    ..
+    | .contract_address? // .contractAddress? // empty
+    | select(type=="string" and test("^0x[0-9a-fA-F]{40}$"))
   ' deploy_output.json | head -n1
 )"
 

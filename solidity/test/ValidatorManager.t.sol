@@ -336,7 +336,7 @@ contract ValidatorManagerTest is Test {
         return ValidatorManager.Secp256k1Key({x: DERIVED_PUBLIC_KEY_X, y: DERIVED_PUBLIC_KEY_Y});
     }
 
-    function testValidatorKeyIdMatchesAddressDerivedFromPrivateKey() public {
+    function testValidatorKeyIdMatchesAddressDerivedFromPrivateKey() public view {
         bytes32 keyId = validatorManager.exposedValidatorKeyId(mnemonicDerivedKey());
         address derived = address(uint160(uint256(keyId)));
         address expected = vm.addr(DERIVED_PRIVATE_KEY);

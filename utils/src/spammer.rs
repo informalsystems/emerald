@@ -85,7 +85,7 @@ impl Spammer {
     ) -> Result<Self> {
         let signers = make_signers();
         let contract_payload = ContractPayload {
-            address: contract.clone(),
+            address: *contract,
             function_sig: function.to_string(),
             args: args.to_string(),
         };

@@ -1,8 +1,9 @@
 use alloy_consensus::{SignableTransaction, TxEip1559, TxEip4844};
-use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
+use alloy_dyn_abi::{DynSolType, JsonAbiExt};
+use alloy_json_abi::Function;
+use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
-use alloy_sol_types::{sol_data, SolType};
 use color_eyre::eyre::Result;
 use reth_primitives::{Transaction, TransactionSigned};
 
@@ -56,39 +57,16 @@ pub(crate) async fn make_signed_eip1559_tx(
     Ok(TransactionSigned::new_unhashed(tx, signature))
 }
 
-/// Create a function selector from a function signature
-fn create_function_selector(function_sig: &str) -> Result<[u8; 4]> {
-    let hash = keccak256(function_sig.as_bytes());
-    Ok([hash[0], hash[1], hash[2], hash[3]])
-}
-
-/// Encode contract call data (function selector + arguments)
-fn encode_call_data(function_sig: &str, args: &str) -> Result<Bytes> {
-    let selector = create_function_selector(function_sig)?;
-    let mut call_data = Vec::new();
-    call_data.extend_from_slice(&selector);
-
-    // If args provided, encode as uint256 (for setNumber)
-    if !args.is_empty() {
-        let value = if let Some(stripped) = args.strip_prefix("0x") {
-            U256::from_str_radix(stripped, 16)?
-        } else {
-            U256::from_str_radix(args, 10)?
-        };
-        let encoded = sol_data::Uint::<256>::abi_encode(&value);
-        call_data.extend_from_slice(&encoded);
-    }
-
-    Ok(Bytes::from(call_data))
-}
-
 pub(crate) fn make_contract_call_tx(
     nonce: u64,
     contract_address: Address,
     function_sig: &str,
     args: &str,
 ) -> Result<Transaction> {
-    let call_data = encode_call_data(function_sig, args)?;
+    let function = Function::parse(function_sig)?;
+    // single uint256 argument for simplicity
+    let coerced_value = DynSolType::Uint(256).coerce_str(args)?;
+    let call_data = function.abi_encode_input(&[coerced_value])?.into();
 
     Ok(Transaction::Eip1559(TxEip1559 {
         chain_id: 1u64,

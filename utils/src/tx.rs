@@ -68,7 +68,7 @@ pub(crate) fn make_contract_call_tx(
     let function = Function::parse(function_sig)?;
     // single uint256 argument for simplicity
     let coerced_value = DynSolType::Uint(256).coerce_str(args)?;
-    let call_data = function.abi_encode_input(&[coerced_value])?.into();
+    let call_data = function.abi_encode_input(&[coerced_value])?;
 
     Ok(Transaction::Eip1559(TxEip1559 {
         chain_id: 1u64,
@@ -78,7 +78,7 @@ pub(crate) fn make_contract_call_tx(
         gas_limit: 100_000,                      // Higher gas limit for contract calls
         to: contract_address.into(),
         value: U256::ZERO, // No ETH transfer
-        input: call_data,
+        input: call_data.into(),
         access_list: Default::default(),
     }))
 }

@@ -116,7 +116,7 @@ pub struct SpamContractCmd {
 
 impl SpamContractCmd {
     pub(crate) async fn run(&self) -> Result<()> {
-        let SpamContractCmd {
+        let Self {
             contract,
             function,
             args,

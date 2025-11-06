@@ -1,3 +1,4 @@
+use alloy_primitives::Address;
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::Result;
 use genesis::{generate_genesis, make_signers};
@@ -91,7 +92,7 @@ impl SpamCmd {
 pub struct SpamContractCmd {
     /// Contract address to spam
     #[clap(long)]
-    contract: String,
+    contract: Address,
     /// Function signature (e.g., "increment()" or "setNumber(uint256)")
     #[clap(long)]
     function: String,

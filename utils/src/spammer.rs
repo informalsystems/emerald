@@ -20,6 +20,16 @@ use tracing::debug;
 use crate::make_signers;
 use crate::tx::{make_signed_contract_call_tx, make_signed_eip1559_tx, make_signed_eip4844_tx};
 
+#[derive(Clone)]
+struct ContractPayload {
+    /// Contract address for contract call spamming.
+    address: Address,
+    /// Function signature for contract calls (e.g., "increment()").
+    function_sig: String,
+    /// Function arguments.
+    args: String,
+}
+
 /// A transaction spammer that sends Ethereum transactions at a controlled rate.
 /// Tracks and reports statistics on sent transactions.
 pub struct Spammer {
@@ -37,12 +47,8 @@ pub struct Spammer {
     max_rate: u64,
     /// Whether to send EIP-4844 blob transactions.
     blobs: bool,
-    /// Optional contract address for contract call spamming.
-    contract_address: Option<Address>,
-    /// Optional function signature for contract calls (e.g., "increment()").
-    function_sig: Option<String>,
-    /// Optional function arguments.
-    function_args: Option<String>,
+    /// Optional payload describing contract call spam parameters.
+    contract_payload: Option<ContractPayload>,
 }
 
 impl Spammer {
@@ -63,9 +69,7 @@ impl Spammer {
             max_time,
             max_rate,
             blobs,
-            contract_address: None,
-            function_sig: None,
-            function_args: None,
+            contract_payload: None,
         })
     }
 
@@ -76,12 +80,16 @@ impl Spammer {
         max_num_txs: u64,
         max_time: u64,
         max_rate: u64,
-        contract: &str,
+        contract: &Address,
         function: &str,
         args: &str,
     ) -> Result<Self> {
         let signers = make_signers();
-        let contract_address = contract.parse::<Address>()?;
+        let contract_payload = ContractPayload {
+            address: contract.clone(),
+            function_sig: function.to_string(),
+            args: args.to_string(),
+        };
         Ok(Self {
             id: signer_index.to_string(),
             client: RpcClient::new(url)?,
@@ -90,9 +98,7 @@ impl Spammer {
             max_time,
             max_rate,
             blobs: false, // Contract calls don't use blobs
-            contract_address: Some(contract_address),
-            function_sig: Some(function.to_string()),
-            function_args: Some(args.to_string()),
+            contract_payload: Some(contract_payload),
         })
     }
 
@@ -176,16 +182,14 @@ impl Spammer {
                 }
 
                 // Create one transaction and sign it.
-                let signed_tx = if let Some(ref contract_addr) = self.contract_address {
+                let signed_tx = if let Some(ref payload) = self.contract_payload {
                     // Contract call transaction
-                    let function_sig = self.function_sig.as_ref().unwrap();
-                    let function_args = self.function_args.as_ref().unwrap();
                     make_signed_contract_call_tx(
                         &self.signer,
                         nonce,
-                        *contract_addr,
-                        function_sig,
-                        function_args,
+                        payload.address,
+                        &payload.function_sig,
+                        &payload.args,
                     )
                     .await?
                 } else if self.blobs {

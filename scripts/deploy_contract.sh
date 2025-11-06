@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 set -x
 
 # --- Configuration ---
@@ -8,17 +9,15 @@ SCRIPT_PATH="solidity/script/Counter.s.sol:CounterScript"
 
 MNEMONIC="${MNEMONIC:-test test test test test test test test test test test junk}"
 PRIVATE_KEY="$(cast wallet derive-private-key --mnemonic "$MNEMONIC")"
-
-echo $PRIVATE_KEY
-
-ADDR=$(cast wallet address --private-key "$PRIVATE_KEY")
+ADDR="$(cast wallet address --private-key "$PRIVATE_KEY")"
 cast balance "$ADDR" --rpc-url "$RPC_URL"
+echo "Using deployer address: $ADDR"
 
 sleep 2
 
 # Deploy contract to an already running local node (e.g., another anvil)
 echo "==> Deploying Counter using forge..."
-forge script "$SCRIPT_PATH" --rpc-url "$RPC_URL" --broadcast --private-key $PRIVATE_KEY -vvvv --json > deploy_output.json
+forge script "$SCRIPT_PATH" --rpc-url "$RPC_URL" --broadcast --private-key "$PRIVATE_KEY" -vvvv --json > deploy_output.json
 echo "Done"
 
 # Extract the contract address
@@ -39,8 +38,6 @@ fi
 
 echo "✅ Deployed Counter at: $CONTRACT_ADDR"
 
-cast call $CONTRACT_ADDR "number()" --rpc-url $RPC_URL
-
-cast send $CONTRACT_ADDR "increment()" --rpc-url http://localhost:8545 --private-key $PRIVATE_KEY
-
-cast call $CONTRACT_ADDR "number()" --rpc-url $RPC_URL
+cast call "$CONTRACT_ADDR" "number()" --rpc-url "$RPC_URL"
+cast send "$CONTRACT_ADDR" "increment()" --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY"
+cast call "$CONTRACT_ADDR" "number()" --rpc-url "$RPC_URL"

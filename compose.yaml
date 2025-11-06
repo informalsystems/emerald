@@ -24,7 +24,7 @@ services:
       - "--http.port=8545"
       - "--http.addr=0.0.0.0"
       - "--http.corsdomain=*"
-      - "--http.api=admin,net,eth,web3,debug,txpool,trace"
+      - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
       - "--authrpc.addr=0.0.0.0"
       - "--authrpc.port=8551"
       - "--authrpc.jwtsecret=/root/assets/jwtsecret"
@@ -59,7 +59,7 @@ services:
       - "--http.port=18545"
       - "--http.addr=0.0.0.0"
       - "--http.corsdomain=*"
-      - "--http.api=admin,net,eth,web3,debug,txpool,trace"
+      - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
       - "--authrpc.addr=0.0.0.0"
       - "--authrpc.port=18551"
       - "--authrpc.jwtsecret=/root/assets/jwtsecret"
@@ -94,7 +94,7 @@ services:
       - "--http.port=28545"
       - "--http.addr=0.0.0.0"
       - "--http.corsdomain=*"
-      - "--http.api=admin,net,eth,web3,debug,txpool,trace"
+      - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
       - "--authrpc.addr=0.0.0.0"
       - "--authrpc.port=28551"
       - "--authrpc.jwtsecret=/root/assets/jwtsecret"
@@ -129,7 +129,7 @@ services:
       - "--http.port=38545"
       - "--http.addr=0.0.0.0"
       - "--http.corsdomain=*"
-      - "--http.api=admin,net,eth,web3,debug,txpool,trace"
+      - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
       - "--authrpc.addr=0.0.0.0"
       - "--authrpc.port=38551"
       - "--authrpc.jwtsecret=/root/assets/jwtsecret"
@@ -170,3 +170,10 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: Editor
       GF_AUTH_BASIC_ENABLED: false
       GF_NEWS_NEWS_FEED_ENABLED: false
+  otterscan:
+    image: otterscan/otterscan:develop
+    depends_on:
+      - reth0
+    network_mode: host # frontend is at http://127.0.0.1:80
+    environment:
+      ERIGON_URL: "http://127.0.0.1:8545"

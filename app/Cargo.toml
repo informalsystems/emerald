@@ -32,6 +32,7 @@ k256            = { workspace = true }
 hex          = { workspace = true }
 async-trait  = { workspace = true }
 bytes        = { workspace = true }
+caches       = "0.3"
 derive-where = { workspace = true }
 color-eyre   = { workspace = true }
 prost        = { workspace = true }

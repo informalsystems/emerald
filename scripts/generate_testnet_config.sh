@@ -89,6 +89,17 @@ for ((i = 0; i < nodes; i++)); do
     fi
 done
 
+printf 'monikers = [ ' >> "$TESTNET_DIR/testnet_config.toml"
+
+for ((i = 0; i < nodes; i++)); do
+    printf '"test-%d"' "$i" >> "$TESTNET_DIR/testnet_config.toml"
+    if (( i < nodes - 1 )); then
+        printf ', ' >> "$TESTNET_DIR/testnet_config.toml"
+    else
+        printf ' ]\n' >> "$TESTNET_DIR/testnet_config.toml"
+    fi
+done
+
 for ((i = 0; i < nodes; i++)); do
     mkdir -p "$TESTNET_DIR/config/$i"
     cat > "$TESTNET_DIR/config/$i/config.toml" <<EOF

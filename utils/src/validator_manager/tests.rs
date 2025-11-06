@@ -27,7 +27,7 @@ fn generate_validators_from_mnemonic(count: usize) -> eyre::Result<Vec<Validator
     let mut derived = Vec::with_capacity(count);
 
     for i in 0..count {
-        let derivation_path = format!("m/44'/60'/0'/0/{}", i);
+        let derivation_path = format!("m/44'/60'/0'/0/{i}");
         let wallet = MnemonicBuilder::<English>::default()
             .phrase(mnemonic)
             .derivation_path(&derivation_path)?
@@ -113,8 +113,7 @@ async fn test_anvil_storage_comparison() -> eyre::Result<()> {
         assert_eq!(
             actual_value,
             (*expected_value).into(),
-            "Storage mismatch at slot {}",
-            slot
+            "Storage mismatch at slot {slot}",
         );
     }
 

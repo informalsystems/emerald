@@ -1,6 +1,5 @@
 //! Init command
 
-use std::fs;
 use std::path::Path;
 
 use clap::Parser;
@@ -20,6 +19,10 @@ pub struct InitCmd {
     /// Overwrite existing configuration files
     #[clap(long)]
     pub overwrite: bool,
+
+    /// Moniker for this node. If not provided and config doesn't exist, defaults to "node"
+    #[clap(long, default_value = "node")]
+    pub moniker: Option<String>,
 
     /// Enable peer discovery.
     /// If enabled, the node will attempt to discover other nodes in the network
@@ -64,18 +67,15 @@ impl InitCmd {
         node: &N,
         config_file: &Path,
         genesis_file: &Path,
-        malaketh_config_file: &Path,
         priv_validator_key_file: &Path,
         logging: LoggingConfig,
     ) -> Result<(), Error>
     where
         N: Node + CanMakePrivateKeyFile + CanGeneratePrivateKey + CanMakeGenesis,
     {
-        let malaketh_config_content = fs::read_to_string(malaketh_config_file)
-            .map_err(|e| Error::LoadFile(malaketh_config_file.to_path_buf(), e))?;
-        let malaketh_config =
-            toml::from_str::<crate::config::MalakethConfig>(&malaketh_config_content)
-                .map_err(Error::FromTOML)?;
+        // Use `node` as default moniker if not provided
+        let moniker = self.moniker.clone().unwrap_or_else(|| "node".to_string());
+
         let config = &generate_config(
             0,
             1,
@@ -88,7 +88,7 @@ impl InitCmd {
             self.ephemeral_connection_timeout_ms,
             TransportProtocol::Tcp,
             logging,
-            malaketh_config,
+            moniker,
         );
 
         init(

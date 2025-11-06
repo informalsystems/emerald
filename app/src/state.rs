@@ -606,9 +606,9 @@ impl State {
         assert_eq!(round, self.current_round);
 
         // We create a new value.
-        let value = Value::new(data);
+        let value = Value::new(data.clone());
 
-        let proposal = ProposedValue {
+        let proposal: ProposedValue<MalakethContext> = ProposedValue {
             height,
             round,
             valid_round: Round::Nil,
@@ -616,6 +616,11 @@ impl State {
             value,
             validity: Validity::Valid, // Our proposals are de facto valid
         };
+        // Store the block data at the proposal's height/round,
+        // which will be passed to the execution client (EL) on commit.
+        // WARN: THE ORDER OF THE FOLLOWING TWO OPERATIONS IS IMPORTANT.
+        self.store_undecided_block_data(height, round, proposal.value.id(), data.clone())
+            .await?;
 
         // Insert the new proposal into the undecided proposals.
         self.store

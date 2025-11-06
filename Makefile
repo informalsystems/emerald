@@ -66,8 +66,8 @@ spam-contract:
 		echo "Example with args: make spam-contract CONTRACT=0x5FbDB... FUNCTION=\"setNumber(uint256)\" ARGS=\"12345\""; \
 		exit 1; \
 	fi; \
-	cargo run --bin malachitebft-eth-utils spam-contract \
-		--contract=$(CONTRACT) \
+	cargo run --release --bin malachitebft-eth-utils spam-contract \
+		--contract="$(CONTRACT)" \
 		--function="$(FUNCTION)" \
 		--args="$(ARGS)" \
 		--time=60 \

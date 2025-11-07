@@ -61,8 +61,8 @@ fi
 
 TESTNET_DIR="$testnet_config_dir"
 
-readonly ENGINE_PORTS=(8545 18545 28545 38545)
-readonly AUTH_PORTS=(8551 18551 28551 38551)
+readonly ENGINE_PORTS=(8545 8546 8547 8548)
+readonly AUTH_PORTS=(8551 8552 8553 8554)
 
 if (( nodes > ${#ENGINE_PORTS[@]} )); then
     echo "This script currently supports up to ${#ENGINE_PORTS[@]} nodes" >&2
@@ -106,8 +106,8 @@ for ((i = 0; i < nodes; i++)); do
 moniker = "test-$i"
 execution_authrpc_address = "http://localhost:${ENGINE_PORTS[i]}"
 engine_authrpc_address = "http://localhost:${AUTH_PORTS[i]}"
-jwt_token_path = "./assets/jwtsecret"
-sync_timeout_ms = 10000
+jwt_token_path = "/home/emerald/jwt"
+sync_timeout_ms = 1000000
 sync_initial_delay_ms = 100
 el_node_type = "archive"
 EOF

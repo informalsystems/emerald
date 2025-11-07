@@ -1,0 +1,51 @@
+services:
+  reth-node:
+    network_mode: host
+    image: ghcr.io/paradigmxyz/reth:v1.8.3
+    volumes:
+      - reth-data-${NODE_ID}:/data
+      - ./assets:/root/assets/
+    environment:
+      - NODE_ID=${NODE_ID:-1}
+      - HTTP_PORT=${HTTP_PORT:-8545}
+      - ENGINE_PORT=${ENGINE_PORT:-8551}
+      - P2P_PORT=${P2P_PORT:-30303}
+      - METRICS_PORT=${METRICS_PORT:-9000}
+    command: 
+      - "node"
+      - "-vvvvv"
+      - "-d"
+      - "--datadir=/data/reth/execution-data"
+      - "--chain=/root/assets/genesis.json"
+      - "--http"
+      - "--http.port=${HTTP_PORT:-8545}"
+      - "--http.addr=0.0.0.0"
+      - "--http.corsdomain=*"
+      - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+      - "--authrpc.addr=0.0.0.0"
+      - "--authrpc.port=${ENGINE_PORT:-8551}"
+      - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+      - "--metrics=0.0.0.0:${METRICS_PORT:-9000}"
+      - "--discovery.port=${P2P_PORT:-30303}"
+      - "--port=${P2P_PORT:-30303}"
+      - "--nat=extip:127.0.0.1"
+      - "--tx-propagation-mode=all"
+      - "--txpool.pending-max-count=50000"
+      - "--txpool.pending-max-size=500"
+      - "--txpool.queued-max-count=50000"
+      - "--txpool.queued-max-size=500"
+      - "--txpool.max-account-slots=50000"
+      - "--txpool.max-batch-size=10000"
+      - "--max-tx-reqs=10000"
+      - "--max-tx-reqs-peer=255"
+      - "--max-pending-imports=10000"
+
+volumes:
+  reth-data-0:
+  reth-data-1:
+  reth-data-2:
+  reth-data-3:
+  reth-data-4:
+  reth-data-5:
+  reth-data-6:
+  reth-data-7:

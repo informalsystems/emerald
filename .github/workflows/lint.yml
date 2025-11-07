@@ -38,7 +38,6 @@ jobs:
         with:
           toolchain: nightly
           components: rustfmt
-          cache-workspaces: "."
       - name: Check formatting
         uses: actions-rust-lang/rustfmt@v1
 
@@ -67,7 +66,6 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           components: clippy
-          cache-workspaces: "."
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run Forge build
@@ -91,7 +89,6 @@ jobs:
   #         # https://doc.rust-lang.org/beta/unstable-book/language-features/doc-cfg.html which allows an
   #         # API be documented as only available in some specific platforms.
   #         toolchain: nightly
-  #         cache-workspaces: "."
   #     - name: Install cargo-docs-rs
   #       uses: dtolnay/install@cargo-docs-rs
   #     - name: Generate documentation

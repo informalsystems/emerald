@@ -1,8 +1,8 @@
 //! Distributed testnet command
 
+use core::time::Duration;
 use std::fs;
 use std::path::Path;
-use std::time::Duration;
 
 use bytesize::ByteSize;
 use clap::Parser;
@@ -256,7 +256,7 @@ fn generate_distributed_config(
     let metrics_port = METRICS_BASE_PORT + (index / machines.len());
 
     Config {
-        moniker: malaketh_config.moniker.clone(),
+        moniker: malaketh_config.moniker,
         consensus: ConsensusConfig {
             timeouts: TimeoutConfig::default(),
             p2p: P2pConfig {

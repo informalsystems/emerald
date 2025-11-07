@@ -4,7 +4,7 @@ use alloy_primitives::U256;
 use thiserror::Error;
 
 /// Result type for storage operations
-pub type Result<T> = std::result::Result<T, StorageError>;
+pub type Result<T> = core::result::Result<T, StorageError>;
 
 /// Errors that can occur during storage data generation
 #[derive(Debug, Error)]

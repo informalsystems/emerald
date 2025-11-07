@@ -1,6 +1,6 @@
 #![allow(clippy::result_large_err)]
 
-use std::mem::size_of;
+use core::mem::size_of;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
@@ -69,28 +69,28 @@ pub enum StoreError {
     Serialization(#[from] serde_json::Error),
 }
 
-const CERTIFICATES_TABLE: redb::TableDefinition<HeightKey, Vec<u8>> =
+const CERTIFICATES_TABLE: redb::TableDefinition<'_, HeightKey, Vec<u8>> =
     redb::TableDefinition::new("certificates");
 
-const DECIDED_VALUES_TABLE: redb::TableDefinition<HeightKey, Vec<u8>> =
+const DECIDED_VALUES_TABLE: redb::TableDefinition<'_, HeightKey, Vec<u8>> =
     redb::TableDefinition::new("decided_values");
 
-const UNDECIDED_PROPOSALS_TABLE: redb::TableDefinition<UndecidedValueKey, Vec<u8>> =
+const UNDECIDED_PROPOSALS_TABLE: redb::TableDefinition<'_, UndecidedValueKey, Vec<u8>> =
     redb::TableDefinition::new("undecided_values");
 
-const DECIDED_BLOCK_DATA_TABLE: redb::TableDefinition<HeightKey, Vec<u8>> =
+const DECIDED_BLOCK_DATA_TABLE: redb::TableDefinition<'_, HeightKey, Vec<u8>> =
     redb::TableDefinition::new("decided_block_data");
 
-const UNDECIDED_BLOCK_DATA_TABLE: redb::TableDefinition<UndecidedValueKey, Vec<u8>> =
+const UNDECIDED_BLOCK_DATA_TABLE: redb::TableDefinition<'_, UndecidedValueKey, Vec<u8>> =
     redb::TableDefinition::new("undecided_block_data");
 
-const DECIDED_BLOCK_HEADERS_TABLE: redb::TableDefinition<HeightKey, Vec<u8>> =
+const DECIDED_BLOCK_HEADERS_TABLE: redb::TableDefinition<'_, HeightKey, Vec<u8>> =
     redb::TableDefinition::new("decided_block_headers");
 
-const PERSISTENT_METRICS_TABLE: redb::TableDefinition<&str, u64> =
+const PERSISTENT_METRICS_TABLE: redb::TableDefinition<'_, &str, u64> =
     redb::TableDefinition::new("persistent_metrics");
 
-const PENDING_PROPOSAL_PARTS_TABLE: redb::TableDefinition<PendingValueKey, Vec<u8>> =
+const PENDING_PROPOSAL_PARTS_TABLE: redb::TableDefinition<'_, PendingValueKey, Vec<u8>> =
     redb::TableDefinition::new("pending_proposal_parts");
 
 struct Db {

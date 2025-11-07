@@ -297,7 +297,7 @@ impl Stats {
 }
 
 impl fmt::Display for Stats {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let elapsed = self.start_time.elapsed().as_millis();
         let stats = format!(
             "[{}] elapsed {:.3}s: Sent {} txs ({} bytes)",

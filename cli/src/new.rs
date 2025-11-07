@@ -1,6 +1,6 @@
 //! key and configuration generation
 
-use std::time::Duration;
+use core::time::Duration;
 
 use itertools::Itertools;
 use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, Node};

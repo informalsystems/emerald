@@ -39,7 +39,7 @@ impl From<ValidatorManager::ValidatorInfo> for Validator {
 
 impl From<Validator> for ValidatorManager::ValidatorInfo {
     fn from(validator: Validator) -> Self {
-        ValidatorManager::ValidatorInfo {
+        Self {
             validatorKey: ValidatorManager::Secp256k1Key {
                 x: validator.validator_key.0,
                 y: validator.validator_key.1,

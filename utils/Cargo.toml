@@ -27,6 +27,8 @@ jsonwebtoken       = "9"
 thiserror          = "2.0.11"
 reqwest            = { version = "0.12.2", default-features = false, features = [ "blocking", "json", "stream", "rustls-tls", "native-tls-vendored" ] }
 
+alloy = { version = "0.6", features = [ "full" ] }
+
 ethereum_serde_utils   = "0.8"
 malachitebft-eth-types = { workspace = true }
 

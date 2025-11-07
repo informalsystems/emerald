@@ -55,3 +55,10 @@ jobs:
           docker compose up -d
           ./scripts/add_peers.sh
           bash scripts/spawn.bash --nodes 3 --home nodes --no-delay --no-wait
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: malaketh-test-logs
+          path: nodes/**/logs/*.log

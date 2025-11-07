@@ -134,6 +134,21 @@ contract ValidatorManagerTest is Test {
         assertKeyEq(validators[1].validatorKey, bobKey);
     }
 
+    function testRegisterRevertsOnTotalPowerOverflow() public {
+        validatorManager.register(ALICE_UNCOMPRESSED, type(uint64).max);
+
+        vm.expectRevert(ValidatorManager.TotalPowerOverflow.selector);
+        validatorManager.register(BOB_COMPRESSED, 1);
+    }
+
+    function testUpdatePowerRevertsOnTotalPowerOverflow() public {
+        validatorManager.register(ALICE_UNCOMPRESSED, type(uint64).max - 1);
+        validatorManager.register(BOB_COMPRESSED, 1);
+
+        vm.expectRevert(ValidatorManager.TotalPowerOverflow.selector);
+        validatorManager.updatePower(bobValidatorAddress, 2);
+    }
+
     function testNonOwnerCannotRegisterValidator() public {
         bytes memory alicePublicKey = ALICE_UNCOMPRESSED;
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, NON_OWNER));

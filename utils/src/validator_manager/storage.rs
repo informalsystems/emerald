@@ -41,7 +41,7 @@ pub(crate) fn set_validator_addresses_set(
 ) -> Result<()> {
     let base_slot_b256 = B256::from(base_slot.to_be_bytes::<32>());
     let validator_addresses: Vec<Address> = validator_set
-        .validator_order
+        .ordered_validator_keys()
         .iter()
         .map(validator_address_from_key)
         .collect();

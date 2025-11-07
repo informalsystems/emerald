@@ -37,6 +37,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     // State variables
     EnumerableSet.AddressSet private _validatorAddresses;
     mapping(address => ValidatorInfo) private _validators;
+    uint64 private _totalPower;
 
     constructor() Ownable(_msgSender()) {}
 
@@ -183,6 +184,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         validPower(validator.power)
     {
         address validatorAddress = _validatedNewAddress(validator.validatorKey);
+        _increaseTotalPower(validator.power);
         _validators[validatorAddress] = validator;
         _validatorAddresses.add(validatorAddress);
 
@@ -212,6 +214,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         _requireValidatorAddressExists(validatorAddress);
         ValidatorInfo memory validator = _validators[validatorAddress];
 
+        _decreaseTotalPower(validator.power);
         delete _validators[validatorAddress];
         _validatorAddresses.remove(validatorAddress);
 
@@ -245,6 +248,12 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         _requireValidatorAddressExists(validatorAddress);
         Secp256k1Key memory validatorKey = _validators[validatorAddress].validatorKey;
         uint64 oldPower = _validators[validatorAddress].power;
+
+        if (newPower > oldPower) {
+            _increaseTotalPower(newPower - oldPower);
+        } else if (oldPower > newPower) {
+            _decreaseTotalPower(oldPower - newPower);
+        }
 
         _validators[validatorAddress].power = newPower;
 
@@ -317,19 +326,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @return totalPower The sum of all validator powers
      */
     function getTotalPower() external view returns (uint64 totalPower) {
-        uint256 length = _validatorAddresses.length();
-        for (uint256 i = 0; i < length;) {
-            address validatorAddress = _validatorAddresses.at(i);
-            uint64 power = _validators[validatorAddress].power;
-            if (totalPower > type(uint64).max - power) {
-                revert TotalPowerOverflow();
-            }
-            totalPower += power;
-            unchecked {
-                ++i;
-            }
-        }
-        return totalPower;
+        return _totalPower;
     }
 
     /**
@@ -339,6 +336,22 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      */
     function _validatorAddress(Secp256k1Key memory validatorKey) external pure returns (address) {
         return _validatorAddressInternal(validatorKey);
+    }
+
+    function _increaseTotalPower(uint64 amount) internal {
+        if (amount > type(uint64).max - _totalPower) {
+            revert TotalPowerOverflow();
+        }
+        _totalPower += amount;
+    }
+
+    function _decreaseTotalPower(uint64 amount) internal {
+        if (amount > _totalPower) {
+            revert TotalPowerOverflow();
+        }
+        unchecked {
+            _totalPower -= amount;
+        }
     }
 
     function _validatorAddressInternal(Secp256k1Key memory validatorKey) internal pure returns (address) {

@@ -7,7 +7,7 @@ volumes:
 services:
   reth0:
     network_mode: host
-    image: ghcr.io/paradigmxyz/reth:v1.7.0
+    image: ghcr.io/paradigmxyz/reth:v1.9.1
     container_name: reth0
     volumes:
       - reth0:/data
@@ -42,7 +42,7 @@ services:
       # - "--txpool.queued-max-count=50000" # default=10000
   reth1:
     network_mode: host
-    image: ghcr.io/paradigmxyz/reth:v1.7.0
+    image: ghcr.io/paradigmxyz/reth:v1.9.1
     container_name: reth1
     volumes:
       - reth1:/data
@@ -63,11 +63,17 @@ services:
       - "--authrpc.addr=0.0.0.0"
       - "--authrpc.port=18551"
       - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+      - "--prune.receipts.distance=10064"
+      - "--prune.accounthistory.distance=10064"
+      - "--prune.storagehistory.distance=10064"
+      - "--prune.transactionlookup.distance=10064"
+      - "--prune.senderrecovery.distance=10064"
+      - "--prune.block-interval=5"
+      - "--prune.bodies.distance=10064"
       - "--metrics=127.0.0.1:9001"
       - "--discovery.port=40303"
       - "--port=40303"
       - "--nat=extip:127.0.0.1"
-      - "--config=assets/reth_pruned.toml"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -78,7 +84,7 @@ services:
       # - "--txpool.queued-max-count=50000" # default=10000
   reth2:
     network_mode: host
-    image: ghcr.io/paradigmxyz/reth:v1.7.0
+    image: ghcr.io/paradigmxyz/reth:v1.9.1
     container_name: reth2
     volumes:
       - reth2:/data
@@ -114,7 +120,7 @@ services:
       # - "--txpool.queued-max-count=50000" # default=10000
   reth3:
     network_mode: host
-    image: ghcr.io/paradigmxyz/reth:v1.7.0
+    image: ghcr.io/paradigmxyz/reth:v1.9.1
     container_name: reth3
     volumes:
       - reth3:/data

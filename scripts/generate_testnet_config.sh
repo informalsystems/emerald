@@ -102,7 +102,7 @@ done
 
 cp scripts/reth_pruned.toml assets/reth_pruned.toml
 
-PRUNING_NODES=(1 2)
+PRUNING_NODES=(1)
 
 for ((i = 0; i < nodes; i++)); do
     mkdir -p "$TESTNET_DIR/config/$i"
@@ -119,7 +119,7 @@ prune_at_block_interval = 5
 EOF
  # Set max_retain_blocks for pruning nodes
       if [[ " ${PRUNING_NODES[@]} " =~ " ${i} " ]]; then
-          sed -i '' 's/max_retain_blocks = 0/max_retain_blocks = 10/' "$TESTNET_DIR/config/$i/config.toml"
+          sed -i '' 's/max_retain_blocks = 0/max_retain_blocks = 10064/' "$TESTNET_DIR/config/$i/config.toml"
       fi
 
 done

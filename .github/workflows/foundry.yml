@@ -17,7 +17,7 @@ env:
 
 jobs:
   foundry-example:
-    name: Build and Test example Foundry project
+    name: Build and Test
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -54,6 +54,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     error InvalidPower();
     error InvalidKey();
     error TotalPowerOverflow();
+    error InvalidTotalPowerAccounting();
     error InvalidPublicKeyLength();
     error InvalidPublicKeyFormat();
     error InvalidPublicKeyCoordinates();
@@ -347,7 +348,7 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
 
     function _decreaseTotalPower(uint64 amount) internal {
         if (amount > _totalPower) {
-            revert TotalPowerOverflow();
+            revert InvalidTotalPowerAccounting();
         }
         unchecked {
             _totalPower -= amount;

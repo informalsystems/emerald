@@ -1,4 +1,4 @@
-name: Malaketh CI
+name: Malaketh
 
 on:
   merge_group:
@@ -25,8 +25,8 @@ env:
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
-  malaketh:
-    name: Malaketh Block Production
+  malaketh-block-production:
+    name: Block Production
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

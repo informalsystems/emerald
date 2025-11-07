@@ -26,7 +26,26 @@ lto             = "thin"
 overflow-checks = true
 
 [workspace.lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = [ 'cfg(coverage_nightly)' ] }
+unexpected_cfgs      = { level = "warn", check-cfg = [ 'cfg(coverage_nightly)' ] }
+unsafe_code          = "forbid"
+dead_code            = "deny"
+rust_2018_idioms     = { level = "deny", priority = -1 }
+trivial_casts        = "deny"
+unused_import_braces = "deny"
+
+[workspace.lints.clippy]
+debug_assert_with_mut_call    = "deny"
+doc_link_with_quotes          = "deny"
+inefficient_to_string         = "deny"
+map_flatten                   = "deny"
+manual_ok_or                  = "deny"
+match_same_arms               = "deny"
+semicolon_if_nothing_returned = "deny"
+uninlined_format_args         = "deny"
+trait_duplication_in_bounds   = "deny"
+use_self                      = "deny"
+redundant_clone               = "deny"
+std_instead_of_core           = "deny"
 
 [workspace.dependencies]
 malachitebft-eth-app    = { version = "0.0.1", path = "app" }

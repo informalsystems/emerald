@@ -1,3 +1,4 @@
+use alloy_primitives::Address;
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::Result;
 use genesis::{generate_genesis, make_signers};
@@ -26,6 +27,7 @@ impl Cli {
                 output,
             } => generate_genesis(public_keys_file, output),
             Commands::Spam(spam_cmd) => spam_cmd.run().await,
+            Commands::SpamContract(spam_contract_cmd) => spam_contract_cmd.run().await,
             Commands::MonitorMempool(monitor_cmd) => monitor_cmd.run().await,
         }
     }
@@ -45,6 +47,10 @@ pub enum Commands {
     /// Spam transactions
     #[command(arg_required_else_help = true)]
     Spam(SpamCmd),
+
+    /// Spam contract transactions
+    #[command(arg_required_else_help = true)]
+    SpamContract(SpamContractCmd),
 
     /// Monitor mempool and log when it becomes empty
     #[command(arg_required_else_help = true)]
@@ -128,7 +134,7 @@ impl SpamCmd {
             let config_path = template
                 .as_deref()
                 .unwrap_or("utils/examples/exchange_transactions.yaml");
-            println!("Loading DEX transaction templates from: {}", config_path);
+            println!("Loading DEX transaction templates from: {config_path}");
             Some(dex_templates::load_templates(config_path)?)
         } else if template.is_some() {
             // If template is specified but --dex is not set, warn the user
@@ -148,6 +154,61 @@ impl SpamCmd {
             *rate,
             *blobs,
             templates,
+        )?
+        .run()
+        .await
+    }
+}
+
+#[derive(Parser, Debug, Clone, PartialEq)]
+pub struct SpamContractCmd {
+    /// Contract address to spam
+    #[clap(long)]
+    contract: Address,
+    /// Function signature (e.g., "increment()" or "setNumber(uint256)")
+    #[clap(long)]
+    function: String,
+    /// Function arguments (supply multiple `--args` or a comma-separated list. e.g. "42" or "42,0x...")
+    #[clap(long, value_delimiter = ',', num_args = 0..)]
+    args: Vec<String>,
+    /// URL of the execution client's RPC endpoint
+    #[clap(long, default_value = "127.0.0.1:8545")]
+    rpc_url: String,
+    /// Number of transactions to send
+    #[clap(short, long, default_value_t = 0)]
+    num_txs: u64,
+    /// Rate of transactions per second
+    #[clap(short, long, default_value_t = 1000)]
+    rate: u64,
+    /// Time to run the spammer for in seconds
+    #[clap(short, long, default_value_t = 0)]
+    time: u64,
+    #[clap(long, default_value_t = 0)]
+    signer_index: usize,
+}
+
+impl SpamContractCmd {
+    pub(crate) async fn run(&self) -> Result<()> {
+        let Self {
+            contract,
+            function,
+            args,
+            rpc_url,
+            num_txs,
+            rate,
+            time,
+            signer_index,
+        } = self;
+        let url = format!("http://{rpc_url}").parse()?;
+        Spammer::new_contract(
+            url,
+            *signer_index,
+            *num_txs,
+            *time,
+            *rate,
+            contract,
+            function,
+            args,
         )?
         .run()
         .await

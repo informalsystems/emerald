@@ -22,3 +22,6 @@ example/docs/
 .example.env
 
 cache/
+
+# Solidity deployment artifacts
+deploy_output.json

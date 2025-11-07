@@ -39,7 +39,7 @@ impl MempoolMonitor {
                     let _ = shutdown_tx.send(()).await;
                 }
                 Err(e) => {
-                    eprintln!("Error setting up signal handler: {}", e);
+                    eprintln!("Error setting up signal handler: {e}");
                 }
             }
         });
@@ -66,9 +66,9 @@ impl MempoolMonitor {
                     if start_timestamp > 0 && end_timestamp > 0 {
                         let duration_ms = end_timestamp - start_timestamp;
                         eprintln!("\n=== Mempool Monitor Statistics ===");
-                        eprintln!("Mempool was full for: {} ms", duration_ms);
-                        eprintln!("Start timestamp: {}", start_timestamp);
-                        eprintln!("End timestamp: {}", end_timestamp);
+                        eprintln!("Mempool was full for: {duration_ms} ms");
+                        eprintln!("Start timestamp: {start_timestamp}");
+                        eprintln!("End timestamp: {end_timestamp}");
                         info!(
                             duration_ms = duration_ms,
                             start_timestamp = start_timestamp,
@@ -107,7 +107,7 @@ impl MempoolMonitor {
                                 // Mempool just became empty - record end_timestamp
                                 if start_timestamp > 0 && end_timestamp == 0 {
                                     end_timestamp = timestamp_ms;
-                                    eprintln!("Mempool not empty at timestamp: {}", end_timestamp);
+                                    eprintln!("Mempool not empty at timestamp: {end_timestamp}");
 
                                 }
                                 info!(
@@ -122,7 +122,7 @@ impl MempoolMonitor {
                                 // Mempool just became filled - record start_timestamp
                                 if start_timestamp == 0 {
                                     start_timestamp = timestamp_ms;
-                                    eprintln!("Mempool empty at start timestamp: {}", start_timestamp);
+                                    eprintln!("Mempool empty at start timestamp: {start_timestamp}");
                                 }
                                 info!(
                                     timestamp_ms = timestamp_ms,

@@ -23,10 +23,10 @@ async fn main() -> Result<()> {
 
             // Create log file with timestamp
             let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-            let log_file_path = format!("{}/dex_spammer_{}.log", log_dir, timestamp);
+            let log_file_path = format!("{log_dir}/dex_spammer_{timestamp}.log");
             let log_file = File::create(&log_file_path)?;
 
-            println!("Logging to: {}", log_file_path);
+            println!("Logging to: {log_file_path}");
 
             // Initialize file-based logger
             tracing_subscriber::registry()
@@ -41,10 +41,10 @@ async fn main() -> Result<()> {
 
             // Create log file with timestamp
             let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-            let log_file_path = format!("{}/mempool_monitor_{}.log", log_dir, timestamp);
+            let log_file_path = format!("{log_dir}/mempool_monitor_{timestamp}.log");
             let log_file = File::create(&log_file_path)?;
 
-            println!("Logging to: {}", log_file_path);
+            println!("Logging to: {log_file_path}");
 
             // Initialize file-based logger
             tracing_subscriber::registry()

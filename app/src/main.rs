@@ -107,7 +107,6 @@ fn init(args: &Args, cmd: &InitCmd, logging: config::LoggingConfig) -> Result<()
         &app,
         &args.get_config_file_path()?,
         &args.get_genesis_file_path()?,
-        &args.get_malaketch_config_file()?,
         &args.get_priv_validator_key_file_path()?,
         logging,
     )

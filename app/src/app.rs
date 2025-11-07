@@ -80,7 +80,7 @@ pub async fn initialize_state_from_existing_block(
             //     payload or a payload that can't be validated because
             //     requisite data for the validation is missing
             debug!("Payload is valid");
-            info!("latest block {:?}", state.latest_block);
+            debug!("latest block {:?}", state.latest_block);
             let block_validator_set = read_validators_from_contract(
                 engine.eth.url().as_ref(),
                 &latest_block_candidate_from_store.block_hash,
@@ -159,13 +159,15 @@ pub async fn run(
                 // Get latest state from local store
                 let start_height_from_store = state.store.max_decided_value_height().await;
 
+                let mut start_height: Height = Height::default();
                 match start_height_from_store {
                     Some(s) => {
                         initialize_state_from_existing_block(state, &engine, s, &malaketh_config)
                             .await?;
-                        info!(
-                            "Start height in state set to: {:?}; height in store is {s} ",
-                            state.current_height
+                        start_height = state.current_height.increment();
+                        debug!(
+                            "Start height in state set to: {:?}; height in store is {:?} ",
+                            start_height, state.current_height
                         );
                     }
                     None => {
@@ -174,8 +176,6 @@ pub async fn run(
                         initialize_state_from_genesis(state, &engine).await?;
                     }
                 }
-                let start_height = state.current_height.increment();
-
                 // We can simply respond by telling the engine to start consensus
                 // at the current height, which is initially 1
                 if reply
@@ -206,7 +206,7 @@ pub async fn run(
                     .store
                     .get_pending_proposal_parts(height, round)
                     .await?;
-                info!(%height, %round, "Found {} pending proposal parts, validating...", pending_parts.len());
+                debug!(%height, %round, "Found {} pending proposal parts, validating...", pending_parts.len());
 
                 for parts in &pending_parts {
                     // Remove the parts from pending
@@ -272,7 +272,7 @@ pub async fn run(
                 // If we have already built or seen values for this height and round,
                 // send them all back to consensus. This may happen when we are restarting after a crash.
                 let proposals = state.store.get_undecided_proposals(height, round).await?;
-                info!(%height, %round, "Found {} undecided proposals", proposals.len());
+                debug!(%height, %round, "Found {} undecided proposals", proposals.len());
 
                 if reply_value.send(proposals).is_err() {
                     error!("Failed to send undecided proposals");
@@ -359,7 +359,7 @@ pub async fn run(
                 // Now what's left to do is to break down the value to propose into parts,
                 // and send those parts over the network to our peers, for them to re-assemble the full value.
                 for stream_message in state.stream_proposal(proposal, bytes, pol_round) {
-                    info!(%height, %round, "Streaming proposal part: {stream_message:?}");
+                    debug!(%height, %round, "Streaming proposal part: {stream_message:?}");
                     channels
                         .network
                         .send(NetworkMsg::PublishProposalPart(stream_message))
@@ -379,7 +379,7 @@ pub async fn run(
                     StreamContent::Fin => ("end of stream", 0),
                 };
 
-                info!(
+                debug!(
                     %from, %part.sequence, part.type = %part_type, part.size = %part_size,
                     "Received proposal part"
                 );

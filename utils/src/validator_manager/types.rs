@@ -1,5 +1,6 @@
 //! Types for validator set management
 
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
 use alloy_primitives::U256;
@@ -66,8 +67,8 @@ impl ValidatorSet {
     pub fn add_validator(&mut self, validator: Validator) -> Result<()> {
         let key = validator.validator_key;
 
-        if self.validators.contains_key(&key) {
-            self.validators.insert(key, validator);
+        if let Entry::Occupied(mut e) = self.validators.entry(key) {
+            e.insert(validator);
             return Ok(());
         }
 

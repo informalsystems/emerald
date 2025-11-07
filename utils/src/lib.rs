@@ -96,9 +96,9 @@ pub struct SpamContractCmd {
     /// Function signature (e.g., "increment()" or "setNumber(uint256)")
     #[clap(long)]
     function: String,
-    /// Optional function arguments (comma-separated, e.g., "42" or "100,0x...")
-    #[clap(long, default_value = "")]
-    args: String,
+    /// Function arguments (supply multiple `--args` or a comma-separated list. e.g. "42" or "42,0x...")
+    #[clap(long, value_delimiter = ',', num_args = 0..)]
+    args: Vec<String>,
     /// URL of the execution client's RPC endpoint
     #[clap(long, default_value = "127.0.0.1:8545")]
     rpc_url: String,

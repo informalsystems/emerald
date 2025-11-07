@@ -1,5 +1,5 @@
 use alloy_consensus::{SignableTransaction, TxEip1559, TxEip4844};
-use alloy_dyn_abi::{DynSolType, JsonAbiExt};
+use alloy_dyn_abi::{JsonAbiExt, Specifier};
 use alloy_json_abi::Function;
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_signer::Signer;
@@ -63,12 +63,20 @@ pub(crate) fn make_contract_call_tx(
     nonce: u64,
     contract_address: Address,
     function_sig: &str,
-    args: &str,
+    args: &[String],
 ) -> Result<Transaction> {
     let function = Function::parse(function_sig)?;
-    // single uint256 argument for simplicity
-    let coerced_value = DynSolType::Uint(256).coerce_str(args)?;
-    let call_data = function.abi_encode_input(&[coerced_value])?;
+    let arg_values = function
+        .inputs
+        .iter()
+        .zip(args.iter())
+        .map(|(param, value)| {
+            let param_ty = param.resolve()?;
+            let coerced_value = param_ty.coerce_str(value)?;
+            Ok(coerced_value)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let call_data = function.abi_encode_input(&arg_values)?;
 
     Ok(Transaction::Eip1559(TxEip1559 {
         chain_id: 1u64,
@@ -88,7 +96,7 @@ pub(crate) async fn make_signed_contract_call_tx(
     nonce: u64,
     contract_address: Address,
     function_sig: &str,
-    args: &str,
+    args: &[String],
 ) -> Result<TransactionSigned> {
     let tx = make_contract_call_tx(nonce, contract_address, function_sig, args)?;
     sign_transaction(signer, tx).await

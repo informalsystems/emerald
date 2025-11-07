@@ -26,7 +26,7 @@ struct ContractPayload {
     /// Function signature for contract calls (e.g., "increment()").
     function_sig: String,
     /// Function arguments.
-    args: String,
+    args: Vec<String>,
 }
 
 /// A transaction spammer that sends Ethereum transactions at a controlled rate.
@@ -81,13 +81,13 @@ impl Spammer {
         max_rate: u64,
         contract: &Address,
         function: &str,
-        args: &str,
+        args: &[String],
     ) -> Result<Self> {
         let signers = make_signers();
         let contract_payload = ContractPayload {
             address: *contract,
             function_sig: function.to_string(),
-            args: args.to_string(),
+            args: args.to_vec(),
         };
         Ok(Self {
             id: signer_index.to_string(),
@@ -188,7 +188,7 @@ impl Spammer {
                         nonce,
                         payload.address,
                         &payload.function_sig,
-                        &payload.args,
+                        payload.args.as_slice(),
                     )
                     .await?
                 } else if self.blobs {

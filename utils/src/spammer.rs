@@ -109,27 +109,29 @@ impl Spammer {
 
         let self_arc = Arc::new(self);
 
-        // Spawn spammer.
-        let spammer_handle = tokio::spawn({
+        // Spammer future.
+        let spammer_handle = {
             let self_arc = Arc::clone(&self_arc);
             async move {
                 self_arc
                     .spammer(result_sender, report_sender, finish_sender)
                     .await
             }
-        });
+        };
 
-        // Spawn result tracker.
-        let tracker_handle = tokio::spawn({
+        // Result tracker future.
+        let tracker_handle = {
             let self_arc = Arc::clone(&self_arc);
             async move {
                 self_arc
                     .tracker(result_receiver, report_receiver, finish_receiver)
                     .await
             }
-        });
+        };
 
+        // Run spammer and result tracker concurrently.
         let _ = tokio::join!(spammer_handle, tracker_handle);
+
         Ok(())
     }
 

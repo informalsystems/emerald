@@ -130,7 +130,7 @@ impl Spammer {
         };
 
         // Run spammer and result tracker concurrently.
-        let _ = tokio::join!(spammer_handle, tracker_handle);
+        tokio::try_join!(spammer_handle, tracker_handle)?;
 
         Ok(())
     }

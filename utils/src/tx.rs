@@ -4,7 +4,7 @@ use alloy_json_abi::Function;
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{bail, Result};
 use reth_primitives::{Transaction, TransactionSigned};
 
 pub(crate) fn make_eip4844_tx(nonce: u64) -> Transaction {
@@ -66,6 +66,14 @@ pub(crate) fn make_contract_call_tx(
     args: &[String],
 ) -> Result<Transaction> {
     let function = Function::parse(function_sig)?;
+    if function.inputs.len() != args.len() {
+        bail!(
+            "argument count mismatch for `{}`: expected {}, got {}",
+            function_sig,
+            function.inputs.len(),
+            args.len()
+        );
+    }
     let arg_values = function
         .inputs
         .iter()

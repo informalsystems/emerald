@@ -1,8 +1,10 @@
 use alloy_consensus::{SignableTransaction, TxEip1559, TxEip4844};
+use alloy_dyn_abi::{JsonAbiExt, Specifier};
+use alloy_json_abi::Function;
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{bail, Result};
 use reth_primitives::{Transaction, TransactionSigned};
 
 pub(crate) fn make_eip4844_tx(nonce: u64) -> Transaction {
@@ -21,14 +23,18 @@ pub(crate) fn make_eip4844_tx(nonce: u64) -> Transaction {
     })
 }
 
+async fn sign_transaction(signer: &PrivateKeySigner, tx: Transaction) -> Result<TransactionSigned> {
+    let tx_sign_hash = tx.signature_hash();
+    let signature = signer.sign_hash(&tx_sign_hash).await?;
+    Ok(TransactionSigned::new_unhashed(tx, signature))
+}
+
 pub(crate) async fn make_signed_eip4844_tx(
     signer: &PrivateKeySigner,
     nonce: u64,
 ) -> Result<TransactionSigned> {
     let tx = make_eip4844_tx(nonce);
-    let tx_sign_hash = tx.signature_hash();
-    let signature = signer.sign_hash(&tx_sign_hash).await?;
-    Ok(TransactionSigned::new_unhashed(tx, signature))
+    sign_transaction(signer, tx).await
 }
 
 pub(crate) fn make_eip1559_tx(nonce: u64) -> Transaction {
@@ -50,9 +56,58 @@ pub(crate) async fn make_signed_eip1559_tx(
     nonce: u64,
 ) -> Result<TransactionSigned> {
     let tx = make_eip1559_tx(nonce);
-    let tx_sign_hash = tx.signature_hash();
-    let signature = signer.sign_hash(&tx_sign_hash).await?;
-    Ok(TransactionSigned::new_unhashed(tx, signature))
+    sign_transaction(signer, tx).await
+}
+
+pub(crate) fn make_contract_call_tx(
+    nonce: u64,
+    contract_address: Address,
+    function_sig: &str,
+    args: &[String],
+) -> Result<Transaction> {
+    let function = Function::parse(function_sig)?;
+    if function.inputs.len() != args.len() {
+        bail!(
+            "argument count mismatch for `{}`: expected {}, got {}",
+            function_sig,
+            function.inputs.len(),
+            args.len()
+        );
+    }
+    let arg_values = function
+        .inputs
+        .iter()
+        .zip(args.iter())
+        .map(|(param, value)| {
+            let param_ty = param.resolve()?;
+            let coerced_value = param_ty.coerce_str(value)?;
+            Ok(coerced_value)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let call_data = function.abi_encode_input(&arg_values)?;
+
+    Ok(Transaction::Eip1559(TxEip1559 {
+        chain_id: 1u64,
+        nonce,
+        max_priority_fee_per_gas: 1_000_000_000, // 1 gwei
+        max_fee_per_gas: 2_000_000_000,          // 2 gwei
+        gas_limit: 100_000,                      // Higher gas limit for contract calls
+        to: contract_address.into(),
+        value: U256::ZERO, // No ETH transfer
+        input: call_data.into(),
+        access_list: Default::default(),
+    }))
+}
+
+pub(crate) async fn make_signed_contract_call_tx(
+    signer: &PrivateKeySigner,
+    nonce: u64,
+    contract_address: Address,
+    function_sig: &str,
+    args: &[String],
+) -> Result<TransactionSigned> {
+    let tx = make_contract_call_tx(nonce, contract_address, function_sig, args)?;
+    sign_transaction(signer, tx).await
 }
 
 #[cfg(test)]

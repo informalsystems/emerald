@@ -1,5 +1,5 @@
+use core::str::FromStr;
 use std::collections::BTreeMap;
-use std::str::FromStr;
 
 use alloy_genesis::{ChainConfig, Genesis, GenesisAccount};
 use alloy_primitives::{Address, B256, U256};

@@ -127,10 +127,10 @@ pub enum ProposalValidationError {
 impl fmt::Display for ProposalValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ProposalValidationError::WrongProposer { actual, expected } => {
+            Self::WrongProposer { actual, expected } => {
                 write!(f, "Wrong proposer: got {actual}, expected {expected}")
             }
-            ProposalValidationError::Signature(err) => {
+            Self::Signature(err) => {
                 write!(f, "Signature verification failed: {err:?}")
             }
         }
@@ -176,7 +176,7 @@ impl State {
         // It represents the start time of measuring metrics, not the actual node start time.
         // This allows us to continue accumulating time correctly after a restart
         let start_time =
-            Instant::now() - std::time::Duration::from_secs(state_metrics.elapsed_seconds);
+            Instant::now() - core::time::Duration::from_secs(state_metrics.elapsed_seconds);
 
         Self {
             ctx,

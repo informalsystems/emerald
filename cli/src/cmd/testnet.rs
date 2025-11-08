@@ -1,8 +1,8 @@
 //! Testnet command
 
+use core::str::FromStr;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use clap::Parser;
 use color_eyre::eyre::eyre;
@@ -31,7 +31,7 @@ impl FromStr for RuntimeFlavour {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.contains(':') {
             match s.split_once(':') {
-                Some(("multi-threaded", n)) => Ok(RuntimeFlavour::MultiThreaded(
+                Some(("multi-threaded", n)) => Ok(Self::MultiThreaded(
                     n.parse()
                         .map_err(|_| "Invalid number of threads".to_string())?,
                 )),
@@ -39,8 +39,8 @@ impl FromStr for RuntimeFlavour {
             }
         } else {
             match s {
-                "single-threaded" => Ok(RuntimeFlavour::SingleThreaded),
-                "multi-threaded" => Ok(RuntimeFlavour::MultiThreaded(0)),
+                "single-threaded" => Ok(Self::SingleThreaded),
+                "multi-threaded" => Ok(Self::MultiThreaded(0)),
                 _ => Err(format!("Invalid runtime flavour: {s}")),
             }
         }
@@ -159,7 +159,7 @@ pub fn testnet<N>(
     ephemeral_connection_timeout_ms: u64,
     transport: TransportProtocol,
     logging: LoggingConfig,
-) -> std::result::Result<(), Error>
+) -> core::result::Result<(), Error>
 where
     N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
 {

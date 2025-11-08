@@ -1,6 +1,6 @@
+use core::time::Duration;
 use std::collections::HashSet;
 use std::path::Path;
-use std::time::Duration;
 
 use alloy_rpc_types_engine::{
     ExecutionPayloadEnvelopeV3, ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated,
@@ -93,8 +93,8 @@ pub struct EngineRPC {
     auth: Auth,
 }
 
-impl std::fmt::Display for EngineRPC {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for EngineRPC {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.url)
     }
 }

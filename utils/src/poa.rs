@@ -5,11 +5,10 @@ use alloy_signer::utils::raw_public_key_to_address;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::sol;
 use color_eyre::eyre;
+use color_eyre::eyre::{Context, Result};
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::PublicKey;
 use reqwest::Url;
-
-use color_eyre::eyre::{Context, Result};
 
 // Define the Solidity contract ABI
 sol! {

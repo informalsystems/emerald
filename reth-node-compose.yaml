@@ -6,28 +6,28 @@ services:
       - reth-data-${NODE_ID}:/data
       - ./assets:/root/assets/
     environment:
-      - NODE_ID=${NODE_ID:-1}
-      - HTTP_PORT=${HTTP_PORT:-8545}
-      - ENGINE_PORT=${ENGINE_PORT:-8551}
-      - P2P_PORT=${P2P_PORT:-30303}
-      - METRICS_PORT=${METRICS_PORT:-9000}
-    command: 
+      - NODE_ID=${NODE_ID}
+      - HTTP_PORT=${HTTP_PORT}
+      - ENGINE_PORT=${ENGINE_PORT}
+      - P2P_PORT=${P2P_PORT}
+      - METRICS_PORT=${METRICS_PORT}
+    command:
       - "node"
       - "-vvvvv"
       - "-d"
       - "--datadir=/data/reth/execution-data"
       - "--chain=/root/assets/genesis.json"
       - "--http"
-      - "--http.port=${HTTP_PORT:-8545}"
+      - "--http.port=${HTTP_PORT}"
       - "--http.addr=0.0.0.0"
       - "--http.corsdomain=*"
       - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
       - "--authrpc.addr=0.0.0.0"
-      - "--authrpc.port=${ENGINE_PORT:-8551}"
+      - "--authrpc.port=${ENGINE_PORT}"
       - "--authrpc.jwtsecret=/root/assets/jwtsecret"
-      - "--metrics=0.0.0.0:${METRICS_PORT:-9000}"
-      - "--discovery.port=${P2P_PORT:-30303}"
-      - "--port=${P2P_PORT:-30303}"
+      - "--metrics=0.0.0.0:${METRICS_PORT}"
+      - "--discovery.port=${P2P_PORT}"
+      - "--port=${P2P_PORT}"
       - "--nat=extip:127.0.0.1"
       - "--tx-propagation-mode=all"
       - "--txpool.pending-max-count=50000"

@@ -49,7 +49,7 @@ start:
 		METRICS_PORT=$$(($(BASE_METRICS_PORT) + $$i))
 		echo "Starting reth node $$i on ports HTTP:$$HTTP_PORT WS:$$WS_PORT P2P:$$P2P_PORT ENGINE:$$ENGINE_PORT METRICS:$$METRICS_PORT"
 		NODE_ID=$$i HTTP_PORT=$$HTTP_PORT WS_PORT=$$WS_PORT P2P_PORT=$$P2P_PORT ENGINE_PORT=$$ENGINE_PORT METRICS_PORT=$$METRICS_PORT \
-			docker compose -p reth-node-$$i -f reth-node-compose.yaml up -d
+			docker compose -p reth-node-$$i -f reth-node-compose.yaml up -d;
 	done
 	./scripts/add_dynamic_peers.sh --nodes $(NODE_COUNT)
 	for i in $$(seq 0 $$(($(NODE_COUNT) - 1))); do
@@ -145,10 +145,10 @@ clean:
 	rm -rf ./nodes
 	rm -rf ./monitoring/data-grafana
 	@for i in $$(seq 0 $$(($(NODE_COUNT) - 1))); do \
-		docker compose -p reth-node-$$i down; \
+		docker compose -p reth-node-$$i down --remove-orphans; \
 	done
 	@for i in $$(seq 0 $$(($(NODE_COUNT) - 1))); do \
-		docker compose -p emerald-node-$$i down; \
+		docker compose -p emerald-node-$$i down --remove-orphans; \
 	done
 	@for i in $$(seq 0 $$(($(NODE_COUNT) - 1))); do \
 		name="reth-node-$${i}_reth-data-$${i}"; \

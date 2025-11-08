@@ -1,9 +1,9 @@
 //! The Application (or Node) definition. The Node trait implements the Consensus context and the
 //! cryptographic library used for signing.
 
+use core::str::FromStr;
 use std::fs;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use async_trait::async_trait;
 use color_eyre::eyre;
@@ -168,7 +168,7 @@ impl Node for App {
             tokio::spawn(metrics::serve(config.metrics.listen_addr));
         }
 
-        let store = Store::open(self.get_home_dir().join("store.db"), metrics.db.clone())?;
+        let store = Store::open(self.get_home_dir().join("store.db"), metrics.db.clone()).await?;
         let start_height = self.start_height.unwrap_or_default();
 
         // Load cumulative metrics from database for crash recovery

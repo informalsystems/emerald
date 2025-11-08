@@ -20,7 +20,7 @@ impl ProposalData {
     }
 
     pub fn size_bytes(&self) -> usize {
-        std::mem::size_of::<u64>()
+        core::mem::size_of::<u64>()
     }
 }
 
@@ -66,6 +66,13 @@ impl ProposalPart {
     pub fn as_data(&self) -> Option<&ProposalData> {
         match self {
             Self::Data(data) => Some(data),
+            _ => None,
+        }
+    }
+
+    pub fn as_fin(&self) -> Option<&ProposalFin> {
+        match self {
+            Self::Fin(fin) => Some(fin),
             _ => None,
         }
     }

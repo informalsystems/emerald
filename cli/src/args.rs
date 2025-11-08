@@ -68,14 +68,14 @@ pub enum Commands {
 
 impl Default for Commands {
     fn default() -> Self {
-        Commands::Start(StartCmd::default())
+        Self::Start(StartCmd::default())
     }
 }
 
 impl Args {
     /// new returns a new instance of the arguments.
-    pub fn new() -> Args {
-        Args::parse()
+    pub fn new() -> Self {
+        Self::parse()
     }
 
     /// get_home_dir returns the application home folder.

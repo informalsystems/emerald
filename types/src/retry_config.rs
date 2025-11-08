@@ -1,40 +1,23 @@
-use std::time::Duration;
+use core::time::Duration;
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-/// Serde helpers for Duration serialization as milliseconds
-mod duration_ms {
-    use super::*;
-
-    pub fn serialize<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_u64(duration.as_millis() as u64)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let millis = u64::deserialize(deserializer)?;
-        Ok(Duration::from_millis(millis))
-    }
-}
+use serde::{Deserialize, Serialize};
 
 /// Exponential backoff retry configuration
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RetryConfig {
-    /// Initial delay between retry attempts (in milliseconds)
-    #[serde(with = "duration_ms")]
+    /// Initial delay between retry attempts
+    /// Supports human-readable format: "100ms", "1s", "500ms", etc.
+    #[serde(with = "humantime_serde")]
     pub initial_delay: Duration,
 
-    /// Maximum delay between retry attempts (in milliseconds)
-    #[serde(with = "duration_ms")]
+    /// Maximum delay between retry attempts
+    /// Supports human-readable format: "2s", "5s", "10s", etc.
+    #[serde(with = "humantime_serde")]
     pub max_delay: Duration,
 
-    /// Total timeout - maximum time to keep retrying (in milliseconds)
-    #[serde(with = "duration_ms")]
+    /// Total timeout - maximum time to keep retrying
+    /// Supports human-readable format: "10s", "1m", "30s", etc.
+    #[serde(with = "humantime_serde")]
     pub max_elapsed_time: Duration,
 
     /// Exponential backoff multiplier (e.g., 2.0 for doubling)
@@ -61,6 +44,6 @@ impl RetryConfig {
     /// Calculate the next retry delay using exponential backoff
     pub fn next_delay(&self, current_delay: Duration) -> Duration {
         let next = current_delay.mul_f64(self.multiplier);
-        std::cmp::min(next, self.max_delay)
+        core::cmp::min(next, self.max_delay)
     }
 }

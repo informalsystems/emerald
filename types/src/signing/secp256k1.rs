@@ -1,6 +1,7 @@
 use alloy_primitives::keccak256;
 use async_trait::async_trait;
 use bytes::Bytes;
+use k256::ecdsa::VerifyingKey;
 use malachitebft_core_types::{Context, SignedExtension, SignedMessage};
 use malachitebft_signing::{Error as SigningError, SigningProvider, VerificationResult};
 use malachitebft_signing_ecdsa::K256Config;
@@ -19,7 +20,18 @@ impl Hashable for PublicKey {
     type Output = [u8; 32];
 
     fn hash(&self) -> [u8; 32] {
-        keccak256(self.to_vec()).into()
+        let compressed_bytes = self.to_vec();
+
+        // Parse the compressed key and get uncompressed encoding
+        let verifying_key = VerifyingKey::from_sec1_bytes(&compressed_bytes)
+            .expect("PublicKey to_vec() should always return valid SEC1 bytes");
+
+        // Get uncompressed point (65 bytes: 0x04 || x || y)
+        let uncompressed_point = verifying_key.to_encoded_point(false);
+        let uncompressed_bytes = uncompressed_point.as_bytes();
+
+        // Hash the x and y coordinates (skip the first byte 0x04)
+        *keccak256(&uncompressed_bytes[1..])
     }
 }
 

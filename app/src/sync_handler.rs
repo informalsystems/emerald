@@ -10,14 +10,16 @@ use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::{BlockHash, Height, MalakethContext, RetryConfig, Value};
 use ssz::{Decode, Encode};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
-use crate::state::reconstruct_execution_payload;
+use crate::state::{reconstruct_execution_payload, ValidatedPayloadCache};
 use crate::store::Store;
 
-/// Validates execution payload with retry mechanism for SYNCING status.
+/// Generic function to validate execution payload with retry mechanism for SYNCING status.
 /// Returns the validity of the payload or an error if timeout is exceeded.
-pub async fn validate_synced_payload(
+/// Uses cache to avoid duplicate validation
+pub async fn validate_payload(
+    cache: &mut ValidatedPayloadCache,
     engine: &Engine,
     execution_payload: &ExecutionPayloadV3,
     versioned_hashes: &[BlockHash],
@@ -25,6 +27,17 @@ pub async fn validate_synced_payload(
     height: Height,
     round: Round,
 ) -> eyre::Result<Validity> {
+    let block_hash = execution_payload.payload_inner.payload_inner.block_hash;
+
+    // Check if we've already called newPayload for this block
+    if let Some(cached_validity) = cache.get(&block_hash) {
+        debug!(
+            %height, %round, %block_hash, validity = ?cached_validity,
+            "Skipping duplicate newPayload call, returning cached result"
+        );
+        return Ok(cached_validity);
+    }
+
     let payload_status = engine
         .notify_new_block_with_retry(
             execution_payload.clone(),

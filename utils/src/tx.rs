@@ -90,7 +90,7 @@ pub(crate) async fn make_contract_call_tx(
     let call_data = function.abi_encode_input(&arg_values)?;
 
     Ok(Transaction::Eip1559(TxEip1559 {
-        chain_id: chain_id,
+        chain_id,
         nonce,
         max_priority_fee_per_gas: 1_000_000_000, // 1 gwei
         max_fee_per_gas: 2_000_000_000,          // 2 gwei

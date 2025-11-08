@@ -1,11 +1,13 @@
-use alloy::{
-    network::EthereumWallet,
-    primitives::{Address, U256},
-    providers::ProviderBuilder,
-    signers::local::PrivateKeySigner,
-    sol,
-    transports::http::reqwest::Url,
-};
+use alloy_network::EthereumWallet;
+use alloy_primitives::{Address, U256};
+use alloy_provider::ProviderBuilder;
+use alloy_signer::utils::raw_public_key_to_address;
+use alloy_signer_local::PrivateKeySigner;
+use alloy_sol_types::sol;
+use k256::elliptic_curve::sec1::ToEncodedPoint;
+use k256::PublicKey;
+use reqwest::Url;
+
 use color_eyre::eyre::{Context, Result};
 
 // Define the Solidity contract ABI
@@ -64,11 +66,24 @@ pub async fn list_validators(rpc_url: Url, contract_address: Address) -> Result<
     println!("Total validators: {}", validators.len());
     println!();
 
+    // sort validators by power descending
+    let mut validators = validators;
+    validators.sort_by(|a, b| b.power.cmp(&a.power));
+
     for (i, validator) in validators.iter().enumerate() {
         println!("Validator #{}:", i + 1);
-        println!("  X: {}", validator.validatorKey.x);
-        println!("  Y: {}", validator.validatorKey.y);
         println!("  Power: {}", validator.power);
+        // validator pubkey in hex
+        let mut pubkey_bytes = Vec::with_capacity(65);
+        pubkey_bytes.push(0x04); // uncompressed prefix
+        pubkey_bytes.extend_from_slice(&validator.validatorKey.x.to_be_bytes::<32>());
+        pubkey_bytes.extend_from_slice(&validator.validatorKey.y.to_be_bytes::<32>());
+        println!("  Pubkey: {}", hex::encode(&pubkey_bytes));
+        // print validator address 0x
+        let pubkey = PublicKey::from_sec1_bytes(&pubkey_bytes)
+            .map_err(|e| color_eyre::eyre::eyre!("Invalid public key bytes: {}", e))?;
+        let address = raw_public_key_to_address(&pubkey.to_encoded_point(false).as_bytes()[1..]);
+        println!("Validator address: 0x{:x}", address);
         println!();
     }
 
@@ -118,10 +133,7 @@ pub async fn add_validator(
         .context("Failed to parse private key")?;
     let wallet = EthereumWallet::from(signer);
 
-    let provider = ProviderBuilder::new()
-        .with_recommended_fillers()
-        .wallet(wallet)
-        .on_http(rpc_url);
+    let provider = ProviderBuilder::new().wallet(wallet).on_http(rpc_url);
 
     // Create contract instance
     let contract = ValidatorManager::new(contract_address, &provider);
@@ -188,10 +200,7 @@ pub async fn remove_validator(
         .context("Failed to parse private key")?;
     let wallet = EthereumWallet::from(signer);
 
-    let provider = ProviderBuilder::new()
-        .with_recommended_fillers()
-        .wallet(wallet)
-        .on_http(rpc_url);
+    let provider = ProviderBuilder::new().wallet(wallet).on_http(rpc_url);
 
     // Create contract instance
     let contract = ValidatorManager::new(contract_address, &provider);
@@ -213,6 +222,36 @@ pub async fn remove_validator(
         .context("Failed to get transaction receipt")?;
 
     println!("Transaction confirmed in block: {:?}", receipt.block_number);
+
+    Ok(())
+}
+
+// update validator vote power
+pub async fn update_validator_power(
+    rpc_url: Url,
+    contract_address: Address,
+    validator_pubkey: &str,
+    new_power: u64,
+    signer_private_key: &str,
+) -> Result<()> {
+    // First, remove the existing validator
+    remove_validator(
+        rpc_url.clone(),
+        contract_address,
+        validator_pubkey,
+        signer_private_key,
+    )
+    .await?;
+
+    // Then, add the validator back with the new power
+    add_validator(
+        rpc_url,
+        contract_address,
+        validator_pubkey,
+        new_power,
+        signer_private_key,
+    )
+    .await?;
 
     Ok(())
 }

@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::Result;
 use genesis::{generate_genesis, make_signers};
+use reqwest::Url;
 use spammer::Spammer;
 
 pub mod genesis;
@@ -89,6 +90,18 @@ impl SpamCmd {
 
 #[derive(Parser, Debug, Clone, PartialEq)]
 pub struct PoaCmd {
+    /// RPC URL
+    #[clap(long, short, default_value = "http://127.0.0.1:8545")]
+    rpc_url: Url,
+
+    /// ValidatorManager contract address
+    #[clap(
+        long,
+        short,
+        default_value = "0x0000000000000000000000000000000000002000"
+    )]
+    contract_address: alloy_primitives::Address,
+
     #[command(subcommand)]
     command: PoaCommands,
 }
@@ -98,32 +111,41 @@ impl PoaCmd {
         match &self.command {
             PoaCommands::AddValidator {
                 validator_pubkey,
-                rpc_url,
-                contract_address,
                 power,
                 owner_private_key,
             } => {
-                let url = rpc_url.parse()?;
-                let address = contract_address.parse()?;
+                let url = self.rpc_url.clone();
+                let address = self.contract_address.clone();
                 poa::add_validator(url, address, validator_pubkey, *power, owner_private_key).await
             }
             PoaCommands::RemoveValidator {
                 validator_pubkey,
-                rpc_url,
-                contract_address,
                 owner_private_key,
             } => {
-                let url = rpc_url.parse()?;
-                let address = contract_address.parse()?;
+                let url = self.rpc_url.clone();
+                let address = self.contract_address.clone();
                 poa::remove_validator(url, address, validator_pubkey, owner_private_key).await
             }
-            PoaCommands::List {
-                rpc_url,
-                contract_address,
-            } => {
-                let url = rpc_url.parse()?;
-                let address = contract_address.parse()?;
+            PoaCommands::List {} => {
+                let url: Url = self.rpc_url.clone();
+                let address = self.contract_address.clone();
                 poa::list_validators(url, address).await
+            }
+            PoaCommands::UpdateValidator {
+                validator_pubkey,
+                power,
+                owner_private_key,
+            } => {
+                let url = self.rpc_url.clone();
+                let address = self.contract_address.clone();
+                poa::update_validator_power(
+                    url,
+                    address,
+                    validator_pubkey,
+                    *power,
+                    owner_private_key,
+                )
+                .await
             }
         }
     }
@@ -137,20 +159,12 @@ pub enum PoaCommands {
         #[clap(long, short)]
         validator_pubkey: String,
 
-        /// RPC URL
-        #[clap(long, short, default_value = "http://127.0.0.1:8545")]
-        rpc_url: String,
-
-        /// ValidatorManager contract address
-        #[clap(long, short)]
-        contract_address: String,
-
         /// Validator power (voting weight)
         #[clap(long, short, default_value = "1")]
         power: u64,
 
         /// Private key of the contract owner
-        #[clap(long, short, env = "owner_private_key")]
+        #[clap(long, short)]
         owner_private_key: String,
     },
     /// Remove a validator
@@ -159,25 +173,22 @@ pub enum PoaCommands {
         #[clap(long, short)]
         validator_pubkey: String,
 
-        /// RPC URL
-        #[clap(long, short, default_value = "http://127.0.0.1:8545")]
-        rpc_url: String,
-
-        /// ValidatorManager contract address
-        #[clap(long, short)]
-        contract_address: String,
-
         /// Private key of the contract owner
         #[clap(long, short, env = "owner_private_key")]
         owner_private_key: String,
     },
-    List {
-        /// RPC URL
-        #[clap(short = 'r', long, default_value = "http://127.0.0.1:8545")]
-        rpc_url: String,
+    UpdateValidator {
+        /// Validator public key (uncompressed secp256k1, hex encoded)
+        #[clap(long, short)]
+        validator_pubkey: String,
 
-        /// ValidatorManager contract address
-        #[clap(short = 'c', long)]
-        contract_address: String,
+        /// New validator power (voting weight)
+        #[clap(long, short)]
+        power: u64,
+
+        /// Private key of the contract owner
+        #[clap(long, short)]
+        owner_private_key: String,
     },
+    List {},
 }

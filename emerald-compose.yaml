@@ -7,8 +7,8 @@ services:
       - ./.testnet/config/${NODE_ID}:/home/emerald/.emerald/emerald
       - ./assets/jwtsecret:/home/emerald/jwt
     environment:
-      - NODE_ID=${NODE_ID:-1}
-    command: 
+      - NODE_ID=${NODE_ID}
+    command:
       - "start"
       - "--home=/home/emerald/.emerald"
       - "--config=/home/emerald/.emerald/emerald/config.toml"

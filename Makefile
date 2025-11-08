@@ -11,7 +11,7 @@ NODE_COUNT ?= 3
 VALIDATOR_COUNT ?= 3
 BASE_HTTP_PORT ?= 8545
 BASE_WS_PORT ?= 8946
-BASE_ENGINE_PORT ?= 8551
+BASE_ENGINE_PORT ?= 9551
 BASE_METRICS_PORT ?= 9000
 BASE_P2P_PORT ?= 30303
 BASE_P2P_C_PORT ?= 27000
@@ -37,7 +37,7 @@ help:
 .ONESHELL:
 SHELL := /bin/bash
 start:
-	./scripts/generate_testnet_config.sh --nodes $(NODE_COUNT) --testnet-config-dir .testnet
+	./scripts/generate_testnet_config.sh --nodes $(NODE_COUNT) --testnet-config-dir .testnet --engine-base-port $(BASE_ENGINE_PORT) --rpc-base-port $(BASE_HTTP_PORT)
 	cargo run --bin malachitebft-eth-app -- testnet --home nodes --testnet-config .testnet/testnet_config.toml --log-level info
 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin malachitebft-eth-app show-pubkey {} > nodes/validator_public_keys.txt
 	cargo run --bin malachitebft-eth-utils genesis --public-keys-file ./nodes/validator_public_keys.txt
@@ -85,6 +85,7 @@ start-node:
 	P2P_M_PORT=$$(($(BASE_P2P_M_PORT) + $(NODE_ID))) \
 	PROMETHEUS_PORT=$$(($(BASE_PROMETHEUS_PORT) + $(NODE_ID))) \
 		docker compose -p emerald-node-$(NODE_ID) -f emerald-compose.yaml up -d;
+	./scripts/add_dynamic_peers.sh --nodes $(NODE_COUNT)
 
 .PHONY: stop-node
 stop-node:

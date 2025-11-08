@@ -92,30 +92,6 @@ pub async fn list_validators(rpc_url: &Url, contract_address: &Address) -> Resul
     Ok(())
 }
 
-// check_validator_exists
-pub async fn check_validator_exists(
-    rpc_url: Url,
-    contract_address: Address,
-    validator_private_key: &str,
-) -> Result<bool> {
-    let (x, y) = pubkey_parser(validator_private_key)?;
-    let validator_key = ValidatorManager::Secp256k1Key { x, y };
-
-    let provider = ProviderBuilder::new().on_http(rpc_url);
-
-    let contract = ValidatorManager::new(contract_address, &provider);
-
-    let is_validator = contract
-        .getValidators()
-        .call()
-        .await?
-        .validators
-        .iter()
-        .any(|v| v.validatorKey.x == validator_key.x && v.validatorKey.y == validator_key.y);
-
-    Ok(is_validator)
-}
-
 /// Add a validator to the PoA validator set
 pub async fn add_validator(
     rpc_url: &Url,

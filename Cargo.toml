@@ -73,6 +73,7 @@ tracing-appender   = "0.2.3"
 tracing-subscriber = { version = "0.3.18", features = [ "env-filter" ] }
 url                = "2"
 k256               = { version = "0.13" }
+test-log           = { version = "0.2", features = [ "trace" ] }
 
 [workspace.dependencies.malachitebft-app]
 package = "informalsystems-malachitebft-app"

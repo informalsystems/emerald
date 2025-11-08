@@ -4,11 +4,11 @@ use alloy_primitives::U256;
 use thiserror::Error;
 
 /// Result type for storage operations
-pub type Result<T> = std::result::Result<T, StorageError>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Errors that can occur during storage data generation
 #[derive(Debug, Error)]
-pub enum StorageError {
+pub enum Error {
     #[error("Empty validator set")]
     EmptyValidatorSet,
 
@@ -17,4 +17,7 @@ pub enum StorageError {
 
     #[error("Duplicate validator ({x:#x}, {y:#x})")]
     DuplicateValidator { x: U256, y: U256 },
+
+    #[error("Total validator power exceeds uint64 max")]
+    TotalPowerOverflow,
 }

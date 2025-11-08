@@ -120,21 +120,21 @@ impl PoaCmd {
                 power,
                 owner_private_key,
             } => {
-                let url = self.rpc_url.clone();
-                let address = self.contract_address.clone();
+                let url = &self.rpc_url;
+                let address = &self.contract_address;
                 poa::add_validator(url, address, validator_pubkey, *power, owner_private_key).await
             }
             PoaCommands::RemoveValidator {
                 validator_pubkey,
                 owner_private_key,
             } => {
-                let url = self.rpc_url.clone();
-                let address = self.contract_address.clone();
+                let url = &self.rpc_url;
+                let address = &self.contract_address;
                 poa::remove_validator(url, address, validator_pubkey, owner_private_key).await
             }
             PoaCommands::List {} => {
-                let url: Url = self.rpc_url.clone();
-                let address = self.contract_address.clone();
+                let url = &self.rpc_url;
+                let address = &self.contract_address;
                 poa::list_validators(url, address).await
             }
             PoaCommands::UpdateValidator {
@@ -142,8 +142,8 @@ impl PoaCmd {
                 power,
                 owner_private_key,
             } => {
-                let url = self.rpc_url.clone();
-                let address = self.contract_address.clone();
+                let url = &self.rpc_url;
+                let address = &self.contract_address;
                 poa::update_validator_power(
                     url,
                     address,
@@ -166,7 +166,7 @@ pub enum PoaCommands {
         validator_pubkey: String,
 
         /// Validator power (voting weight)
-        #[clap(long, short, default_value = "1")]
+        #[clap(long, short, default_value = "100")]
         power: u64,
 
         /// Private key of the contract owner
@@ -189,7 +189,7 @@ pub enum PoaCommands {
         validator_pubkey: String,
 
         /// New validator power (voting weight)
-        #[clap(long, short)]
+        #[clap(long, short, default_value = "100")]
         power: u64,
 
         /// Private key of the contract owner

@@ -4,6 +4,7 @@ use alloy_provider::ProviderBuilder;
 use alloy_signer::utils::raw_public_key_to_address;
 use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::sol;
+use color_eyre::eyre;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::PublicKey;
 use reqwest::Url;
@@ -45,10 +46,10 @@ pub fn pubkey_parser(validator_pubkey: &str) -> Result<(U256, U256)> {
     } else if pubkey_bytes.len() == 64 {
         (&pubkey_bytes[0..32], &pubkey_bytes[32..64])
     } else {
-        return Err(color_eyre::eyre::eyre!(
-            "Invalid public key length: expected 64 or 65 bytes, got {}",
+        eyre::bail!(
+            "Invalid public key length, expected 64 or 65 bytes, got {}",
             pubkey_bytes.len()
-        ));
+        );
     };
 
     let x = U256::from_be_slice(x_bytes);
@@ -58,10 +59,10 @@ pub fn pubkey_parser(validator_pubkey: &str) -> Result<(U256, U256)> {
 }
 
 // list validators
-pub async fn list_validators(rpc_url: Url, contract_address: Address) -> Result<()> {
-    let provider = ProviderBuilder::new().on_http(rpc_url);
+pub async fn list_validators(rpc_url: &Url, contract_address: &Address) -> Result<()> {
+    let provider = ProviderBuilder::new().on_http(rpc_url.clone());
 
-    let contract = ValidatorManager::new(contract_address, &provider);
+    let contract = ValidatorManager::new(*contract_address, &provider);
 
     let validators = contract.getValidators().call().await?.validators;
 
@@ -85,7 +86,7 @@ pub async fn list_validators(rpc_url: Url, contract_address: Address) -> Result<
         let pubkey = PublicKey::from_sec1_bytes(&pubkey_bytes)
             .map_err(|e| color_eyre::eyre::eyre!("Invalid public key bytes: {}", e))?;
         let address = raw_public_key_to_address(&pubkey.to_encoded_point(false).as_bytes()[1..]);
-        println!("Validator address: 0x{:x}", address);
+        println!("Validator address: 0x{address:x}");
         println!();
     }
 
@@ -118,8 +119,8 @@ pub async fn check_validator_exists(
 
 /// Add a validator to the PoA validator set
 pub async fn add_validator(
-    rpc_url: Url,
-    contract_address: Address,
+    rpc_url: &Url,
+    contract_address: &Address,
     validator_pubkey: &str,
     power: u64,
     signer_private_key: &str,
@@ -156,14 +157,16 @@ pub async fn add_validator(
         .context("Failed to parse private key")?;
     let wallet = EthereumWallet::from(signer);
 
-    let provider = ProviderBuilder::new().wallet(wallet).on_http(rpc_url);
+    let provider = ProviderBuilder::new()
+        .wallet(wallet)
+        .on_http(rpc_url.clone());
 
     // Create contract instance
-    let contract = ValidatorManager::new(contract_address, &provider);
+    let contract = ValidatorManager::new(*contract_address, &provider);
 
     // Call the register function
-    println!("Adding validator with pubkey: {}", validator_pubkey);
-    println!("  Power: {}", power);
+    println!("Adding validator with pubkey: {validator_pubkey}");
+    println!("  Power: {power}");
 
     let tx = contract
         .register(validator_public_key_bytes.into(), power)
@@ -186,8 +189,8 @@ pub async fn add_validator(
 
 /// Remove a validator from the PoA validator set
 pub async fn remove_validator(
-    rpc_url: Url,
-    contract_address: Address,
+    rpc_url: &Url,
+    contract_address: &Address,
     validator_pubkey: &str,
     signer_private_key: &str,
 ) -> Result<()> {
@@ -201,10 +204,12 @@ pub async fn remove_validator(
         .context("Failed to parse private key")?;
     let wallet = EthereumWallet::from(signer);
 
-    let provider = ProviderBuilder::new().wallet(wallet).on_http(rpc_url);
+    let provider = ProviderBuilder::new()
+        .wallet(wallet)
+        .on_http(rpc_url.clone());
 
     // Create contract instance
-    let contract = ValidatorManager::new(contract_address, &provider);
+    let contract = ValidatorManager::new(*contract_address, &provider);
 
     // Get the validator address from the contract
     let validator_address = contract
@@ -215,8 +220,8 @@ pub async fn remove_validator(
         ._0;
 
     // Call the unregister function
-    println!("Removing validator with pubkey: {}", validator_pubkey);
-    println!("  Validator address: {:?}", validator_address);
+    println!("Removing validator with pubkey: {validator_pubkey}");
+    println!("  Validator address: {validator_address:?}");
 
     let tx = contract
         .unregister(validator_address)
@@ -238,8 +243,8 @@ pub async fn remove_validator(
 
 // update validator vote power
 pub async fn update_validator_power(
-    rpc_url: Url,
-    contract_address: Address,
+    rpc_url: &Url,
+    contract_address: &Address,
     validator_pubkey: &str,
     new_power: u64,
     signer_private_key: &str,
@@ -254,10 +259,12 @@ pub async fn update_validator_power(
         .context("Failed to parse private key")?;
     let wallet = EthereumWallet::from(signer);
 
-    let provider = ProviderBuilder::new().wallet(wallet).on_http(rpc_url);
+    let provider = ProviderBuilder::new()
+        .wallet(wallet)
+        .on_http(rpc_url.clone());
 
     // Create contract instance
-    let contract = ValidatorManager::new(contract_address, &provider);
+    let contract = ValidatorManager::new(*contract_address, &provider);
 
     // Get the validator address from the contract
     let validator_address = contract
@@ -268,9 +275,9 @@ pub async fn update_validator_power(
         ._0;
 
     // Call the updatePower function
-    println!("Updating validator power with pubkey: {}", validator_pubkey);
-    println!("  Validator address: {:?}", validator_address);
-    println!("  New power: {}", new_power);
+    println!("Updating validator power with pubkey: {validator_pubkey}");
+    println!("  Validator address: {validator_address:?}");
+    println!("  New power: {new_power}");
 
     let tx = contract
         .updatePower(validator_address, new_power)
@@ -285,7 +292,7 @@ pub async fn update_validator_power(
         .await
         .context("Failed to get transaction receipt")?;
 
-    println!("Transaction confirmed in block: {:?}", receipt.block_number);
+    println!("Transaction confirmed in block: {receipt:?}");
     println!("Gas used: {}", receipt.gas_used);
 
     Ok(())

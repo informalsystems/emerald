@@ -13,6 +13,14 @@ use tracing::debug;
 use super::{generate_storage_data, Validator};
 use crate::validator_manager::contract::ValidatorManager;
 
+fn encode_uncompressed_key(key: ValidatorManager::Secp256k1Key) -> Vec<u8> {
+    let mut out = Vec::with_capacity(65);
+    out.push(0x04);
+    out.extend_from_slice(&key.x.to_be_bytes::<32>());
+    out.extend_from_slice(&key.y.to_be_bytes::<32>());
+    out
+}
+
 /// Generate validators from "test test ... junk" mnemonic using sequential derivation paths.
 ///
 /// Each validator is derived from path `m/44'/60'/0'/0/{index}` and includes both
@@ -155,7 +163,7 @@ async fn deploy_and_register_validators(
         let info: ValidatorManager::ValidatorInfo = validator.clone().into();
 
         let pending_tx = owner_contract
-            .register(info.validatorKey, info.power)
+            .register(pubkey_bytes.into(), info.power)
             .send()
             .await?;
 

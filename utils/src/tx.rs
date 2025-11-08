@@ -5,9 +5,9 @@ use alloy_signer_local::PrivateKeySigner;
 use color_eyre::eyre::Result;
 use reth_primitives::{Transaction, TransactionSigned};
 
-pub(crate) fn make_eip4844_tx(nonce: u64) -> Transaction {
+pub(crate) fn make_eip4844_tx(nonce: u64, chain_id: u64) -> Transaction {
     Transaction::Eip4844(TxEip4844 {
-        chain_id: 1u64,
+        chain_id,
         nonce,
         max_fee_per_gas: 50_000_000_000,             // 50 gwei
         max_priority_fee_per_gas: 1_000_000_000_000, // 1000 gwei
@@ -24,16 +24,17 @@ pub(crate) fn make_eip4844_tx(nonce: u64) -> Transaction {
 pub(crate) async fn make_signed_eip4844_tx(
     signer: &PrivateKeySigner,
     nonce: u64,
+    chain_id: u64,
 ) -> Result<TransactionSigned> {
-    let tx = make_eip4844_tx(nonce);
+    let tx = make_eip4844_tx(nonce, chain_id);
     let tx_sign_hash = tx.signature_hash();
     let signature = signer.sign_hash(&tx_sign_hash).await?;
     Ok(TransactionSigned::new_unhashed(tx, signature))
 }
 
-pub(crate) fn make_eip1559_tx(nonce: u64) -> Transaction {
+pub(crate) fn make_eip1559_tx(nonce: u64, chain_id: u64) -> Transaction {
     Transaction::Eip1559(TxEip1559 {
-        chain_id: 1u64,
+        chain_id,
         nonce,
         max_priority_fee_per_gas: 1_000_000_000, // 1 gwei
         max_fee_per_gas: 2_000_000_000,          // 2 gwei
@@ -48,8 +49,9 @@ pub(crate) fn make_eip1559_tx(nonce: u64) -> Transaction {
 pub(crate) async fn make_signed_eip1559_tx(
     signer: &PrivateKeySigner,
     nonce: u64,
+    chain_id: u64,
 ) -> Result<TransactionSigned> {
-    let tx = make_eip1559_tx(nonce);
+    let tx = make_eip1559_tx(nonce, chain_id);
     let tx_sign_hash = tx.signature_hash();
     let signature = signer.sign_hash(&tx_sign_hash).await?;
     Ok(TransactionSigned::new_unhashed(tx, signature))
@@ -65,7 +67,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_encode_decode_signed_eip4844_tx() {
-        let tx = make_eip4844_tx(0);
+        let tx = make_eip4844_tx(0, 1);
         let signature = Signature::test_signature();
         let signed_tx = TransactionSigned::new_unhashed(tx, signature);
         let tx_bytes = signed_tx.encoded_2718();
@@ -76,7 +78,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_encode_decode_signed_eip1559_tx() {
-        let tx = make_eip1559_tx(0);
+        let tx = make_eip1559_tx(0, 1);
         let signature = Signature::test_signature();
         let signed_tx = TransactionSigned::new_unhashed(tx, signature);
         let tx_bytes = signed_tx.encoded_2718();

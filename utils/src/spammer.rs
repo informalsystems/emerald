@@ -37,6 +37,8 @@ pub struct Spammer {
     max_rate: u64,
     /// Whether to send EIP-4844 blob transactions.
     blobs: bool,
+    /// Chain ID for the transactions.
+    chain_id: u64,
 }
 
 impl Spammer {
@@ -47,6 +49,7 @@ impl Spammer {
         max_time: u64,
         max_rate: u64,
         blobs: bool,
+        chain_id: u64,
     ) -> Result<Self> {
         let signers = make_signers();
         Ok(Self {
@@ -57,6 +60,7 @@ impl Spammer {
             max_time,
             max_rate,
             blobs,
+            chain_id,
         })
     }
 
@@ -141,9 +145,9 @@ impl Spammer {
 
                 // Create one transaction and sign it.
                 let signed_tx = if self.blobs {
-                    make_signed_eip4844_tx(&self.signer, nonce).await?
+                    make_signed_eip4844_tx(&self.signer, nonce, self.chain_id).await?
                 } else {
-                    make_signed_eip1559_tx(&self.signer, nonce).await?
+                    make_signed_eip1559_tx(&self.signer, nonce, self.chain_id).await?
                 };
                 let tx_bytes = signed_tx.encoded_2718();
                 let tx_bytes_len = tx_bytes.len() as u64;

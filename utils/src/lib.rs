@@ -125,6 +125,9 @@ pub struct SpamCmd {
 
     #[clap(long, default_value = "0")]
     signer_index: usize,
+
+    #[clap(long, short)]
+    chain_id: u64,
 }
 
 impl SpamCmd {
@@ -136,10 +139,19 @@ impl SpamCmd {
             time,
             blobs,
             signer_index,
+            chain_id,
         } = self;
         let url = format!("http://{rpc_url}").parse()?;
-        Spammer::new(url, *signer_index, *num_txs, *time, *rate, *blobs)?
-            .run()
-            .await
+        Spammer::new(
+            url,
+            *signer_index,
+            *num_txs,
+            *time,
+            *rate,
+            *blobs,
+            *chain_id,
+        )?
+        .run()
+        .await
     }
 }

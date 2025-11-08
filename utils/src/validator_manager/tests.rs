@@ -161,6 +161,7 @@ async fn deploy_and_register_validators(
     let owner_contract = ValidatorManager::new(contract_address, deployer_provider.clone());
     for (i, validator) in validators.iter().enumerate() {
         let info: ValidatorManager::ValidatorInfo = validator.clone().into();
+
         let pending_tx = owner_contract
             .register(info.validatorKey, info.power)
             .send()

@@ -18,7 +18,16 @@ use tokio::time::{self, sleep, Duration, Instant};
 use tracing::debug;
 
 use crate::make_signers;
-use crate::tx::{make_signed_eip1559_tx, make_signed_eip4844_tx};
+use crate::tx::{make_signed_contract_call_tx, make_signed_eip1559_tx, make_signed_eip4844_tx};
+
+struct ContractPayload {
+    /// Contract address for contract call spamming.
+    address: Address,
+    /// Function signature for contract calls (e.g., "increment()").
+    function_sig: String,
+    /// Function arguments.
+    args: Vec<String>,
+}
 
 /// A transaction spammer that sends Ethereum transactions at a controlled rate.
 /// Tracks and reports statistics on sent transactions.
@@ -39,6 +48,8 @@ pub struct Spammer {
     blobs: bool,
     /// Chain ID for the transactions.
     chain_id: u64,
+    /// Optional payload describing contract call spam parameters.
+    contract_payload: Option<ContractPayload>,
 }
 
 impl Spammer {
@@ -61,6 +72,38 @@ impl Spammer {
             max_rate,
             blobs,
             chain_id,
+            contract_payload: None,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_contract(
+        url: Url,
+        signer_index: usize,
+        max_num_txs: u64,
+        max_time: u64,
+        max_rate: u64,
+        contract: &Address,
+        function: &str,
+        args: &[String],
+        chain_id: u64,
+    ) -> Result<Self> {
+        let signers = make_signers();
+        let contract_payload = ContractPayload {
+            address: *contract,
+            function_sig: function.to_string(),
+            args: args.to_vec(),
+        };
+        Ok(Self {
+            id: signer_index.to_string(),
+            client: RpcClient::new(url)?,
+            signer: signers[signer_index].clone(),
+            max_num_txs,
+            max_time,
+            max_rate,
+            blobs: false, // Contract calls don't use blobs
+            contract_payload: Some(contract_payload),
+            chain_id,
         })
     }
 
@@ -72,27 +115,29 @@ impl Spammer {
 
         let self_arc = Arc::new(self);
 
-        // Spawn spammer.
-        let spammer_handle = tokio::spawn({
+        // Spammer future.
+        let spammer_handle = {
             let self_arc = Arc::clone(&self_arc);
             async move {
                 self_arc
                     .spammer(result_sender, report_sender, finish_sender)
                     .await
             }
-        });
+        };
 
-        // Spawn result tracker.
-        let tracker_handle = tokio::spawn({
+        // Result tracker future.
+        let tracker_handle = {
             let self_arc = Arc::clone(&self_arc);
             async move {
                 self_arc
                     .tracker(result_receiver, report_receiver, finish_receiver)
                     .await
             }
-        });
+        };
 
-        let _ = tokio::join!(spammer_handle, tracker_handle);
+        // Run spammer and result tracker concurrently.
+        tokio::try_join!(spammer_handle, tracker_handle)?;
+
         Ok(())
     }
 
@@ -144,9 +189,22 @@ impl Spammer {
                 }
 
                 // Create one transaction and sign it.
-                let signed_tx = if self.blobs {
+                let signed_tx = if let Some(ref payload) = self.contract_payload {
+                    // Contract call transaction
+                    make_signed_contract_call_tx(
+                        &self.signer,
+                        nonce,
+                        payload.address,
+                        &payload.function_sig,
+                        payload.args.as_slice(),
+                        self.chain_id,
+                    )
+                    .await?
+                } else if self.blobs {
+                    // Blob transaction
                     make_signed_eip4844_tx(&self.signer, nonce, self.chain_id).await?
                 } else {
+                    // Regular transfer
                     make_signed_eip1559_tx(&self.signer, nonce, self.chain_id).await?
                 };
                 let tx_bytes = signed_tx.encoded_2718();

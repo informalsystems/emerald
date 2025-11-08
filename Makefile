@@ -52,3 +52,24 @@ clean-prometheus: stop
 
 spam:
 	cargo run --bin malachitebft-eth-utils spam --time=60 --rate=5000 --rpc-url=127.0.0.1:8545
+
+spam-contract:
+	@if [ -z "$(CONTRACT)" ]; then \
+		echo "Error: CONTRACT address is required"; \
+		echo "Usage: make spam-contract CONTRACT=0x5FbDB... FUNCTION=\"increment()\""; \
+		echo "Example with args: make spam-contract CONTRACT=0x5FbDB... FUNCTION=\"setNumber(uint256)\" ARGS=\"12345\""; \
+		exit 1; \
+	fi; \
+	if [ -z "$(FUNCTION)" ]; then \
+		echo "Error: FUNCTION signature is required"; \
+		echo "Usage: make spam-contract CONTRACT=0x5FbDB... FUNCTION=\"increment()\""; \
+		echo "Example with args: make spam-contract CONTRACT=0x5FbDB... FUNCTION=\"setNumber(uint256)\" ARGS=\"12345\""; \
+		exit 1; \
+	fi; \
+	cargo run --release --bin malachitebft-eth-utils spam-contract \
+		--contract="$(CONTRACT)" \
+		--function="$(FUNCTION)" \
+		--args="$(ARGS)" \
+		--time=60 \
+		--rate=1000 \
+		--rpc-url=127.0.0.1:8545

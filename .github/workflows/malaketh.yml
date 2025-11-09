@@ -47,6 +47,7 @@ jobs:
         run: forge build
       - name: Run malaketh
         run: |
+          forge build
           cargo build
           # `make all` equivalent but with --no-wait
           ./scripts/generate_testnet_config.sh --nodes 3 --testnet-config-dir .testnet

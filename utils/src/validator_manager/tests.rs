@@ -154,8 +154,14 @@ async fn deploy_and_register_validators(
     for (i, validator) in validators.iter().enumerate() {
         let info: ValidatorManager::ValidatorInfo = validator.clone().into();
 
+        // Encode the public key as uncompressed format (65 bytes: 0x04 + x + y)
+        let mut pubkey_bytes = Vec::with_capacity(65);
+        pubkey_bytes.push(0x04);
+        pubkey_bytes.extend_from_slice(&info.validatorKey.x.to_be_bytes::<32>());
+        pubkey_bytes.extend_from_slice(&info.validatorKey.y.to_be_bytes::<32>());
+
         let pending_tx = owner_contract
-            .register(info.validatorKey, info.power)
+            .register(pubkey_bytes.into(), info.power)
             .send()
             .await?;
 

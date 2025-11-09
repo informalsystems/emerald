@@ -4,8 +4,6 @@ build:
 	docker build -t emerald:latest .
 
 # Default values
-NODE_COUNT ?= 3
-VALIDATOR_COUNT ?= 3
 BASE_HTTP_PORT ?= 8545
 BASE_WS_PORT ?= 8946
 BASE_ENGINE_PORT ?= 9551
@@ -34,6 +32,19 @@ help:
 .ONESHELL:
 SHELL := /bin/bash
 start:
+	if [ -z "$(NODE_COUNT)" ]; then \
+		echo "Error: NODE_COUNT is required. Usage: make start NODE_COUNT=3"; \
+		exit 1; \
+	fi
+	// check NODE_COUNT is greater than 0 and less than or equal to 8
+	if [ $(NODE_COUNT) -le 0 ]; then \
+		echo "Error: NODE_COUNT must be greater than 0"; \
+		exit 1; \
+	fi
+	if [ $(NODE_COUNT) -gt 8 ]; then \
+		echo "Error: NODE_COUNT cannot be greater than 8"; \
+		exit 1; \
+	fi
 	./scripts/generate_testnet_config.sh --nodes $(NODE_COUNT) --testnet-config-dir .testnet --engine-base-port $(BASE_ENGINE_PORT) --rpc-base-port $(BASE_HTTP_PORT)
 	cargo run --bin malachitebft-eth-app -- testnet --home nodes --testnet-config .testnet/testnet_config.toml --log-level info
 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin malachitebft-eth-app show-pubkey {} > nodes/validator_public_keys.txt
@@ -50,11 +61,7 @@ start:
 	done
 	./scripts/add_dynamic_peers.sh --nodes $(NODE_COUNT)
 	for i in $$(seq 0 $$(($(NODE_COUNT) - 1))); do
-		P2P_C_PORT=$$(($(BASE_P2P_C_PORT) + $$i))
-		P2P_M_PORT=$$(($(BASE_P2P_M_PORT) + $$i))
-		PROMETHEUS_PORT=$$(($(BASE_PROMETHEUS_PORT) + $$i))
-		echo "Starting emerald node $$i on ports P2P consensus:$$P2P_C_PORT P2P mempool:$$P2P_M_PORT PROMETHEUS:$$PROMETHEUS_PORT"
-		NODE_ID=$$i P2P_C_PORT=$$P2P_C_PORT P2P_M_PORT=$$P2P_M_PORT \
+		NODE_ID=$$i \
 			docker compose -p emerald-node-$$i -f emerald-compose.yaml up -d
 	done
 	docker compose up -d prometheus grafana otterscan
@@ -77,12 +84,9 @@ start-node:
 	METRICS_PORT=$$(($(BASE_METRICS_PORT) + $(NODE_ID))) \
 		docker compose -p reth-node-$(NODE_ID) -f reth-node-compose.yaml up -d;
 	sleep 2
-	NODE_ID=$(NODE_ID) \
-	P2P_C_PORT=$$(($(BASE_P2P_C_PORT) + $(NODE_ID))) \
-	P2P_M_PORT=$$(($(BASE_P2P_M_PORT) + $(NODE_ID))) \
-	PROMETHEUS_PORT=$$(($(BASE_PROMETHEUS_PORT) + $(NODE_ID))) \
-		docker compose -p emerald-node-$(NODE_ID) -f emerald-compose.yaml up -d;
 	./scripts/add_dynamic_peers.sh --nodes $(NODE_COUNT)
+	NODE_ID=$(NODE_ID) \
+		docker compose -p emerald-node-$(NODE_ID) -f emerald-compose.yaml up -d;
 
 .PHONY: stop-node
 stop-node:
@@ -152,6 +156,7 @@ clean:
 		name="reth-node-$${i}_reth-data-$${i}"; \
 		docker volume rm --force $$name 2>/dev/null || true; \
 	done
+	docker compose down --remove-orphans prometheus grafana otterscan
 
 spam:
 	cargo run --bin malachitebft-eth-utils spam --time=60 --rate=5000 --rpc-url=127.0.0.1:8545

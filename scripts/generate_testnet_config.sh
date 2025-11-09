@@ -135,7 +135,7 @@ moniker = "test-$i"
 execution_authrpc_address = "http://localhost:${rpc_port}"
 engine_authrpc_address = "http://localhost:${auth_port}"
 jwt_token_path = "/home/emerald/jwt"
-sync_timeout_ms = 1000000
+sync_timeout_ms = 10000000
 sync_initial_delay_ms = 100
 el_node_type = "archive"
 EOF

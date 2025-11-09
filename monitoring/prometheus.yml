@@ -33,6 +33,38 @@ scrape_configs:
         labels:
           client_name: "reth"
           client_type: "execution"
+  - job_name: "reth4"
+    metrics_path: "/metrics"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ["127.0.0.1:9004"]
+        labels:
+          client_name: "reth"
+          client_type: "execution"
+  - job_name: "reth5"
+    metrics_path: "/metrics"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ["127.0.0.1:9005"]
+        labels:
+          client_name: "reth"
+          client_type: "execution"
+  - job_name: "reth6"
+    metrics_path: "/metrics"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ["127.0.0.1:9006"]
+        labels:
+          client_name: "reth"
+          client_type: "execution"
+  - job_name: "reth7"
+    metrics_path: "/metrics"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ["127.0.0.1:9007"]
+        labels:
+          client_name: "reth"
+          client_type: "execution"
 
   - job_name: "malachite0"
     metrics_path: "/metrics"
@@ -63,6 +95,38 @@ scrape_configs:
     scrape_interval: 1s
     static_configs:
       - targets: ["127.0.0.1:29003"]
+        labels:
+          client_name: "malachite"
+          client_type: "consensus"
+  - job_name: "malachite4"
+    metrics_path: "/metrics"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ["127.0.0.1:29004"]
+        labels:
+          client_name: "malachite"
+          client_type: "consensus"
+  - job_name: "malachite5"
+    metrics_path: "/metrics"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ["127.0.0.1:29005"]
+        labels:
+          client_name: "malachite"
+          client_type: "consensus"
+  - job_name: "malachite6"
+    metrics_path: "/metrics"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ["127.0.0.1:29006"]
+        labels:
+          client_name: "malachite"
+          client_type: "consensus"
+  - job_name: "malachite7"
+    metrics_path: "/metrics"
+    scrape_interval: 1s
+    static_configs:
+      - targets: ["127.0.0.1:29007"]
         labels:
           client_name: "malachite"
           client_type: "consensus"

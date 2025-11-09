@@ -3,7 +3,8 @@
 Tendermint-based consensus engine for Ethereum execution clients, connected via [Engine API][engine-api].
 Built as a shim layer on top of [Malachite][malachite].
 
-__Table of contents__
+**Table of contents**
+
 - [Introduction](#introduction)
 - [Engine API](#engine-api)
 - [Malachite as a library](#malachite-as-a-library)
@@ -77,8 +78,8 @@ Malachite sends additional messages (e.g., for synchronisation), but we focus on
 events relevant to this integration. Each event includes a `reply` callback, allowing the
 application to respond to Malachite.
 
-For more details on Malachite's architecture and its three interfaces, check out the blog post [*The
-Most Flexible Consensus API in the World*][flexible]. For a hands-on explanation of the Channels
+For more details on Malachite's architecture and its three interfaces, check out the blog post [_The
+Most Flexible Consensus API in the World_][flexible]. For a hands-on explanation of the Channels
 API, see the [Malachite Channels tutorial][channels].
 
 ## Connecting Malachite to Engine API
@@ -87,6 +88,7 @@ Malaketh-layered is an application built on top of Malachite, which is unaware o
 only exposes the Channels interface.
 
 The application includes two main components for interacting with the execution client:
+
 - An RPC client with JWT authentication to send Engine API requests to the execution client.
 - An internal state to keep track of values such as the latest block and the current height, round,
   and proposer. It also maintains persistent storage for proposals and block data to support block
@@ -129,12 +131,11 @@ following steps:
 
 1. Retrieve the stored block and compute its hash.
 2. Call `forkchoiceUpdated` with the block’s hash (no `PayloadAttributes`) to set the block as the
-   head  of the chain and finalise it.
+   head of the chain and finalise it.
 3. Update the local state with the new block and certificate. Finally, signal Malachite to proceed
    to the next height.
 
 <img src="docs/assets/malaketh-layered-2.png" width="800" />
-
 
 ### Voting and committing as a non-proposer
 
@@ -167,33 +168,75 @@ Check out the following section for reproducing these tests.
 
 ### Requirements
 
-- Docker
-- [Foundry][foundry], to be able to use [`cast`][cast].
+The following tools are required to run a local testnet:
+
+- **Docker** & **Docker Compose** - For running Reth execution clients and monitoring stack
+- **Rust** (stable toolchain) - For building consensus and application binaries
+  - Install: https://rustup.rs/
+- **Foundry** - Ethereum development toolkit providing `forge` and `cast`
+  - `forge` - For compiling Solidity contracts
+  - `cast` - For RPC calls and blockchain queries
+  - Install: https://book.getfoundry.sh/getting-started/installation
+- **make** - Build automation tool
+- **jq** - Command-line JSON processor (used in peer discovery scripts)
+  - Install: `apt install jq` (Ubuntu/Debian) or `brew install jq` (macOS)
+- **bash** (v4+) - For running setup scripts
+
+Standard Unix tools (`xargs`, `ls`, `seq`, etc.) are also required but typically pre-installed on most systems.
 
 ### Setup and run
 
-Running `make` will:
-1. Clean up any previous running testnet, if any.
-2. Build the app.
-3. Generate a genesis file in `./assets/genesis.json`.
-4. Spin up docker containers including 3 Reth servers + monitoring services (Prometheus and Grafana).
-5. Generate configuration files for 3 Malachite nodes in `./nodes/`.
-6. Run the Malachite nodes.
+For local testnet, follow these steps:
 
-If successful, Malachite logs for each node can be found at `nodes/<N>/logs/node.log`.
+1. Set the amount of validators to run:
+   ```bash
+   export NODE_COUNT=3
+   ```
+2. Build the Docker images and setup Forge:
+   ```bash
+   make build
+   ```
+3. Start the local testnet:
+   ```bash
+   make start
+   ```
 
-Check out the metrics in the Grafana dashboards at http://localhost:3000.
+Node IDs are indexed 0-7 (example NODE_ID=0, NODE_ID=3 etc). To stop a single node, run:
+
+```
+make stop-node NODE_ID=<node_id>
+```
+
+To start a single node, run:
+
+```
+make start-node NODE_ID=<node_id>
+```
+
+To stop the entire testnet, run:
+
+```
+make stop-all
+```
+
+When finished, to stop and remove all containers, networks, and volumes created for the testnet, run:
+
+```
+make clean
+```
 
 ### Inject transaction load
 
 In a separate terminal, run the following command to send transactions during 60 seconds at a rate
 of 1000 tx/s to one of Reth RPC endpoints.
+
 ```
 cargo run --bin malachitebft-eth-utils spam --time=60 --rate=1000
 ```
 
 > [!TIP]
 > With the `cast` tool one can explore the blockchain by querying the execution client. For example:
+>
 > ```
 > cast block-number                      # show the number of the latest finalised block
 > cast block 3                           # show the block #3's content

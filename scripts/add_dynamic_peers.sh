@@ -33,6 +33,12 @@ for i in $(seq 0 $((NODES_COUNT - 1))); do
 done
 
 for i in $(seq 0 $((NODES_COUNT - 1))); do
-    cast rpc --rpc-url 127.0.0.1:$((PORT + i)) admin_addTrustedPeer "${RETH_ENODES[i]}"
-    cast rpc --rpc-url 127.0.0.1:$((PORT + i)) admin_addPeer "${RETH_ENODES[i]}"
+    for j in $(seq 0 $((NODES_COUNT - 1))); do
+        # Skip adding yourself as a peer
+        if [ $i -ne $j ]; then
+            echo "Adding peer $j to node $i"
+            cast rpc --rpc-url 127.0.0.1:$((PORT + i)) admin_addTrustedPeer "${RETH_ENODES[j]}"
+            cast rpc --rpc-url 127.0.0.1:$((PORT + i)) admin_addPeer "${RETH_ENODES[j]}"
+        fi
+    done
 done

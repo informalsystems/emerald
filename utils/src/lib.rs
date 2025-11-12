@@ -6,6 +6,7 @@ use mempool_monitor::MempoolMonitor;
 use spammer::Spammer;
 
 pub mod dex_templates;
+pub mod dexalot_generator;
 pub mod genesis;
 pub mod mempool_monitor;
 pub mod spammer;
@@ -83,6 +84,14 @@ pub struct SpamCmd {
 
     #[clap(long, default_value = "0")]
     signer_index: usize,
+
+    /// Dexalot Portfolio contract address (required for dexalot templates)
+    #[clap(long, required_if_eq("template", "dexalot"))]
+    portfolio: Option<Address>,
+
+    /// Dexalot TradePairs contract address (required for dexalot templates)
+    #[clap(long, required_if_eq("template", "dexalot"))]
+    tradepairs: Option<Address>,
 }
 #[derive(Parser, Debug, Clone, PartialEq)]
 pub struct MonitorMempoolCmd {
@@ -121,6 +130,8 @@ impl SpamCmd {
             time,
             blobs,
             signer_index,
+            portfolio,
+            tradepairs,
         } = self;
         let url = if rpc_url.starts_with("http://") || rpc_url.starts_with("https://") {
             rpc_url.parse()?
@@ -134,8 +145,38 @@ impl SpamCmd {
             let config_path = template
                 .as_deref()
                 .unwrap_or("utils/examples/exchange_transactions.yaml");
-            println!("Loading DEX transaction templates from: {config_path}");
-            Some(dex_templates::load_templates(config_path)?)
+
+            // Check if this is a dexalot template (generate dynamically)
+            if config_path.contains("dexalot") {
+                // Get signer address for dynamic template generation
+                let signers = make_signers();
+                let signer_address = signers[*signer_index].address();
+
+                // Require both portfolio and tradepairs addresses
+                let portfolio_addr = portfolio.ok_or_else(|| {
+                    color_eyre::eyre::eyre!(
+                        "Dexalot template requires --portfolio address to be specified"
+                    )
+                })?;
+                let tradepairs_addr = tradepairs.ok_or_else(|| {
+                    color_eyre::eyre::eyre!(
+                        "Dexalot template requires --tradepairs address to be specified"
+                    )
+                })?;
+
+                let config = dexalot_generator::DexalotConfig {
+                    portfolio: portfolio_addr,
+                    tradepairs: tradepairs_addr,
+                };
+
+                Some(dexalot_generator::generate_dexalot_transactions(
+                    signer_address,
+                    config,
+                )?)
+            } else {
+                println!("Loading DEX transaction templates from: {config_path}");
+                Some(dex_templates::load_templates(config_path)?)
+            }
         } else if template.is_some() {
             // If template is specified but --dex is not set, warn the user
             eprintln!(

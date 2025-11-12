@@ -106,7 +106,7 @@ pub struct MonitorMempoolCmd {
 
 impl MonitorMempoolCmd {
     pub(crate) async fn run(&self) -> Result<()> {
-        let MonitorMempoolCmd {
+        let Self {
             rpc_url,
             poll_interval_ms,
         } = self;

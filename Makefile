@@ -52,6 +52,8 @@ clean-prometheus: stop
 
 spam:
 	cargo run --bin malachitebft-eth-utils spam --time=60 --rate=5000 --rpc-url=127.0.0.1:8545
+	cargo run --bin malachitebft-eth-utils spam --time=60 --rate=5000 --rpc-url=127.0.0.1:18545
+	cargo run --bin malachitebft-eth-utils spam --time=60 --rate=5000 --rpc-url=127.0.0.1:28545
 
 spam-contract:
 	@if [ -z "$(CONTRACT)" ]; then \

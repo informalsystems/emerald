@@ -73,7 +73,7 @@ function wait_for_reth {
             sleep 3
         fi
     done
-    echo "Reth node at port $NODE_PORT did not reach height 0 in time. Exiting with error."
+    echo "Reth node at port $NODE_PORT did not reach height 1 in time. Exiting with error."
     exit_and_cleanup 1
 }
 

@@ -38,7 +38,7 @@ pub fn generate_rubicon_transactions(config: RubiconConfig) -> Result<Vec<TxTemp
         input: format!("0x{}", hex::encode(usdc_approve_calldata)),
     }));
 
-    // 3. Deposit 0.001 ETH to get WETH
+    // 3. Deposit 0.001 ETH to get WETH for first sell
     let deposit_calldata = encode_deposit()?;
     transactions.push(TxTemplate::Eip1559(Eip1559Template {
         to: format!("{:#x}", config.weth),
@@ -53,8 +53,33 @@ pub fn generate_rubicon_transactions(config: RubiconConfig) -> Result<Vec<TxTemp
     let sell_prices = vec![3000, 3100, 2950, 3000, 3050, 2900, 3150, 2850, 3200, 2980];
     let weth_amount = U256::from(10_000_000_000_000_000u128); // 0.01 WETH
 
-    for price in sell_prices {
-        let usdc_amount = U256::from((price as u128) * 1_000_000_000_000_000_000u128); // price in USDC (18 decimals)
+    // 4. First SELL offer
+    let usdc_amount = weth_amount * U256::from(sell_prices[0]);
+    let offer_calldata =
+        encode_offer(weth_amount, config.weth, usdc_amount, config.usdc, 0, true)?;
+    transactions.push(TxTemplate::Eip1559(Eip1559Template {
+        to: format!("{:#x}", config.rubicon_market),
+        value: "0.0".to_string(),
+        gas_limit: 500000,
+        max_fee_per_gas: "2".to_string(),
+        max_priority_fee_per_gas: "1".to_string(),
+        input: format!("0x{}", hex::encode(offer_calldata)),
+    }));
+
+    // 5. Deposit 1 ETH to get WETH for remaining sells
+    let deposit_calldata_2 = encode_deposit()?;
+    transactions.push(TxTemplate::Eip1559(Eip1559Template {
+        to: format!("{:#x}", config.weth),
+        value: "1".to_string(),
+        gas_limit: 100000,
+        max_fee_per_gas: "2".to_string(),
+        max_priority_fee_per_gas: "1".to_string(),
+        input: format!("0x{}", hex::encode(deposit_calldata_2)),
+    }));
+
+    // 6-13. Remaining 9 SELL offers
+    for price in &sell_prices[1..] {
+        let usdc_amount = weth_amount * U256::from(*price);
         let offer_calldata =
             encode_offer(weth_amount, config.weth, usdc_amount, config.usdc, 0, true)?;
 
@@ -68,33 +93,22 @@ pub fn generate_rubicon_transactions(config: RubiconConfig) -> Result<Vec<TxTemp
         }));
     }
 
-    // 14. Deposit 1 ETH to get more WETH
-    let deposit_calldata_2 = encode_deposit()?;
-    transactions.push(TxTemplate::Eip1559(Eip1559Template {
-        to: format!("{:#x}", config.weth),
-        value: "1".to_string(),
-        gas_limit: 100000,
-        max_fee_per_gas: "2".to_string(),
-        max_priority_fee_per_gas: "1".to_string(),
-        input: format!("0x{}", hex::encode(deposit_calldata_2)),
-    }));
-
-    // 15. Mint 10,000 USDC using adminMint()
-    let admin_mint_calldata = encode_admin_mint()?;
+    // 14. Mint 10,000 USDC using adminMint() - USDCWithFaucet specific function
+    // Using raw selector 0x6d1b229d since this is a custom function
     transactions.push(TxTemplate::Eip1559(Eip1559Template {
         to: format!("{:#x}", config.usdc),
         value: "0.0".to_string(),
         gas_limit: 200000,
         max_fee_per_gas: "2".to_string(),
         max_priority_fee_per_gas: "1".to_string(),
-        input: format!("0x{}", hex::encode(admin_mint_calldata)),
+        input: "0x6d1b229d".to_string(),
     }));
 
-    // 16-23. BUY offers at varying prices (match sells)
+    // 15-21. BUY offers at varying prices (7 orders to match sells)
     let buy_prices = vec![3000, 3100, 2950, 3000, 3050, 3150, 3200];
 
     for price in buy_prices {
-        let usdc_amount = U256::from((price as u128) * 1_000_000_000_000_000_000u128); // price in USDC
+        let usdc_amount = weth_amount * U256::from(price);
         let offer_calldata =
             encode_offer(usdc_amount, config.usdc, weth_amount, config.weth, 0, true)?;
 
@@ -124,12 +138,6 @@ fn encode_approve(spender: Address, amount: U256) -> Result<Vec<u8>> {
 /// Encode deposit() function call
 fn encode_deposit() -> Result<Vec<u8>> {
     let function = Function::parse("deposit()")?;
-    Ok(function.abi_encode_input(&[])?)
-}
-
-/// Encode adminMint() function call
-fn encode_admin_mint() -> Result<Vec<u8>> {
-    let function = Function::parse("adminMint()")?;
     Ok(function.abi_encode_input(&[])?)
 }
 

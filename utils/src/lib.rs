@@ -9,6 +9,7 @@ pub mod dex_templates;
 pub mod dexalot_generator;
 pub mod genesis;
 pub mod mempool_monitor;
+pub mod rubicon_generator;
 pub mod spammer;
 pub mod tx;
 pub mod validator_manager;
@@ -92,6 +93,18 @@ pub struct SpamCmd {
     /// Dexalot TradePairs contract address (required for dexalot templates)
     #[clap(long, required_if_eq("template", "dexalot"))]
     tradepairs: Option<Address>,
+
+    /// RubiconMarket contract address (for rubicon templates)
+    #[clap(long)]
+    rubicon_market: Option<Address>,
+
+    /// WETH9 token contract address (for rubicon templates)
+    #[clap(long)]
+    weth: Option<Address>,
+
+    /// USDC token contract address (for rubicon templates)
+    #[clap(long)]
+    usdc: Option<Address>,
 }
 #[derive(Parser, Debug, Clone, PartialEq)]
 pub struct MonitorMempoolCmd {
@@ -132,6 +145,9 @@ impl SpamCmd {
             signer_index,
             portfolio,
             tradepairs,
+            rubicon_market,
+            weth,
+            usdc,
         } = self;
         let url = if rpc_url.starts_with("http://") || rpc_url.starts_with("https://") {
             rpc_url.parse()?
@@ -169,10 +185,55 @@ impl SpamCmd {
                     tradepairs: tradepairs_addr,
                 };
 
-                Some(dexalot_generator::generate_dexalot_transactions(
-                    signer_address,
-                    config,
-                )?)
+                let templates =
+                    dexalot_generator::generate_dexalot_transactions(signer_address, config)?;
+
+                // Save generated templates to file
+                let output_path = "utils/examples/generated_dexalot.yaml";
+                if let Err(e) = dex_templates::save_templates(&templates, &output_path) {
+                    eprintln!("Warning: Failed to save generated template: {}", e);
+                } else {
+                    println!("Generated Dexalot template saved to: {}", output_path);
+                }
+
+                Some(templates)
+            } else if config_path.contains("rubicon") || rubicon_market.is_some() {
+                // Check if this is a rubicon template (generate dynamically)
+                // Require all three contract addresses
+                let rubicon_market_addr = rubicon_market.ok_or_else(|| {
+                    color_eyre::eyre::eyre!(
+                        "Rubicon template requires --rubicon-market address to be specified"
+                    )
+                })?;
+                let weth_addr = weth.ok_or_else(|| {
+                    color_eyre::eyre::eyre!(
+                        "Rubicon template requires --weth address to be specified"
+                    )
+                })?;
+                let usdc_addr = usdc.ok_or_else(|| {
+                    color_eyre::eyre::eyre!(
+                        "Rubicon template requires --usdc address to be specified"
+                    )
+                })?;
+
+                let config = rubicon_generator::RubiconConfig {
+                    rubicon_market: rubicon_market_addr,
+                    weth: weth_addr,
+                    usdc: usdc_addr,
+                };
+
+                println!("Generating Rubicon DEX transaction templates with custom addresses");
+                let templates = rubicon_generator::generate_rubicon_transactions(config)?;
+
+                // Save generated templates to file
+                let output_path = "utils/examples/generated_rubicon.yaml";
+                if let Err(e) = dex_templates::save_templates(&templates, &output_path) {
+                    eprintln!("Warning: Failed to save generated template: {}", e);
+                } else {
+                    println!("Generated Rubicon template saved to: {}", output_path);
+                }
+
+                Some(templates)
             } else {
                 println!("Loading DEX transaction templates from: {config_path}");
                 Some(dex_templates::load_templates(config_path)?)

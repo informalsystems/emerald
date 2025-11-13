@@ -3,16 +3,16 @@ use std::path::Path;
 
 use alloy_primitives::{Address, Bytes, U256};
 use color_eyre::eyre::{eyre, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Root structure for deserializing transaction templates from YAML
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TransactionTemplates {
     pub transactions: Vec<TxTemplate>,
 }
 
 /// Enum representing different transaction types
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum TxTemplate {
     Eip1559(Eip1559Template),
@@ -20,7 +20,7 @@ pub enum TxTemplate {
 }
 
 /// Template for EIP-1559 transactions
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Eip1559Template {
     /// Recipient address
     pub to: String,
@@ -38,7 +38,7 @@ pub struct Eip1559Template {
 }
 
 /// Template for EIP-4844 (blob) transactions
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Eip4844Template {
     /// Recipient address
     pub to: String,
@@ -124,6 +124,33 @@ pub fn load_templates(path: impl AsRef<Path>) -> Result<Vec<TxTemplate>> {
     }
 
     Ok(templates.transactions)
+}
+
+/// Save transaction templates to a YAML file
+pub fn save_templates(templates: &[TxTemplate], path: impl AsRef<Path>) -> Result<()> {
+    let path_ref = path.as_ref();
+
+    // Create parent directory if it doesn't exist
+    if let Some(parent) = path_ref.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let wrapper = TransactionTemplates {
+        transactions: templates.to_vec(),
+    };
+
+    let yaml_content = serde_yaml::to_string(&wrapper)
+        .map_err(|e| eyre!("Failed to serialize templates to YAML: {}", e))?;
+
+    fs::write(path_ref, yaml_content).map_err(|e| {
+        eyre!(
+            "Failed to write template file '{}': {}",
+            path_ref.display(),
+            e
+        )
+    })?;
+
+    Ok(())
 }
 
 /// Round-robin selector for cycling through transaction templates

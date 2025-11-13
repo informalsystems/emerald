@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
 
             // Initialize file-based logger
             tracing_subscriber::registry()
-                .with(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
+                .with(EnvFilter::from_default_env().add_directive(tracing::Level::DEBUG.into()))
                 .with(fmt::layer().with_writer(log_file).with_ansi(false))
                 .init();
         }
@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
 
             // Initialize file-based logger
             tracing_subscriber::registry()
-                .with(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
+                .with(EnvFilter::from_default_env().add_directive(tracing::Level::DEBUG.into()))
                 .with(fmt::layer().with_writer(log_file).with_ansi(false))
                 .init();
         }

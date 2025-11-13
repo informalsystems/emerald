@@ -34,8 +34,34 @@ pub fn generate_dexalot_transactions(
         hex::decode("415641582f555344540000000000000000000000000000000000000000000000")?;
     let base_price = 15.0; // 15 USDT
     let price_increment = 0.1;
-    let sell_quantity = U256::from(1_000_000_000_000_000_000u128); // 1.0 AVAX
-    let buy_quantity = U256::from(500_000_000_000_000_000u128); // 0.5 AVAX
+
+    // Varying sell quantities to create partial fills
+    let sell_quantities = vec![
+        U256::from(1_000_000_000_000_000_000u128), // 1.0 AVAX
+        U256::from(1_500_000_000_000_000_000u128), // 1.5 AVAX
+        U256::from(800_000_000_000_000_000u128),   // 0.8 AVAX
+        U256::from(1_200_000_000_000_000_000u128), // 1.2 AVAX
+        U256::from(900_000_000_000_000_000u128),   // 0.9 AVAX
+        U256::from(1_100_000_000_000_000_000u128), // 1.1 AVAX
+        U256::from(700_000_000_000_000_000u128),   // 0.7 AVAX
+        U256::from(1_300_000_000_000_000_000u128), // 1.3 AVAX
+        U256::from(950_000_000_000_000_000u128),   // 0.95 AVAX
+        U256::from(1_050_000_000_000_000_000u128), // 1.05 AVAX
+    ];
+
+    // Varying buy quantities to create partial fills
+    let buy_quantities = vec![
+        U256::from(600_000_000_000_000_000u128), // 0.6 AVAX
+        U256::from(750_000_000_000_000_000u128), // 0.75 AVAX
+        U256::from(500_000_000_000_000_000u128), // 0.5 AVAX
+        U256::from(850_000_000_000_000_000u128), // 0.85 AVAX
+        U256::from(650_000_000_000_000_000u128), // 0.65 AVAX
+        U256::from(550_000_000_000_000_000u128), // 0.55 AVAX
+        U256::from(700_000_000_000_000_000u128), // 0.7 AVAX
+        U256::from(800_000_000_000_000_000u128), // 0.8 AVAX
+        U256::from(450_000_000_000_000_000u128), // 0.45 AVAX
+        U256::from(900_000_000_000_000_000u128), // 0.9 AVAX
+    ];
 
     // 2-11. Generate 10 SELL orders
     for i in 0..10 {
@@ -47,7 +73,7 @@ pub fn generate_dexalot_transactions(
             &client_id,
             &tradepair_id,
             price_wei,
-            sell_quantity,
+            sell_quantities[i as usize],
             trader,
             1,
         )?;
@@ -72,7 +98,7 @@ pub fn generate_dexalot_transactions(
             &client_id,
             &tradepair_id,
             price_wei,
-            buy_quantity,
+            buy_quantities[i as usize],
             trader,
             0,
         )?;

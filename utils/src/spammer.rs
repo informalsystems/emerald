@@ -194,6 +194,14 @@ impl Spammer {
                     );
                     // Only update if the actual nonce is different from what we expected
                     nonce = actual_nonce;
+
+                    // Reset template selector to start from the beginning
+                    // This prevents sending dependent transactions out of order
+                    if let Some(ref templates) = self.templates {
+                        let mut selector = templates.lock().unwrap();
+                        selector.reset();
+                        eprintln!("Template sequence reset to start from beginning");
+                    }
                 }
             }
 

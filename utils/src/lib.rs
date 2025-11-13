@@ -190,7 +190,7 @@ impl SpamCmd {
 
                 // Save generated templates to file
                 let output_path = "utils/examples/generated_dexalot.yaml";
-                if let Err(e) = dex_templates::save_templates(&templates, &output_path) {
+                if let Err(e) = dex_templates::save_templates(&templates, output_path) {
                     eprintln!("Warning: Failed to save generated template: {}", e);
                 } else {
                     println!("Generated Dexalot template saved to: {}", output_path);
@@ -227,7 +227,7 @@ impl SpamCmd {
 
                 // Save generated templates to file
                 let output_path = "utils/examples/generated_rubicon.yaml";
-                if let Err(e) = dex_templates::save_templates(&templates, &output_path) {
+                if let Err(e) = dex_templates::save_templates(&templates, output_path) {
                     eprintln!("Warning: Failed to save generated template: {}", e);
                 } else {
                     println!("Generated Rubicon template saved to: {}", output_path);

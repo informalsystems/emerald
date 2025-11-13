@@ -38,11 +38,11 @@ pub fn generate_rubicon_transactions(config: RubiconConfig) -> Result<Vec<TxTemp
         input: format!("0x{}", hex::encode(usdc_approve_calldata)),
     }));
 
-    // 3. Deposit 0.001 ETH to get WETH for first sell
+    // 3. Deposit 0.1 ETH to get WETH for all 10 sell offers
     let deposit_calldata = encode_deposit()?;
     transactions.push(TxTemplate::Eip1559(Eip1559Template {
         to: format!("{:#x}", config.weth),
-        value: "0.001".to_string(),
+        value: "0.1".to_string(),
         gas_limit: 100000,
         max_fee_per_gas: "2".to_string(),
         max_priority_fee_per_gas: "1".to_string(),
@@ -50,13 +50,12 @@ pub fn generate_rubicon_transactions(config: RubiconConfig) -> Result<Vec<TxTemp
     }));
 
     // 4-13. SELL offers at varying prices (2850-3200 USDC/WETH)
-    let sell_prices = vec![3000, 3100, 2950, 3000, 3050, 2900, 3150, 2850, 3200, 2980];
+    let sell_prices = [3000, 3100, 2950, 3000, 3050, 2900, 3150, 2850, 3200, 2980];
     let weth_amount = U256::from(10_000_000_000_000_000u128); // 0.01 WETH
 
     // 4. First SELL offer
     let usdc_amount = weth_amount * U256::from(sell_prices[0]);
-    let offer_calldata =
-        encode_offer(weth_amount, config.weth, usdc_amount, config.usdc, 0, true)?;
+    let offer_calldata = encode_offer(weth_amount, config.weth, usdc_amount, config.usdc, 0, true)?;
     transactions.push(TxTemplate::Eip1559(Eip1559Template {
         to: format!("{:#x}", config.rubicon_market),
         value: "0.0".to_string(),
@@ -105,7 +104,7 @@ pub fn generate_rubicon_transactions(config: RubiconConfig) -> Result<Vec<TxTemp
     }));
 
     // 15-21. BUY offers at varying prices (7 orders to match sells)
-    let buy_prices = vec![3000, 3100, 2950, 3000, 3050, 3150, 3200];
+    let buy_prices = [3000, 3100, 2950, 3000, 3050, 3150, 3200];
 
     for price in buy_prices {
         let usdc_amount = weth_amount * U256::from(price);

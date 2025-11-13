@@ -174,6 +174,12 @@ impl RoundRobinSelector {
         self.current_index = (self.current_index + 1) % self.templates.len();
         template
     }
+
+    /// Reset the selector back to the first template
+    /// Used when nonce mismatches occur to restart the template sequence
+    pub fn reset(&mut self) {
+        self.current_index = 0;
+    }
 }
 
 #[cfg(test)]

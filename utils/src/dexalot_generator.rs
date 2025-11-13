@@ -22,7 +22,7 @@ pub fn generate_dexalot_transactions(
     let deposit_calldata = encode_deposit_native(trader)?;
     transactions.push(TxTemplate::Eip1559(Eip1559Template {
         to: format!("{:#x}", config.portfolio),
-        value: "0.1".to_string(),
+        value: "11".to_string(),
         gas_limit: 200000,
         max_fee_per_gas: "5".to_string(),
         max_priority_fee_per_gas: "2".to_string(),

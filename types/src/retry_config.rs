@@ -1,4 +1,4 @@
-use std::time::Duration;
+use core::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -44,6 +44,6 @@ impl RetryConfig {
     /// Calculate the next retry delay using exponential backoff
     pub fn next_delay(&self, current_delay: Duration) -> Duration {
         let next = current_delay.mul_f64(self.multiplier);
-        std::cmp::min(next, self.max_delay)
+        core::cmp::min(next, self.max_delay)
     }
 }

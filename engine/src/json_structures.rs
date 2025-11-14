@@ -87,7 +87,7 @@ impl From<ExecutionPayloadV3> for JsonExecutionPayloadV3 {
     fn from(payload: ExecutionPayloadV3) -> Self {
         let v2 = payload.payload_inner;
         let v1 = v2.payload_inner;
-        JsonExecutionPayloadV3 {
+        Self {
             parent_hash: v1.parent_hash,
             fee_recipient: v1.fee_recipient.into(),
             state_root: v1.state_root,

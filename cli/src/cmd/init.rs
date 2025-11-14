@@ -118,7 +118,7 @@ where
 {
     // Save configuration
     if config_file.exists() && !overwrite {
-        warn!(file = ?config_file.display(), "Configuration file already exists, skipping")
+        warn!(file = ?config_file.display(), "Configuration file already exists, skipping");
     } else {
         info!(file = ?config_file, "Saving configuration");
         save_config(config_file, config)?;
@@ -142,7 +142,7 @@ where
         warn!(
             "Genesis file already exists at {:?}, skipping",
             genesis_file.display()
-        )
+        );
     } else {
         let private_keys = generate_private_keys(node, 1, false);
         let public_keys = private_keys

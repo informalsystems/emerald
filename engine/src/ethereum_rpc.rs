@@ -1,4 +1,4 @@
-use std::time::Duration;
+use core::time::Duration;
 
 use alloy_rpc_types_txpool::{TxpoolInspect, TxpoolStatus};
 use color_eyre::eyre;

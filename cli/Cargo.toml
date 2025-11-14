@@ -16,6 +16,8 @@ malachitebft-metrics    = { workspace = true }
 malachitebft-config     = { workspace = true }
 malachitebft-app        = { workspace = true }
 
+
+humantime-serde = { workspace = true }
 axum = { workspace = true }
 bytesize = { workspace = true }
 clap = { workspace = true, features = [ "derive", "env" ] }

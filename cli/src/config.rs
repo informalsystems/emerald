@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use color_eyre::eyre;
 use malachitebft_app::node::NodeConfig;
@@ -44,6 +44,14 @@ pub struct MalakethConfig {
     /// Type of execution layer node (archive, full, or custom)
     #[serde(default)]
     pub el_node_type: ElNodeType,
+
+    // Application set timeout_commit forcing the app to sleep
+    // before moving onto the next height.
+    // Malachite does not have a notion of timeout_commit, thus
+    // this has to be handled by the application.
+    // Default: 0
+    #[serde(with = "humantime_serde")]
+    pub timeout_commit: Duration,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

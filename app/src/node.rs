@@ -17,6 +17,9 @@ use malachitebft_app_channel::app::types::core::VotingPower;
 use malachitebft_eth_cli::config::{Config, MalakethConfig};
 // Use the same types used for integration tests.
 // A real application would use its own types and context instead.
+use crate::metrics::Metrics;
+use crate::state::{State, StateMetrics};
+use crate::store::Store;
 use malachitebft_eth_cli::metrics;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::engine_rpc::EngineRPC;
@@ -27,10 +30,6 @@ use malachitebft_eth_types::{Address, Genesis, Height, MalakethContext, Validato
 use rand::{CryptoRng, RngCore};
 use tokio::task::JoinHandle;
 use url::Url;
-
-use crate::metrics::Metrics;
-use crate::state::{State, StateMetrics};
-use crate::store::Store;
 
 /// Main application struct implementing the consensus node functionality
 #[derive(Clone)]
@@ -185,16 +184,6 @@ impl Node for App {
             metrics,
         };
 
-        let mut state = State::new(
-            genesis,
-            ctx,
-            signing_provider,
-            address,
-            start_height,
-            store,
-            state_metrics,
-        );
-
         let malaketh_config = self.load_malaketh_config()?;
 
         let engine: Engine = {
@@ -207,6 +196,18 @@ impl Node for App {
                 EthereumRPC::new(eth_url)?,
             )
         };
+
+        let timeout_commit = malaketh_config.timeout_commit;
+        let mut state = State::new(
+            genesis,
+            ctx,
+            signing_provider,
+            address,
+            start_height,
+            store,
+            state_metrics,
+            timeout_commit,
+        );
 
         let app_handle = tokio::spawn(async move {
             if let Err(e) =

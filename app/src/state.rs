@@ -1,8 +1,6 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
-use std::fmt;
-
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use caches::lru::AdaptiveCache;
@@ -24,7 +22,9 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sha3::Digest;
 use ssz::Decode;
-use tokio::time::Instant;
+use std::fmt;
+
+use tokio::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
 use crate::metrics::Metrics;
@@ -100,6 +100,8 @@ pub struct State {
     pub chain_bytes: u64,
     pub start_time: Instant,
     pub metrics: Metrics,
+
+    pub timeout_commit: Duration,
 }
 
 /// Represents errors that can occur during the verification of a proposal's signature.
@@ -171,6 +173,7 @@ impl State {
         height: Height,
         store: Store,
         state_metrics: StateMetrics,
+        timeout: Duration,
     ) -> Self {
         // Calculate start_time by subtracting elapsed_seconds from now.
         // It represents the start time of measuring metrics, not the actual node start time.
@@ -199,6 +202,7 @@ impl State {
             chain_bytes: state_metrics.chain_bytes,
             start_time,
             metrics: state_metrics.metrics,
+            timeout_commit: timeout,
         }
     }
 
@@ -549,6 +553,10 @@ impl State {
         // Move to next height
         self.current_height = self.current_height.increment();
         self.current_round = Round::new(0);
+
+        // Sleep to reduce the block speed, if set via config.
+        info!("timeout commit is {:?}", self.timeout_commit);
+        tokio::time::sleep(self.timeout_commit).await;
 
         Ok(())
     }

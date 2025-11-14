@@ -110,5 +110,6 @@ jwt_token_path = "./assets/jwtsecret"
 sync_timeout_ms = 10000
 sync_initial_delay_ms = 100
 el_node_type = "archive"
+timeout_commit = "400ms"
 EOF
 done

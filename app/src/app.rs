@@ -648,7 +648,7 @@ pub async fn run(
                     "💡 Sync block validated at height {} with hash: {}",
                     height, new_block_hash
                 );
-                let proposed_value: ProposedValue<MalakethContext> = ProposedValue {
+                let proposed_value: ProposedValue<EmeraldContext> = ProposedValue {
                     height,
                     round,
                     valid_round: Round::Nil,

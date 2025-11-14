@@ -622,7 +622,7 @@ impl State {
         // We create a new value.
         let value = Value::new(data.clone());
 
-        let proposal: ProposedValue<MalakethContext> = ProposedValue {
+        let proposal: ProposedValue<EmeraldContext> = ProposedValue {
             height,
             round,
             valid_round: Round::Nil,

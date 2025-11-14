@@ -441,9 +441,9 @@ impl State {
                     return Ok(None);
                 }
                 info!(%value.height, %value.round, %value.proposer, "Storing validated proposal as undecided");
-                self.store.store_undecided_proposal(value.clone()).await?;
                 self.store_undecided_block_data(value.height, value.round, value.value.id(), data)
                     .await?;
+                self.store.store_undecided_proposal(value.clone()).await?;
 
                 Ok(Some(value))
             }

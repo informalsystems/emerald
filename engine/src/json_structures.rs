@@ -132,3 +132,21 @@ pub struct ExecutionPayloadBodyV1 {
     pub transactions: Vec<Bytes>,
     pub withdrawals: Option<Vec<Withdrawal>>,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncStatusData {
+    #[serde(with = "serde_utils::u64_hex_be")]
+    pub starting_block: u64,
+    #[serde(with = "serde_utils::u64_hex_be")]
+    pub current_block: u64,
+    #[serde(with = "serde_utils::u64_hex_be")]
+    pub highest_block: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SyncStatus {
+    Syncing(SyncStatusData),
+    NotSyncing(bool),
+}

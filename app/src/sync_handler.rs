@@ -55,6 +55,7 @@ pub async fn validate_payload(
         })?;
 
     if payload_status.status.is_valid() {
+        info!("Validated block *+XXXX");
         Ok(Validity::Valid)
     } else {
         // INVALID or ACCEPTED - both are treated as invalid

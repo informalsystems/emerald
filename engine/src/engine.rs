@@ -10,7 +10,7 @@ use tracing::{debug, warn};
 
 use crate::engine_rpc::EngineRPC;
 use crate::ethereum_rpc::EthereumRPC;
-use crate::json_structures::ExecutionBlock;
+use crate::json_structures::{ExecutionBlock, SyncStatus};
 /// RPC client for Engine API.
 /// Spec: https://github.com/ethereum/execution-apis/tree/main/src/engine
 pub struct Engine {
@@ -33,6 +33,7 @@ impl Engine {
         {
             return Err(eyre::eyre!("Engine does not support required methods"));
         }
+
         Ok(())
     }
 
@@ -265,6 +266,27 @@ impl Engine {
                     retry_config.max_elapsed_time
                 )
             })?
+    }
+
+    /// Check if the execution client is syncing.
+    /// Returns a tuple of (is_syncing, current_block_height).
+    /// - is_syncing: true if the node is currently syncing, false otherwise
+    /// - current_block_height: the current block height of the node
+    pub async fn is_syncing(&self) -> eyre::Result<(bool, u64)> {
+        let sync_status: SyncStatus = self
+            .api
+            .rpc_request("eth_syncing", serde_json::json!([]), Duration::from_secs(2))
+            .await?;
+
+        match sync_status {
+            SyncStatus::Syncing(data) => Ok((true, data.highest_block)),
+            SyncStatus::NotSyncing(_) => {
+                // When not syncing, we need to get the current block height separately
+                let latest_block = self.eth.get_block_by_number("latest").await?;
+                let block_height = latest_block.map(|block| block.block_number).unwrap_or(0);
+                Ok((false, block_height))
+            }
+        }
     }
 
     /// Returns the duration since the unix epoch.

@@ -1,9 +1,12 @@
+use std::time::Duration;
+
 use alloy_primitives::{address, Address};
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre, OptionExt};
 use malachitebft_app_channel::app::engine::host::Next;
+use malachitebft_app_channel::app::engine::util::ticker;
 use malachitebft_app_channel::app::streaming::StreamContent;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
@@ -284,7 +287,7 @@ pub async fn run(
             AppMsg::GetValue {
                 height,
                 round,
-                timeout: _,
+                timeout,
                 reply,
             } => {
                 // NOTE: We can ignore the timeout as we are building the value right away.
@@ -295,25 +298,60 @@ pub async fn run(
 
                 // Here it is important that, if we have previously built a value for this height and round,
                 // we send back the very same value.
-                let (proposal, bytes) =
-                    match state.get_previously_built_value(height, round).await? {
-                        Some(proposal) => {
-                            info!(value = %proposal.value.id(), "Re-using previously built value");
-                            // Fetch the block data for the previously built value
-                            let bytes = state
-                                .store
-                                .get_block_data(height, round, proposal.value.id())
-                                .await?
-                                .ok_or_else(|| {
-                                    eyre!("Block data not found for previously built value")
-                                })?;
-                            (proposal, bytes)
-                        }
-                        None => {
-                            // If we have not previously built a value for that very same height and round,
-                            // we need to create a new value to propose and send it back to consensus.
-                            info!("Building a new value to propose");
+                let (proposal, bytes) = match state
+                    .get_previously_built_value(height, round)
+                    .await?
+                {
+                    Some(proposal) => {
+                        info!(value = %proposal.value.id(), "Re-using previously built value");
+                        // Fetch the block data for the previously built value
+                        let bytes = state
+                            .store
+                            .get_block_data(height, round, proposal.value.id())
+                            .await?
+                            .ok_or_else(|| {
+                                eyre!("Block data not found for previously built value")
+                            })?;
+                        (proposal, bytes)
+                    }
+                    None => {
+                        // If we have not previously built a value for that very same height and round,
+                        // we need to create a new value to propose and send it back to consensus.
+                        info!("Building a new value to propose");
 
+                        // Check if the execution client is syncing and behind the consensus height
+                        let (is_syncing, highest_chain_height) = engine.is_syncing().await?;
+                        if is_syncing && highest_chain_height >= height.as_u64() {
+                            warn!(
+                                    "⚠️  Execution client is syncing (current: {}, target: {}), waiting for timeout",
+                                    highest_chain_height,
+                                    height.as_u64()
+                                );
+                            tokio::time::sleep(timeout * 2).await;
+                            continue;
+
+                            // After sleeping, retry getting previously built value until it's available
+                            // let proposal = loop {
+                            //     info!("looping YYY");
+                            //     if let Some(proposal) =
+                            //         state.get_previously_built_value(height, round).await?
+                            //     {
+                            //         break proposal;
+                            //     }
+                            // };
+
+                            // info!(value = %proposal.value.id(), "Re-using previously built value after sync wait");
+                            // // Fetch the block data for the previously built value
+                            // let bytes = state
+                            //     .store
+                            //     .get_block_data(height, round, proposal.value.id())
+                            //     .await?
+                            //     .ok_or_else(|| {
+                            //         eyre!("Block data not found for previously built value")
+                            //     })?;
+
+                            // (proposal, bytes)
+                        } else {
                             // We need to ask the execution engine for a new value to
                             // propose. Then we send it back to consensus.
 
@@ -346,7 +384,8 @@ pub async fn run(
 
                             (proposal, bytes)
                         }
-                    };
+                    }
+                };
 
                 // Send it to consensus
                 if reply.send(proposal.clone()).is_err() {
@@ -570,7 +609,7 @@ pub async fn run(
                         .await?;
                 debug!("🌈 Got validator set: {:?}", new_validator_set);
                 state.set_validator_set(new_validator_set);
-
+                // TODO::REMOVE tokio::time::sleep(Duration::new(0, 300)).await;
                 // Pause briefly before starting next height, just to make following the logs easier
                 // tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 

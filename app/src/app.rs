@@ -1,12 +1,9 @@
-use std::time::Duration;
-
 use alloy_primitives::{address, Address};
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre, OptionExt};
 use malachitebft_app_channel::app::engine::host::Next;
-use malachitebft_app_channel::app::engine::util::ticker;
 use malachitebft_app_channel::app::streaming::StreamContent;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};

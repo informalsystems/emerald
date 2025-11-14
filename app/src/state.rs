@@ -168,6 +168,7 @@ fn build_execution_block_from_bytes(raw_block_data: Bytes) -> ExecutionBlock {
 
 impl State {
     /// Creates a new State instance with the given validator address and starting height
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         _genesis: Genesis, // all genesis data is in EVM via genesis.json
         ctx: MalakethContext,

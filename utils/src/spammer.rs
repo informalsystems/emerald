@@ -207,8 +207,7 @@ impl Spammer {
 
                         selector.set_index(correct_index);
                         eprintln!(
-                            "Template index adjusted to {} (nonce offset: {}, template count: {})",
-                            correct_index, nonce_offset, template_count
+                            "Template index adjusted to {correct_index} (nonce offset: {nonce_offset}, template count: {template_count})"
                         );
                     }
                 }

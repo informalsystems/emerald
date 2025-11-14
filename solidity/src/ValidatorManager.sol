@@ -11,7 +11,11 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  * @dev Ownership controls who can register, unregister, and update validator power
  */
 contract ValidatorManager is Ownable, ReentrancyGuard {
-    using EnumerableSet for EnumerableSet.Bytes32Set;
+    using EnumerableSet for EnumerableSet.AddressSet;
+
+    uint256 internal constant SECP256K1_P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F;
+    uint256 internal constant SECP256K1_B = 7;
+    uint256 internal constant SECP256K1_SQRT_EXPONENT = (SECP256K1_P + 1) / 4;
 
     struct Secp256k1Key {
         uint256 x;
@@ -19,21 +23,29 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     }
 
     struct ValidatorInfo {
-        Secp256k1Key validatorKey; // Uncompressed secp256k1 key stored as X and Y limbs
-        uint64 power; // Voting power
+        /// @dev Uncompressed secp256k1 key stored as X and Y limbs
+        Secp256k1Key validatorKey;
+        /// @dev Voting power assigned to the validator
+        uint64 power;
+    }
+
+    struct ValidatorRegistration {
+        bytes publicKey;
+        uint64 power;
     }
 
     // State variables
-    EnumerableSet.Bytes32Set private _validatorKeys;
-    mapping(bytes32 => ValidatorInfo) private _validators;
+    EnumerableSet.AddressSet private _validatorAddresses;
+    mapping(address => ValidatorInfo) private _validators;
+    uint64 private _totalPower;
 
     constructor() Ownable(_msgSender()) {}
 
     // Events
-    event ValidatorRegistered(bytes32 indexed validatorKeyId, Secp256k1Key validatorKey, uint64 power);
-    event ValidatorUnregistered(bytes32 indexed validatorKeyId, Secp256k1Key validatorKey);
+    event ValidatorRegistered(address indexed validatorAddress, Secp256k1Key validatorKey, uint64 power);
+    event ValidatorUnregistered(address indexed validatorAddress, Secp256k1Key validatorKey);
     event ValidatorPowerUpdated(
-        bytes32 indexed validatorKeyId, Secp256k1Key validatorKey, uint64 oldPower, uint64 newPower
+        address indexed validatorAddress, Secp256k1Key validatorKey, uint64 oldPower, uint64 newPower
     );
 
     // Errors
@@ -42,24 +54,10 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     error InvalidPower();
     error InvalidKey();
     error TotalPowerOverflow();
-
-    /**
-     * @dev Modifier to check if a validator exists
-     * @param validatorKey The validator key to check
-     */
-    modifier validatorExists(Secp256k1Key memory validatorKey) {
-        _requireValidatorExists(validatorKey);
-        _;
-    }
-
-    /**
-     * @dev Modifier to check if a validator does not exist
-     * @param validatorKey The validator key to check
-     */
-    modifier validatorNotExists(Secp256k1Key memory validatorKey) {
-        _requireValidatorNotExists(validatorKey);
-        _;
-    }
+    error InvalidTotalPowerAccounting();
+    error InvalidPublicKeyLength();
+    error InvalidPublicKeyFormat();
+    error InvalidPublicKeyCoordinates();
 
     /**
      * @dev Modifier to check if power is valid (greater than 0)
@@ -77,24 +75,6 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     modifier validKey(Secp256k1Key memory validatorKey) {
         _requireValidKey(validatorKey);
         _;
-    }
-
-    /**
-     * @dev Ensures the provided validator key is already registered.
-     */
-    function _requireValidatorExists(Secp256k1Key memory validatorKey) internal view {
-        if (!_validatorKeys.contains(_validatorKeyId(validatorKey))) {
-            revert ValidatorDoesNotExist();
-        }
-    }
-
-    /**
-     * @dev Ensures the provided validator key has not been registered yet.
-     */
-    function _requireValidatorNotExists(Secp256k1Key memory validatorKey) internal view {
-        if (_validatorKeys.contains(_validatorKeyId(validatorKey))) {
-            revert ValidatorAlreadyExists();
-        }
     }
 
     /**
@@ -116,43 +96,82 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Batch register validators.
-     * @param addValidators Array of validator key identifiers and power to be added
-     * @param removeValidatorKeys Array of validator key identifiers to be removed
+     * @dev Returns the validator address ensuring it already exists.
      */
-    function addAndRemove(ValidatorInfo[] memory addValidators, Secp256k1Key[] memory removeValidatorKeys)
-        external
-        nonReentrant
-        onlyOwner
+    function _validatedExistingAddress(Secp256k1Key memory validatorKey)
+        internal
+        view
+        returns (address validatorAddress)
     {
-        _registerSet(addValidators);
-        _unregisterSet(removeValidatorKeys);
-    }
-
-    /**
-     * @dev Batch register validators.
-     * @param addValidators Array of validator key identifiers and power to be added
-     */
-    function registerSet(ValidatorInfo[] memory addValidators) external nonReentrant onlyOwner {
-        _registerSet(addValidators);
-    }
-
-    /**
-     * @dev Internal implementation of batch register validators
-     * @param addValidators Array of validator key identifiers and power to be added
-     */
-    function _registerSet(ValidatorInfo[] memory addValidators) internal {
-        for (uint256 i = 0; i < addValidators.length; i++) {
-            _register(addValidators[i]);
+        validatorAddress = _validatorAddressInternal(validatorKey);
+        if (!_validatorAddresses.contains(validatorAddress)) {
+            revert ValidatorDoesNotExist();
         }
     }
 
     /**
-     * @dev Register a new validator with specified key and power
-     * @param validatorKey The validator key identifier
+     * @dev Returns the validator address ensuring it does not exist yet.
+     */
+    function _validatedNewAddress(Secp256k1Key memory validatorKey) internal view returns (address validatorAddress) {
+        validatorAddress = _validatorAddressInternal(validatorKey);
+        if (_validatorAddresses.contains(validatorAddress)) {
+            revert ValidatorAlreadyExists();
+        }
+    }
+
+    /**
+     * @dev Ensures the derived validator address is already registered.
+     */
+    function _requireValidatorAddressExists(address validatorAddress) internal view {
+        if (!_validatorAddresses.contains(validatorAddress)) {
+            revert ValidatorDoesNotExist();
+        }
+    }
+
+    /**
+     * @dev Batch update validators by adding new ones and removing existing ones.
+     * @param addValidators Array of validator registration payloads to add
+     * @param removeValidatorAddresses Array of validator addresses to remove
+     */
+    function updateValidatorSet(
+        ValidatorRegistration[] calldata addValidators,
+        address[] calldata removeValidatorAddresses
+    ) external nonReentrant onlyOwner {
+        _registerSet(addValidators);
+        _unregisterAddresses(removeValidatorAddresses);
+    }
+
+    /**
+     * @dev Batch register validators.
+     * @param registrations Array of validator registration payloads
+     */
+    function registerSet(ValidatorRegistration[] calldata registrations) external nonReentrant onlyOwner {
+        _registerSet(registrations);
+    }
+
+    /**
+     * @dev Internal batch register validators.
+     * @param registrations Array of validator registration payloads
+     */
+    function _registerSet(ValidatorRegistration[] calldata registrations) internal {
+        uint256 length = registrations.length;
+        for (uint256 i = 0; i < length;) {
+            Secp256k1Key memory validatorKey = _secp256k1KeyFromBytesInternal(registrations[i].publicKey);
+            _register(ValidatorInfo({validatorKey: validatorKey, power: registrations[i].power}));
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /**
+     * @dev Register a new validator from a hex-encoded public key and power.
+     *      Accepts either a 33-byte compressed or 65-byte uncompressed secp256k1 key.
+     * @param validatorPublicKey The validator public key bytes
      * @param power The voting power for the validator
      */
-    function register(Secp256k1Key memory validatorKey, uint64 power) external nonReentrant onlyOwner {
+    function register(bytes calldata validatorPublicKey, uint64 power) external nonReentrant onlyOwner {
+        Secp256k1Key memory validatorKey = _secp256k1KeyFromBytesInternal(validatorPublicKey);
         _register(ValidatorInfo({validatorKey: validatorKey, power: power}));
     }
 
@@ -162,157 +181,289 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      */
     function _register(ValidatorInfo memory validator)
         internal
-        validatorNotExists(validator.validatorKey)
         validKey(validator.validatorKey)
         validPower(validator.power)
     {
-        bytes32 keyId = _validatorKeyId(validator.validatorKey);
-        _validators[keyId] = validator;
-        _validatorKeys.add(keyId);
+        address validatorAddress = _validatedNewAddress(validator.validatorKey);
+        _increaseTotalPower(validator.power);
+        _validators[validatorAddress] = validator;
+        _validatorAddresses.add(validatorAddress);
 
-        emit ValidatorRegistered(keyId, validator.validatorKey, validator.power);
+        emit ValidatorRegistered(validatorAddress, validator.validatorKey, validator.power);
     }
 
     /**
      * @dev Batch unregister validators.
-     * @param validatorKeys Array of validator key identifiers
+     * @param validatorAddresses Array of validator addresses
      */
-    function unregisterSet(Secp256k1Key[] memory validatorKeys) external nonReentrant onlyOwner {
-        _unregisterSet(validatorKeys);
+    function unregisterSet(address[] calldata validatorAddresses) external nonReentrant onlyOwner {
+        _unregisterAddresses(validatorAddresses);
     }
 
     /**
-     * @dev Internal implementation of batch unregister validators
-     * @param validatorKeys Array of validator key identifiers
+     * @dev Unregister a validator (only callable by the owner).
+     * @param validatorAddress The address derived from the validator public key to remove.
      */
-    function _unregisterSet(Secp256k1Key[] memory validatorKeys) internal {
-        for (uint256 i = 0; i < validatorKeys.length; i++) {
-            _unregister(validatorKeys[i]);
+    function unregister(address validatorAddress) external nonReentrant onlyOwner {
+        _unregisterByAddress(validatorAddress);
+    }
+
+    /**
+     * @dev Internal implementation to unregister by validator address.
+     */
+    function _unregisterByAddress(address validatorAddress) internal {
+        _requireValidatorAddressExists(validatorAddress);
+        ValidatorInfo memory validator = _validators[validatorAddress];
+
+        _decreaseTotalPower(validator.power);
+        delete _validators[validatorAddress];
+        _validatorAddresses.remove(validatorAddress);
+
+        emit ValidatorUnregistered(validatorAddress, validator.validatorKey);
+    }
+
+    /**
+     * @dev Internal batch unregister by validator addresses.
+     */
+    function _unregisterAddresses(address[] calldata validatorAddresses) internal {
+        uint256 length = validatorAddresses.length;
+        for (uint256 i = 0; i < length;) {
+            _unregisterByAddress(validatorAddresses[i]);
+            unchecked {
+                ++i;
+            }
         }
     }
 
     /**
-     * @dev Unregister a validator (only callable by the owner)
+     * @dev Update a validator's power (only callable by the owner).
+     * @param validatorAddress The registered validator address whose voting power is being updated.
+     * @param newPower The new voting power to assign.
      */
-    function unregister(Secp256k1Key memory validatorKey) external nonReentrant onlyOwner {
-        _unregister(validatorKey);
-    }
-
-    /**
-     * @dev Internal implementation to unregister a validator (only callable by the owner)
-     */
-    function _unregister(Secp256k1Key memory validatorKey) internal validatorExists(validatorKey) {
-        bytes32 keyId = _validatorKeyId(validatorKey);
-
-        delete _validators[keyId];
-        _validatorKeys.remove(keyId);
-
-        emit ValidatorUnregistered(keyId, validatorKey);
-    }
-
-    /**
-     * @dev Update a validator's power (only callable by the owner)
-     * @param validatorKey The validator key to update
-     * @param newPower The new voting power
-     */
-    function updatePower(Secp256k1Key memory validatorKey, uint64 newPower)
+    function updatePower(address validatorAddress, uint64 newPower)
         external
         nonReentrant
         onlyOwner
-        validatorExists(validatorKey)
         validPower(newPower)
     {
-        bytes32 keyId = _validatorKeyId(validatorKey);
-        uint64 oldPower = _validators[keyId].power;
+        _requireValidatorAddressExists(validatorAddress);
+        Secp256k1Key memory validatorKey = _validators[validatorAddress].validatorKey;
+        uint64 oldPower = _validators[validatorAddress].power;
 
-        _validators[keyId].power = newPower;
+        if (newPower > oldPower) {
+            _increaseTotalPower(newPower - oldPower);
+        } else if (oldPower > newPower) {
+            _decreaseTotalPower(oldPower - newPower);
+        }
 
-        emit ValidatorPowerUpdated(keyId, validatorKey, oldPower, newPower);
+        _validators[validatorAddress].power = newPower;
+
+        emit ValidatorPowerUpdated(validatorAddress, validatorKey, oldPower, newPower);
     }
 
     /**
-     * @dev Get validator information by key
-     * @param validatorKey The validator key
-     * @return info Complete validator info including key and power
-     * @dev Reverts with {ValidatorDoesNotExist} if the key is not registered
+     * @dev Get validator information for a registered address.
+     * @param validatorAddress The address derived from the validator public key.
+     * @return info The validator information including key and power.
+     * @notice Reverts with {ValidatorDoesNotExist} if the address is not registered.
      */
-    function getValidator(Secp256k1Key memory validatorKey)
-        external
-        view
-        validatorExists(validatorKey)
-        returns (ValidatorInfo memory info)
-    {
-        return _validators[_validatorKeyId(validatorKey)];
+    function getValidator(address validatorAddress) external view returns (ValidatorInfo memory info) {
+        _requireValidatorAddressExists(validatorAddress);
+        return _validators[validatorAddress];
     }
 
     /**
-     * @dev Get all validators with their information
-     * @return validators Array of validator information
+     * @dev Get all validators with their addresses, keys, and powers
+     * @return validators Array of all registered validators
      */
     function getValidators() external view returns (ValidatorInfo[] memory validators) {
-        uint256 length = _validatorKeys.length();
+        uint256 length = _validatorAddresses.length();
         validators = new ValidatorInfo[](length);
 
-        for (uint256 i = 0; i < length; i++) {
-            bytes32 keyId = _validatorKeys.at(i);
-            validators[i] = _validators[keyId];
+        for (uint256 i = 0; i < length;) {
+            address validatorAddress = _validatorAddresses.at(i);
+            validators[i] = _validators[validatorAddress];
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /**
+     * @dev Get the list of registered validator addresses.
+     * @return addresses Array containing each registered validator address.
+     */
+    function getValidatorAddresses() external view returns (address[] memory addresses) {
+        uint256 length = _validatorAddresses.length();
+        addresses = new address[](length);
+
+        for (uint256 i = 0; i < length;) {
+            addresses[i] = _validatorAddresses.at(i);
+            unchecked {
+                ++i;
+            }
         }
     }
 
     /**
      * @dev Get the total number of validators
-     * @return The number of registered validators
+     * @return count The number of registered validators
      */
-    function getValidatorCount() external view returns (uint256) {
-        return _validatorKeys.length();
+    function getValidatorCount() external view returns (uint256 count) {
+        count = _validatorAddresses.length();
     }
 
     /**
-     * @dev Check if a key is a registered validator
-     * @param validatorKey The validator key to check
-     * @return True if the key is a registered validator
+     * @dev Checks if an address is a registered validator.
+     * @param validatorAddress The address derived from the validator public key.
+     * @return contains True if the address is currently registered.
      */
-    function isValidator(Secp256k1Key memory validatorKey) external view returns (bool) {
-        return _validatorKeys.contains(_validatorKeyId(validatorKey));
-    }
-
-    /**
-     * @dev Get all validator keys
-     * @return validatorKeys Array of all validator keys
-     */
-    function getValidatorKeys() external view returns (Secp256k1Key[] memory validatorKeys) {
-        uint256 length = _validatorKeys.length();
-        validatorKeys = new Secp256k1Key[](length);
-
-        for (uint256 i = 0; i < length; i++) {
-            validatorKeys[i] = _validators[_validatorKeys.at(i)].validatorKey;
-        }
+    function isValidator(address validatorAddress) external view returns (bool contains) {
+        return _validatorAddresses.contains(validatorAddress);
     }
 
     /**
      * @dev Get total power of all validators
-     * @return The sum of all validator powers
+     * @return totalPower The sum of all validator powers
      */
-    function getTotalPower() external view returns (uint64) {
-        uint256 length = _validatorKeys.length();
-        uint64 total = 0;
-        for (uint256 i = 0; i < length; i++) {
-            bytes32 keyId = _validatorKeys.at(i);
-            uint64 power = _validators[keyId].power;
-            if (total > type(uint64).max - power) {
-                revert TotalPowerOverflow();
-            }
-            total += power;
-        }
-        return total;
+    function getTotalPower() external view returns (uint64 totalPower) {
+        return _totalPower;
     }
 
     /**
      * @dev Computes the deterministic identifier for a validator key.
+     * @param validatorKey The secp256k1 public key limbs `(x, y)`.
+     * @return validatorAddress The address derived from the supplied key.
      */
-    function _validatorKeyId(Secp256k1Key memory validatorKey) internal pure returns (bytes32 keyId) {
+    function _validatorAddress(Secp256k1Key memory validatorKey) external pure returns (address) {
+        return _validatorAddressInternal(validatorKey);
+    }
+
+    function _increaseTotalPower(uint64 amount) internal {
+        if (amount > type(uint64).max - _totalPower) {
+            revert TotalPowerOverflow();
+        }
+        _totalPower += amount;
+    }
+
+    function _decreaseTotalPower(uint64 amount) internal {
+        if (amount > _totalPower) {
+            revert InvalidTotalPowerAccounting();
+        }
+        unchecked {
+            _totalPower -= amount;
+        }
+    }
+
+    function _validatorAddressInternal(Secp256k1Key memory validatorKey) internal pure returns (address) {
+        bytes32 hash;
         assembly {
-            keyId := keccak256(validatorKey, 0x40)
+            let ptr := mload(0x40)
+            mstore(ptr, mload(validatorKey))
+            mstore(add(ptr, 0x20), mload(add(validatorKey, 0x20)))
+            hash := keccak256(ptr, 0x40)
+        }
+        return address(uint160(uint256(hash)));
+    }
+
+    /**
+     * @dev Parses a secp256k1 public key from compressed (33-byte) or uncompressed (65-byte) encoding.
+     * @param validatorPublicKey The encoded validator public key bytes.
+     * @return validatorKey The decoded validator key limbs `(x, y)`.
+     */
+    function _secp256k1KeyFromBytes(bytes calldata validatorPublicKey) external pure returns (Secp256k1Key memory) {
+        return _secp256k1KeyFromBytesInternal(validatorPublicKey);
+    }
+
+    function _secp256k1KeyFromBytesInternal(bytes calldata validatorPublicKey)
+        internal
+        pure
+        returns (Secp256k1Key memory)
+    {
+        if (validatorPublicKey.length == 33) {
+            uint8 prefix = uint8(validatorPublicKey[0]);
+            if (prefix != 0x02 && prefix != 0x03) {
+                revert InvalidPublicKeyFormat();
+            }
+
+            uint256 x = _bytesToUintCalldata(validatorPublicKey, 1);
+            uint256 y = _deriveYFromX(x, prefix == 0x03);
+            if (x == 0 && y == 0) {
+                revert InvalidKey();
+            }
+            return Secp256k1Key({x: x, y: y});
+        } else if (validatorPublicKey.length == 65) {
+            if (uint8(validatorPublicKey[0]) != 0x04) {
+                revert InvalidPublicKeyFormat();
+            }
+
+            uint256 x = _bytesToUintCalldata(validatorPublicKey, 1);
+            uint256 y = _bytesToUintCalldata(validatorPublicKey, 33);
+            if (x == 0 && y == 0) {
+                revert InvalidKey();
+            }
+            _validatePointOnCurve(x, y);
+            return Secp256k1Key({x: x, y: y});
+        }
+
+        revert InvalidPublicKeyLength();
+    }
+
+    function _bytesToUintCalldata(bytes calldata data, uint256 start) internal pure returns (uint256 result) {
+        if (data.length < start + 32) {
+            revert InvalidPublicKeyLength();
+        }
+        assembly {
+            result := calldataload(add(data.offset, start))
+        }
+    }
+
+    function _deriveYFromX(uint256 x, bool odd) internal pure returns (uint256) {
+        if (x >= SECP256K1_P) {
+            revert InvalidPublicKeyCoordinates();
+        }
+
+        uint256 xx = mulmod(x, x, SECP256K1_P);
+        uint256 xxx = mulmod(xx, x, SECP256K1_P);
+        uint256 rhs = addmod(xxx, SECP256K1_B, SECP256K1_P);
+        uint256 y = _modExp(rhs, SECP256K1_SQRT_EXPONENT);
+
+        if (mulmod(y, y, SECP256K1_P) != rhs) {
+            revert InvalidPublicKeyCoordinates();
+        }
+
+        if ((y & 1) != (odd ? 1 : 0)) {
+            y = SECP256K1_P - y;
+        }
+
+        return y;
+    }
+
+    function _modExp(uint256 base, uint256 exponent) internal pure returns (uint256 result) {
+        uint256 modulus = SECP256K1_P;
+        result = 1;
+        uint256 x = base % modulus;
+        uint256 e = exponent;
+        while (e > 0) {
+            if (e & 1 == 1) {
+                result = mulmod(result, x, modulus);
+            }
+            x = mulmod(x, x, modulus);
+            e >>= 1;
+        }
+    }
+
+    function _validatePointOnCurve(uint256 x, uint256 y) internal pure {
+        if (x >= SECP256K1_P || y >= SECP256K1_P) {
+            revert InvalidPublicKeyCoordinates();
+        }
+
+        uint256 lhs = mulmod(y, y, SECP256K1_P);
+        uint256 xx = mulmod(x, x, SECP256K1_P);
+        uint256 rhs = addmod(mulmod(xx, x, SECP256K1_P), SECP256K1_B, SECP256K1_P);
+
+        if (lhs != rhs) {
+            revert InvalidPublicKeyCoordinates();
         }
     }
 }

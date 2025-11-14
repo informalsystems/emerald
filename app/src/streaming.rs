@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use core::cmp::Ordering;
 use std::collections::{BTreeMap, BinaryHeap, HashSet};
 
 use malachitebft_app_channel::app::streaming::{Sequence, StreamId, StreamMessage};

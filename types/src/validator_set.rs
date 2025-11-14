@@ -26,13 +26,13 @@ impl Validator {
 }
 
 impl PartialOrd for Validator {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for Validator {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.address.cmp(&other.address)
     }
 }
@@ -60,7 +60,7 @@ pub struct ValidatorSet {
 impl ValidatorSet {
     pub fn new(validators: impl IntoIterator<Item = Validator>) -> Self {
         let mut validators: Vec<_> = validators.into_iter().collect();
-        ValidatorSet::sort_validators(&mut validators);
+        Self::sort_validators(&mut validators);
 
         assert!(!validators.is_empty());
 

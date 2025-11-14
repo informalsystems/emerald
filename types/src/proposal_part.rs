@@ -20,7 +20,7 @@ impl ProposalData {
     }
 
     pub fn size_bytes(&self) -> usize {
-        std::mem::size_of::<u64>()
+        core::mem::size_of::<u64>()
     }
 }
 

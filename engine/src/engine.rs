@@ -271,7 +271,10 @@ impl Engine {
     /// Check if the execution client is syncing.
     /// Returns a tuple of (is_syncing, current_block_height).
     /// - is_syncing: true if the node is currently syncing, false otherwise
-    /// - current_block_height: the current block height of the node
+    /// - heights_block_height: the heights block height of the chain from Reth's perspective
+    /// Note that this height might be the actual tip of the chain.Reth is updating this as its
+    /// syncing
+    /// If the client is not syncing it will return 0 as the heights height - this should be ignored.
     pub async fn is_syncing(&self) -> eyre::Result<(bool, u64)> {
         let sync_status: SyncStatus = self
             .api
@@ -281,10 +284,7 @@ impl Engine {
         match sync_status {
             SyncStatus::Syncing(data) => Ok((true, data.highest_block)),
             SyncStatus::NotSyncing(_) => {
-                // When not syncing, we need to get the current block height separately
-                let latest_block = self.eth.get_block_by_number("latest").await?;
-                let block_height = latest_block.map(|block| block.block_number).unwrap_or(0);
-                Ok((false, block_height))
+                Ok((false, 0)) // Note we do not need the actual height here.
             }
         }
     }

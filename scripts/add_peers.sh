@@ -11,41 +11,41 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-# PORT=8545
-# PORT_INCREMENT=10000
+PORT=8545
+PORT_INCREMENT=10000
 
-# for _ in {0..NODES_COUNT-1}; do
-#     echo "Waiting for Reth node on port ${PORT} to be ready..."
-#     until cast rpc --rpc-url "127.0.0.1:${PORT}" net_listening > /dev/null 2>&1; do
-#         sleep 1
-#     done
-#     PORT=$((PORT + PORT_INCREMENT))
-# done
+for _ in {0..NODES_COUNT-1}; do
+    echo "Waiting for Reth node on port ${PORT} to be ready..."
+    until cast rpc --rpc-url "127.0.0.1:${PORT}" net_listening > /dev/null 2>&1; do
+        sleep 1
+    done
+    PORT=$((PORT + PORT_INCREMENT))
+done
 
 RETH0_ENODE=$(cast rpc --rpc-url 127.0.0.1:8545 admin_nodeInfo | jq -r .enode )
 RETH1_ENODE=$(cast rpc --rpc-url 127.0.0.1:18545 admin_nodeInfo | jq -r .enode )
 RETH2_ENODE=$(cast rpc --rpc-url 127.0.0.1:28545 admin_nodeInfo | jq -r .enode )
 
-# echo "RETH0_ENODE: ${RETH0_ENODE}"
-# cast rpc --rpc-url 127.0.0.1:8545 admin_addTrustedPeer "${RETH1_ENODE}"
-# cast rpc --rpc-url 127.0.0.1:8545 admin_addTrustedPeer "${RETH2_ENODE}"
-# cast rpc --rpc-url 127.0.0.1:8545 admin_addPeer "${RETH1_ENODE}"
-# cast rpc --rpc-url 127.0.0.1:8545 admin_addPeer "${RETH2_ENODE}"
+echo "RETH0_ENODE: ${RETH0_ENODE}"
+cast rpc --rpc-url 127.0.0.1:8545 admin_addTrustedPeer "${RETH1_ENODE}"
+cast rpc --rpc-url 127.0.0.1:8545 admin_addTrustedPeer "${RETH2_ENODE}"
+cast rpc --rpc-url 127.0.0.1:8545 admin_addPeer "${RETH1_ENODE}"
+cast rpc --rpc-url 127.0.0.1:8545 admin_addPeer "${RETH2_ENODE}"
 
-# echo "RETH1_ENODE: ${RETH1_ENODE}"
-# cast rpc --rpc-url 127.0.0.1:18545 admin_addTrustedPeer "${RETH0_ENODE}"
-# cast rpc --rpc-url 127.0.0.1:18545 admin_addTrustedPeer "${RETH2_ENODE}"
-# cast rpc --rpc-url 127.0.0.1:18545 admin_addPeer "${RETH0_ENODE}"
-# cast rpc --rpc-url 127.0.0.1:18545 admin_addPeer "${RETH2_ENODE}"
+echo "RETH1_ENODE: ${RETH1_ENODE}"
+cast rpc --rpc-url 127.0.0.1:18545 admin_addTrustedPeer "${RETH0_ENODE}"
+cast rpc --rpc-url 127.0.0.1:18545 admin_addTrustedPeer "${RETH2_ENODE}"
+cast rpc --rpc-url 127.0.0.1:18545 admin_addPeer "${RETH0_ENODE}"
+cast rpc --rpc-url 127.0.0.1:18545 admin_addPeer "${RETH2_ENODE}"
 
-# echo "RETH2_ENODE: ${RETH2_ENODE}"
-# cast rpc --rpc-url 127.0.0.1:28545 admin_addTrustedPeer "${RETH0_ENODE}"
-# cast rpc --rpc-url 127.0.0.1:28545 admin_addTrustedPeer "${RETH1_ENODE}"
-# cast rpc --rpc-url 127.0.0.1:28545 admin_addPeer "${RETH0_ENODE}"
-# cast rpc --rpc-url 127.0.0.1:28545 admin_addPeer "${RETH1_ENODE}"
+echo "RETH2_ENODE: ${RETH2_ENODE}"
+cast rpc --rpc-url 127.0.0.1:28545 admin_addTrustedPeer "${RETH0_ENODE}"
+cast rpc --rpc-url 127.0.0.1:28545 admin_addTrustedPeer "${RETH1_ENODE}"
+cast rpc --rpc-url 127.0.0.1:28545 admin_addPeer "${RETH0_ENODE}"
+cast rpc --rpc-url 127.0.0.1:28545 admin_addPeer "${RETH1_ENODE}"
 
 # If 4 nodes, add reth3
-#if [ "$NODES_COUNT" -eq 4 ]; then
+if [ "$NODES_COUNT" -eq 4 ]; then
     RETH3_ENODE=$(cast rpc --rpc-url 127.0.0.1:38545 admin_nodeInfo | jq -r .enode )
 
     echo "RETH3_ENODE: ${RETH3_ENODE}"
@@ -67,4 +67,4 @@ RETH2_ENODE=$(cast rpc --rpc-url 127.0.0.1:28545 admin_nodeInfo | jq -r .enode )
     cast rpc --rpc-url 127.0.0.1:38545 admin_addPeer "${RETH0_ENODE}"
     cast rpc --rpc-url 127.0.0.1:38545 admin_addPeer "${RETH1_ENODE}"
     cast rpc --rpc-url 127.0.0.1:38545 admin_addPeer "${RETH2_ENODE}"
-#fi
+fi

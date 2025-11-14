@@ -1,4 +1,4 @@
-name: Malaketh
+name: Emerald
 
 on:
   merge_group:
@@ -25,7 +25,7 @@ env:
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
-  malaketh-block-production:
+  emerald-block-production:
     name: Block Production
     runs-on: ubuntu-latest
     steps:
@@ -45,7 +45,7 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run Forge build
         run: forge build
-      - name: Run malaketh
+      - name: Run emerald
         run: |
           cargo build
           # `make all` equivalent but with --no-wait
@@ -61,5 +61,5 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v5
         with:
-          name: malaketh-test-logs
+          name: emerald-test-logs
           path: nodes/**/logs/*.log

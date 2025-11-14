@@ -20,7 +20,7 @@ use crate::cmd::testnet::TestnetCmd;
 use crate::error::Error;
 
 const APP_FOLDER: &str = ".malachite";
-const MALAKETH_FOLDER: &str = ".malaketh";
+const EMERALD_FOLDER: &str = ".emerald";
 const CONFIG_FILE: &str = "config.toml";
 const GENESIS_FILE: &str = "genesis.json";
 const PRIV_VALIDATOR_KEY_FILE: &str = "priv_validator_key.json";
@@ -40,7 +40,7 @@ pub struct Args {
     #[arg(long, global = true, value_name = "LOG_FORMAT")]
     pub log_format: Option<LogFormat>,
 
-    /// Malaketh configuration file (default: `~/.malaketh/config/config.toml`)
+    /// Emerald configuration file (default: `~/.emerald/config/config.toml`)
     #[arg(long, global = true, value_name = "CONFIG_FILE")]
     pub config: Option<PathBuf>,
 
@@ -90,15 +90,15 @@ impl Args {
         }
     }
 
-    /// get_malaketch_config_file returns the application configuration file.
-    /// Typically, `$HOME/.malaketh/config/config.toml`.
-    pub fn get_malaketch_config_file(&self) -> Result<PathBuf, Error> {
+    /// get_emerald_config_file returns the application configuration file.
+    /// Typically, `$HOME/.emerald/config/config.toml`.
+    pub fn get_emerald_config_file(&self) -> Result<PathBuf, Error> {
         match self.config {
             Some(ref path) => Ok(path.clone()),
             None => Ok(BaseDirs::new()
                 .ok_or(Error::DirPath)?
                 .home_dir()
-                .join(MALAKETH_FOLDER)
+                .join(EMERALD_FOLDER)
                 .join("config")
                 .join("config.toml")),
         }

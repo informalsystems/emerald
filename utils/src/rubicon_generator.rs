@@ -38,11 +38,11 @@ pub fn generate_rubicon_transactions(config: RubiconConfig) -> Result<Vec<TxTemp
         input: format!("0x{}", hex::encode(usdc_approve_calldata)),
     }));
 
-    // 3. Deposit 0.1 ETH to get WETH for all 10 sell offers
+    // 3. Deposit 0.01 ETH to get WETH for all 10 sell offers
     let deposit_calldata = encode_deposit()?;
     transactions.push(TxTemplate::Eip1559(Eip1559Template {
         to: format!("{:#x}", config.weth),
-        value: "0.1".to_string(),
+        value: "0.01".to_string(),
         gas_limit: 100000,
         max_fee_per_gas: "2".to_string(),
         max_priority_fee_per_gas: "1".to_string(),
@@ -51,7 +51,7 @@ pub fn generate_rubicon_transactions(config: RubiconConfig) -> Result<Vec<TxTemp
 
     // 4-13. SELL offers at varying prices (2850-3200 USDC/WETH)
     let sell_prices = [3000, 3100, 2950, 3000, 3050, 2900, 3150, 2850, 3200, 2980];
-    let weth_amount = U256::from(10_000_000_000_000_000u128); // 0.01 WETH
+    let weth_amount = U256::from(1_000_000_000_000_000u128); // 0.001 WETH (10x smaller)
 
     // 4. First SELL offer
     let usdc_amount = weth_amount * U256::from(sell_prices[0]);
@@ -59,7 +59,7 @@ pub fn generate_rubicon_transactions(config: RubiconConfig) -> Result<Vec<TxTemp
     transactions.push(TxTemplate::Eip1559(Eip1559Template {
         to: format!("{:#x}", config.rubicon_market),
         value: "0.0".to_string(),
-        gas_limit: 500000,
+        gas_limit: 1500000,
         max_fee_per_gas: "2".to_string(),
         max_priority_fee_per_gas: "1".to_string(),
         input: format!("0x{}", hex::encode(offer_calldata)),
@@ -85,22 +85,21 @@ pub fn generate_rubicon_transactions(config: RubiconConfig) -> Result<Vec<TxTemp
         transactions.push(TxTemplate::Eip1559(Eip1559Template {
             to: format!("{:#x}", config.rubicon_market),
             value: "0.0".to_string(),
-            gas_limit: 500000,
+            gas_limit: 1500000,
             max_fee_per_gas: "2".to_string(),
             max_priority_fee_per_gas: "1".to_string(),
             input: format!("0x{}", hex::encode(offer_calldata)),
         }));
     }
 
-    // 14. Mint 10,000 USDC using adminMint() - USDCWithFaucet specific function
-    // Using raw selector 0x6d1b229d since this is a custom function
+    // 14. Mint 10,000 USDC using faucet() - USDCWithFaucet function
     transactions.push(TxTemplate::Eip1559(Eip1559Template {
         to: format!("{:#x}", config.usdc),
         value: "0.0".to_string(),
         gas_limit: 200000,
         max_fee_per_gas: "2".to_string(),
         max_priority_fee_per_gas: "1".to_string(),
-        input: "0x6d1b229d".to_string(),
+        input: "0xde5f72fd".to_string(),
     }));
 
     // 15-21. BUY offers at varying prices (7 orders to match sells)
@@ -114,7 +113,7 @@ pub fn generate_rubicon_transactions(config: RubiconConfig) -> Result<Vec<TxTemp
         transactions.push(TxTemplate::Eip1559(Eip1559Template {
             to: format!("{:#x}", config.rubicon_market),
             value: "0.0".to_string(),
-            gas_limit: 500000,
+            gas_limit: 1500000,
             max_fee_per_gas: "2".to_string(),
             max_priority_fee_per_gas: "1".to_string(),
             input: format!("0x{}", hex::encode(offer_calldata)),

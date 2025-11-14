@@ -180,6 +180,22 @@ impl RoundRobinSelector {
     pub fn reset(&mut self) {
         self.current_index = 0;
     }
+
+    /// Set the selector to a specific template index
+    /// Used for smart nonce recovery to resume at the correct position in the template cycle
+    pub fn set_index(&mut self, index: usize) {
+        self.current_index = index % self.templates.len();
+    }
+
+    /// Get the number of templates in the cycle
+    pub fn template_count(&self) -> usize {
+        self.templates.len()
+    }
+
+    /// Get the current template index
+    pub fn current_index(&self) -> usize {
+        self.current_index
+    }
 }
 
 #[cfg(test)]

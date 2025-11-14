@@ -81,7 +81,7 @@ pub fn generate_dexalot_transactions(
         transactions.push(TxTemplate::Eip1559(Eip1559Template {
             to: format!("{:#x}", config.tradepairs),
             value: "0.0".to_string(),
-            gas_limit: 500000,
+            gas_limit: 1500000,
             max_fee_per_gas: "5".to_string(),
             max_priority_fee_per_gas: "2".to_string(),
             input: format!("0x{}", hex::encode(order_calldata)),
@@ -106,7 +106,7 @@ pub fn generate_dexalot_transactions(
         transactions.push(TxTemplate::Eip1559(Eip1559Template {
             to: format!("{:#x}", config.tradepairs),
             value: "0.0".to_string(),
-            gas_limit: 500000,
+            gas_limit: 1500000,
             max_fee_per_gas: "5".to_string(),
             max_priority_fee_per_gas: "2".to_string(),
             input: format!("0x{}", hex::encode(order_calldata)),

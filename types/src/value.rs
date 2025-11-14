@@ -26,7 +26,7 @@ impl From<u64> for ValueId {
 }
 
 impl fmt::Display for ValueId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:x}", self.0)
     }
 }
@@ -48,7 +48,7 @@ impl Protobuf for ValueId {
             ))
         })?;
 
-        Ok(ValueId::new(u64::from_be_bytes(bytes)))
+        Ok(Self::new(u64::from_be_bytes(bytes)))
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
@@ -69,8 +69,8 @@ pub struct Value {
 impl Value {
     /// Creates a new Value by hashing the provided bytes using SipHash
     pub fn new(data: Bytes) -> Self {
+        use core::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new(); // Uses SipHash
         data.hash(&mut hasher);
@@ -86,7 +86,7 @@ impl Value {
     }
 
     pub fn size_bytes(&self) -> usize {
-        std::mem::size_of_val(&self.value) + self.extensions.len()
+        core::mem::size_of_val(&self.value) + self.extensions.len()
     }
 }
 
@@ -116,7 +116,7 @@ impl Protobuf for Value {
 
         let extensions = bytes.slice(8..);
 
-        Ok(Value {
+        Ok(Self {
             value: u64::from_be_bytes(value),
             extensions,
         })

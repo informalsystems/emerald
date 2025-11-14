@@ -73,7 +73,7 @@ pub struct SpamCmd {
 
 impl SpamCmd {
     pub(crate) async fn run(&self) -> Result<()> {
-        let SpamCmd {
+        let Self {
             rpc_url,
             num_txs,
             rate,

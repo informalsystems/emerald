@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use core::str::FromStr;
 
 use alloy_network::EthereumWallet;
 use alloy_node_bindings::anvil::Anvil;

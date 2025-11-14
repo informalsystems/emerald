@@ -1,9 +1,9 @@
 //! The Application (or Node) definition. The Node trait implements the Consensus context and the
 //! cryptographic library used for signing.
 
+use core::str::FromStr;
 use std::fs;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use async_trait::async_trait;
 use color_eyre::eyre;

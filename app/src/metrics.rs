@@ -1,6 +1,6 @@
-use std::ops::Deref;
+use core::ops::Deref;
+use core::time::Duration;
 use std::sync::Arc;
-use std::time::Duration;
 
 use malachitebft_app_channel::app::metrics;
 use metrics::prometheus::metrics::counter::Counter;

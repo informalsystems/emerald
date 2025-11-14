@@ -40,7 +40,7 @@ impl redb::Value for HeightKey {
 }
 
 impl redb::Key for HeightKey {
-    fn compare(data1: &[u8], data2: &[u8]) -> std::cmp::Ordering {
+    fn compare(data1: &[u8], data2: &[u8]) -> core::cmp::Ordering {
         <u64 as redb::Key>::compare(data1, data2)
     }
 }
@@ -78,7 +78,7 @@ impl redb::Value for RoundKey {
 }
 
 impl redb::Key for RoundKey {
-    fn compare(data1: &[u8], data2: &[u8]) -> std::cmp::Ordering {
+    fn compare(data1: &[u8], data2: &[u8]) -> core::cmp::Ordering {
         <i64 as redb::Key>::compare(data1, data2)
     }
 }
@@ -116,7 +116,7 @@ impl redb::Value for ValueIdKey {
 }
 
 impl redb::Key for ValueIdKey {
-    fn compare(data1: &[u8], data2: &[u8]) -> std::cmp::Ordering {
+    fn compare(data1: &[u8], data2: &[u8]) -> core::cmp::Ordering {
         <u64 as redb::Key>::compare(data1, data2)
     }
 }

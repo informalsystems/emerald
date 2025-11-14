@@ -27,7 +27,7 @@ impl Height {
 
 impl Default for Height {
     fn default() -> Self {
-        Height(1)
+        Self(1)
     }
 }
 
@@ -44,8 +44,8 @@ impl fmt::Debug for Height {
 }
 
 impl malachitebft_core_types::Height for Height {
-    const ZERO: Self = Height::new(0);
-    const INITIAL: Self = Height::new(1);
+    const ZERO: Self = Self::new(0);
+    const INITIAL: Self = Self::new(1);
 
     fn increment_by(&self, n: u64) -> Self {
         Self(self.0 + n)

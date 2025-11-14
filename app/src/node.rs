@@ -197,7 +197,7 @@ impl Node for App {
             )
         };
 
-        let timeout_commit = malaketh_config.timeout_commit;
+        let min_block_time = malaketh_config.min_block_time;
         let mut state = State::new(
             genesis,
             ctx,
@@ -206,7 +206,7 @@ impl Node for App {
             start_height,
             store,
             state_metrics,
-            timeout_commit,
+            min_block_time,
         );
 
         let app_handle = tokio::spawn(async move {

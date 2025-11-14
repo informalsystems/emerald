@@ -45,13 +45,13 @@ pub struct MalakethConfig {
     #[serde(default)]
     pub el_node_type: ElNodeType,
 
-    // Application set timeout_commit forcing the app to sleep
+    // Application set min_block_time forcing the app to sleep
     // before moving onto the next height.
-    // Malachite does not have a notion of timeout_commit, thus
+    // Malachite does not have a notion of min_block_time, thus
     // this has to be handled by the application.
     // Default: 0
     #[serde(with = "humantime_serde")]
-    pub timeout_commit: Duration,
+    pub min_block_time: Duration,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

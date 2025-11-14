@@ -14,6 +14,7 @@ use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::secp256k1::PublicKey;
 use malachitebft_eth_types::{Block, BlockHash, Height, MalakethContext, Validator, ValidatorSet};
 use ssz::{Decode, Encode};
+use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
 
 const GENESIS_VALIDATOR_MANAGER_ACCOUNT: Address =
@@ -201,6 +202,10 @@ pub async fn run(
                 state.current_height = height;
                 state.current_round = round;
                 state.current_proposer = Some(proposer);
+
+                if state.current_round == Round::ZERO {
+                    state.last_block_time = Instant::now();
+                }
 
                 let pending_parts = state
                     .store

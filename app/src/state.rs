@@ -10,6 +10,7 @@ use malachitebft_app_channel::app::streaming::{StreamContent, StreamId, StreamMe
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Context, Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
+
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
@@ -101,7 +102,9 @@ pub struct State {
     pub start_time: Instant,
     pub metrics: Metrics,
 
-    pub timeout_commit: Duration,
+    pub min_block_time: Duration,
+
+    pub last_block_time: Instant,
 }
 
 /// Represents errors that can occur during the verification of a proposal's signature.
@@ -202,7 +205,8 @@ impl State {
             chain_bytes: state_metrics.chain_bytes,
             start_time,
             metrics: state_metrics.metrics,
-            timeout_commit: timeout,
+            min_block_time: timeout,
+            last_block_time: start_time,
         }
     }
 
@@ -555,8 +559,12 @@ impl State {
         self.current_round = Round::new(0);
 
         // Sleep to reduce the block speed, if set via config.
-        info!("timeout commit is {:?}", self.timeout_commit);
-        tokio::time::sleep(self.timeout_commit).await;
+        info!("timeout commit is {:?}", self.min_block_time);
+        let elapsed_height_time = self.last_block_time.elapsed();
+
+        if elapsed_height_time < self.min_block_time {
+            tokio::time::sleep(self.min_block_time - elapsed_height_time).await;
+        }
 
         Ok(())
     }

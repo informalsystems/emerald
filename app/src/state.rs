@@ -176,7 +176,7 @@ impl State {
         height: Height,
         store: Store,
         state_metrics: StateMetrics,
-        timeout: Duration,
+        min_block_time: Duration,
     ) -> Self {
         // Calculate start_time by subtracting elapsed_seconds from now.
         // It represents the start time of measuring metrics, not the actual node start time.
@@ -205,7 +205,7 @@ impl State {
             chain_bytes: state_metrics.chain_bytes,
             start_time,
             metrics: state_metrics.metrics,
-            min_block_time: timeout,
+            min_block_time: min_block_time,
             last_block_time: start_time,
         }
     }

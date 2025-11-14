@@ -206,7 +206,7 @@ impl State {
             start_time,
             metrics: state_metrics.metrics,
             min_block_time: min_block_time,
-            last_block_time: start_time,
+            last_block_time: Instant::now(),
         }
     }
 

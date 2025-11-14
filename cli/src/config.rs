@@ -24,7 +24,7 @@ pub enum ElNodeType {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct MalakethConfig {
+pub struct EmeraldConfig {
     /// A custom human-readable name for this node
     pub moniker: String,
 

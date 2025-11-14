@@ -90,7 +90,7 @@ impl Args {
         }
     }
 
-    /// get_malaketch_config_file returns the application configuration file.
+    /// get_emerald_config_file returns the application configuration file.
     /// Typically, `$HOME/.emerald/config/config.toml`.
     pub fn get_emerald_config_file(&self) -> Result<PathBuf, Error> {
         match self.config {

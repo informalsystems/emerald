@@ -8,7 +8,7 @@ use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::sync::RawDecidedValue;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::{BlockHash, Height, MalakethContext, RetryConfig, Value};
+use malachitebft_eth_types::{BlockHash, EmeraldContext, Height, RetryConfig, Value};
 use ssz::{Decode, Encode};
 use tracing::{debug, error, info};
 
@@ -72,7 +72,7 @@ pub async fn get_decided_value_for_sync(
     engine: &Engine,
     height: Height,
     earliest_unpruned_height: Height,
-) -> eyre::Result<Option<RawDecidedValue<MalakethContext>>> {
+) -> eyre::Result<Option<RawDecidedValue<EmeraldContext>>> {
     if height >= earliest_unpruned_height {
         // Height is in our decided values table - get it directly
         info!(%height, earliest_unpruned_height = %earliest_unpruned_height, "Getting decided value from local storage");

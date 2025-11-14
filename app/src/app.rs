@@ -8,11 +8,11 @@ use malachitebft_app_channel::app::streaming::StreamContent;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
 use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
-use malachitebft_eth_cli::config::MalakethConfig;
+use malachitebft_eth_cli::config::EmeraldConfig;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::secp256k1::PublicKey;
-use malachitebft_eth_types::{Block, BlockHash, Height, MalakethContext, Validator, ValidatorSet};
+use malachitebft_eth_types::{Block, BlockHash, EmeraldContext, Height, Validator, ValidatorSet};
 use ssz::{Decode, Encode};
 use tracing::{debug, error, info, warn};
 
@@ -51,7 +51,7 @@ pub async fn initialize_state_from_existing_block(
     state: &mut State,
     engine: &Engine,
     start_height: Height,
-    malaketh_config: &MalakethConfig,
+    malaketh_config: &EmeraldConfig,
 ) -> eyre::Result<()> {
     // If there was somethign stored in the store for height, we should be able to retrieve
     // block data as well.
@@ -141,9 +141,9 @@ pub async fn read_validators_from_contract(
 
 pub async fn run(
     state: &mut State,
-    channels: &mut Channels<MalakethContext>,
+    channels: &mut Channels<EmeraldContext>,
     engine: Engine,
-    malaketh_config: MalakethConfig,
+    malaketh_config: EmeraldConfig,
 ) -> eyre::Result<()> {
     while let Some(msg) = channels.consensus.recv().await {
         match msg {
@@ -330,7 +330,7 @@ pub async fn run(
                             debug!("🎁 block size: {:?}, height: {}", bytes.len(), height);
 
                             // Prepare block proposal.
-                            let proposal: LocallyProposedValue<MalakethContext> =
+                            let proposal: LocallyProposedValue<EmeraldContext> =
                                 state.propose_value(height, round, bytes.clone()).await?;
 
                             // Store the block data at the proposal's height/round,

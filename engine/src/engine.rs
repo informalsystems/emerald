@@ -269,12 +269,11 @@ impl Engine {
     }
 
     /// Check if the execution client is syncing.
+    /// Note that this height might be the actual tip of the chain.Reth is updating this as its syncing.
+    /// If the client is not syncing it will return 0 as the heights height - this should be ignored.
     /// Returns a tuple of (is_syncing, current_block_height).
     /// - is_syncing: true if the node is currently syncing, false otherwise
     /// - heights_block_height: the heights block height of the chain from Reth's perspective
-    /// Note that this height might be the actual tip of the chain.Reth is updating this as its
-    /// syncing
-    /// If the client is not syncing it will return 0 as the heights height - this should be ignored.
     pub async fn is_syncing(&self) -> eyre::Result<(bool, u64)> {
         let sync_status: SyncStatus = self
             .api

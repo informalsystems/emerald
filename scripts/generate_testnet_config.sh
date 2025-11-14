@@ -61,7 +61,7 @@ fi
 
 TESTNET_DIR="$testnet_config_dir"
 
-readonly ENGINE_PORTS=(8545 18545 28545 38545)
+readonly ENGINE_PORTS=(95450 95451 95452 38545)
 readonly AUTH_PORTS=(8551 18551 28551 38551)
 
 if (( nodes > ${#ENGINE_PORTS[@]} )); then

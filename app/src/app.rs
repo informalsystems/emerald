@@ -283,7 +283,7 @@ pub async fn run(
             AppMsg::GetValue {
                 height,
                 round,
-                timeout: _,
+                timeout,
                 reply,
             } => {
                 // NOTE: We can ignore the timeout as we are building the value right away.
@@ -294,25 +294,37 @@ pub async fn run(
 
                 // Here it is important that, if we have previously built a value for this height and round,
                 // we send back the very same value.
-                let (proposal, bytes) =
-                    match state.get_previously_built_value(height, round).await? {
-                        Some(proposal) => {
-                            info!(value = %proposal.value.id(), "Re-using previously built value");
-                            // Fetch the block data for the previously built value
-                            let bytes = state
-                                .store
-                                .get_block_data(height, round, proposal.value.id())
-                                .await?
-                                .ok_or_else(|| {
-                                    eyre!("Block data not found for previously built value")
-                                })?;
-                            (proposal, bytes)
-                        }
-                        None => {
+                let (proposal, bytes) = match state
+                    .get_previously_built_value(height, round)
+                    .await?
+                {
+                    Some(proposal) => {
+                        info!(value = %proposal.value.id(), "Re-using previously built value");
+                        // Fetch the block data for the previously built value
+                        let bytes = state
+                            .store
+                            .get_block_data(height, round, proposal.value.id())
+                            .await?
+                            .ok_or_else(|| {
+                                eyre!("Block data not found for previously built value")
+                            })?;
+                        (proposal, bytes)
+                    }
+                    None => {
+                        // Check if the execution client is syncing and behind the consensus height
+                        let (is_syncing, highest_chain_height) = engine.is_syncing().await?;
+                        if is_syncing && highest_chain_height >= height.as_u64() {
+                            warn!(
+                                    "⚠️  Execution client is syncing (current: {}, target: {}), waiting for timeout",
+                                    highest_chain_height,
+                                    height.as_u64()
+                                );
+                            tokio::time::sleep(timeout * 2).await; // Sleep long enough to trigger timeout_propose
+                            continue;
+                        } else {
                             // If we have not previously built a value for that very same height and round,
                             // we need to create a new value to propose and send it back to consensus.
                             info!("Building a new value to propose");
-
                             // We need to ask the execution engine for a new value to
                             // propose. Then we send it back to consensus.
 
@@ -334,7 +346,8 @@ pub async fn run(
 
                             (proposal, bytes)
                         }
-                    };
+                    }
+                };
 
                 // Send it to consensus
                 if reply.send(proposal.clone()).is_err() {
@@ -558,9 +571,6 @@ pub async fn run(
                         .await?;
                 debug!("🌈 Got validator set: {:?}", new_validator_set);
                 state.set_validator_set(new_validator_set);
-
-                // Pause briefly before starting next height, just to make following the logs easier
-                // tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
                 // And then we instruct consensus to start the next height
                 if reply

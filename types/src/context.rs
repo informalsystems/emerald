@@ -11,15 +11,15 @@ use crate::value::*;
 use crate::vote::*;
 
 #[derive(Copy, Clone, Debug, Default)]
-pub struct MalakethContext;
+pub struct EmeraldContext;
 
-impl MalakethContext {
+impl EmeraldContext {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Context for MalakethContext {
+impl Context for EmeraldContext {
     type Address = Address;
     type ProposalPart = ProposalPart;
     type Height = Height;

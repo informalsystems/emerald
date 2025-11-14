@@ -176,8 +176,8 @@ where
         // Use home directory `home_dir/<index>`
         let node_home_dir = home_dir.join(i.to_string());
 
-        // Use malaketh config directory `malaketh_config_dir/<index>/config.toml`
-        let node_malaketh_config_file = testnet_config
+        // Use emerald config directory `emerald_config_dir/<index>/config.toml`
+        let node_emerald_config_file = testnet_config
             .configuration_paths
             .get(i)
             .ok_or(Error::MissingPath(i))?;
@@ -191,14 +191,14 @@ where
         info!(
             id = %i,
             home = %node_home_dir.display(),
-            malaketh_config = %node_malaketh_config_file.display(),
+            emerald_config = %node_emerald_config_file.display(),
             "Generating configuration for node..."
         );
 
         // Set the destination folder
         let args = Args {
             home: Some(node_home_dir),
-            config: Some(node_malaketh_config_file.clone()),
+            config: Some(node_emerald_config_file.clone()),
             ..Args::default()
         };
 

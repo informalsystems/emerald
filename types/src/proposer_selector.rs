@@ -1,6 +1,6 @@
 use malachitebft_core_types::{Context, Round};
 
-use crate::{Address, Height, MalakethContext, ValidatorSet};
+use crate::{Address, EmeraldContext, Height, ValidatorSet};
 
 /// Defines how to select a proposer amongst a validator set for a given round.
 pub trait ProposerSelector<Ctx>
@@ -27,7 +27,7 @@ where
 #[derive(Copy, Clone, Debug, Default)]
 pub struct RotateProposer;
 
-impl ProposerSelector<MalakethContext> for RotateProposer {
+impl ProposerSelector<EmeraldContext> for RotateProposer {
     fn select_proposer(
         &self,
         height: Height,
@@ -55,7 +55,7 @@ impl FixedProposer {
     }
 }
 
-impl ProposerSelector<MalakethContext> for FixedProposer {
+impl ProposerSelector<EmeraldContext> for FixedProposer {
     fn select_proposer(
         &self,
         _height: Height,

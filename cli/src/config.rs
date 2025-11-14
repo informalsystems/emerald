@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use color_eyre::eyre;
 use malachitebft_app::node::NodeConfig;
 pub use malachitebft_config::{
@@ -7,7 +9,6 @@ pub use malachitebft_config::{
 };
 use malachitebft_eth_types::RetryConfig;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use tokio::time::Duration;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

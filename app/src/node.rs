@@ -15,11 +15,6 @@ use malachitebft_app_channel::app::node::{
 };
 use malachitebft_app_channel::app::types::core::VotingPower;
 use malachitebft_eth_cli::config::{Config, EmeraldConfig};
-// Use the same types used for integration tests.
-// A real application would use its own types and context instead.
-use crate::metrics::Metrics;
-use crate::state::{State, StateMetrics};
-use crate::store::Store;
 use malachitebft_eth_cli::metrics;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::engine_rpc::EngineRPC;
@@ -30,6 +25,12 @@ use malachitebft_eth_types::{Address, EmeraldContext, Genesis, Height, Validator
 use rand::{CryptoRng, RngCore};
 use tokio::task::JoinHandle;
 use url::Url;
+
+// Use the same types used for integration tests.
+// A real application would use its own types and context instead.
+use crate::metrics::Metrics;
+use crate::state::{State, StateMetrics};
+use crate::store::Store;
 
 /// Main application struct implementing the consensus node functionality
 #[derive(Clone)]

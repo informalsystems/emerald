@@ -1,6 +1,8 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
+use std::fmt;
+
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use caches::lru::AdaptiveCache;
@@ -10,7 +12,6 @@ use malachitebft_app_channel::app::streaming::{StreamContent, StreamId, StreamMe
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Context, Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
-
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
@@ -23,8 +24,6 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sha3::Digest;
 use ssz::Decode;
-use std::fmt;
-
 use tokio::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 

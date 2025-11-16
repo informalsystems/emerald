@@ -13,7 +13,7 @@ use prost::Message;
 
 use crate::secp256k1::Signature;
 use crate::{
-    decode_votetype, encode_votetype, proto, Address, Height, MalakethContext, Proposal,
+    decode_votetype, encode_votetype, proto, Address, EmeraldContext, Height, Proposal,
     ProposalPart, Value, ValueId, Vote,
 };
 
@@ -62,10 +62,10 @@ impl Codec<Signature> for ProtobufCodec {
     }
 }
 
-impl Codec<SignedConsensusMsg<MalakethContext>> for ProtobufCodec {
+impl Codec<SignedConsensusMsg<EmeraldContext>> for ProtobufCodec {
     type Error = ProtoError;
 
-    fn decode(&self, bytes: Bytes) -> Result<SignedConsensusMsg<MalakethContext>, Self::Error> {
+    fn decode(&self, bytes: Bytes) -> Result<SignedConsensusMsg<EmeraldContext>, Self::Error> {
         let proto = proto::SignedMessage::decode(bytes.as_ref())?;
 
         let signature = proto
@@ -91,7 +91,7 @@ impl Codec<SignedConsensusMsg<MalakethContext>> for ProtobufCodec {
         }
     }
 
-    fn encode(&self, msg: &SignedConsensusMsg<MalakethContext>) -> Result<Bytes, Self::Error> {
+    fn encode(&self, msg: &SignedConsensusMsg<EmeraldContext>) -> Result<Bytes, Self::Error> {
         match msg {
             SignedConsensusMsg::Vote(vote) => {
                 let proto = proto::SignedMessage {
@@ -155,10 +155,10 @@ impl Codec<StreamMessage<ProposalPart>> for ProtobufCodec {
     }
 }
 
-impl Codec<ProposedValue<MalakethContext>> for ProtobufCodec {
+impl Codec<ProposedValue<EmeraldContext>> for ProtobufCodec {
     type Error = ProtoError;
 
-    fn decode(&self, bytes: Bytes) -> Result<ProposedValue<MalakethContext>, Self::Error> {
+    fn decode(&self, bytes: Bytes) -> Result<ProposedValue<EmeraldContext>, Self::Error> {
         let proto = proto::ProposedValue::decode(bytes.as_ref())?;
 
         let proposer = proto
@@ -179,7 +179,7 @@ impl Codec<ProposedValue<MalakethContext>> for ProtobufCodec {
         })
     }
 
-    fn encode(&self, msg: &ProposedValue<MalakethContext>) -> Result<Bytes, Self::Error> {
+    fn encode(&self, msg: &ProposedValue<EmeraldContext>) -> Result<Bytes, Self::Error> {
         let proto = proto::ProposedValue {
             height: msg.height.as_u64(),
             round: msg.round.as_u32().unwrap(),
@@ -193,10 +193,10 @@ impl Codec<ProposedValue<MalakethContext>> for ProtobufCodec {
     }
 }
 
-impl Codec<sync::Status<MalakethContext>> for ProtobufCodec {
+impl Codec<sync::Status<EmeraldContext>> for ProtobufCodec {
     type Error = ProtoError;
 
-    fn decode(&self, bytes: Bytes) -> Result<sync::Status<MalakethContext>, Self::Error> {
+    fn decode(&self, bytes: Bytes) -> Result<sync::Status<EmeraldContext>, Self::Error> {
         let proto = proto::Status::decode(bytes.as_ref())?;
 
         let proto_peer_id = proto
@@ -210,7 +210,7 @@ impl Codec<sync::Status<MalakethContext>> for ProtobufCodec {
         })
     }
 
-    fn encode(&self, msg: &sync::Status<MalakethContext>) -> Result<Bytes, Self::Error> {
+    fn encode(&self, msg: &sync::Status<EmeraldContext>) -> Result<Bytes, Self::Error> {
         let proto = proto::Status {
             peer_id: Some(proto::PeerId {
                 id: Bytes::from(msg.peer_id.to_bytes()),
@@ -223,10 +223,10 @@ impl Codec<sync::Status<MalakethContext>> for ProtobufCodec {
     }
 }
 
-impl Codec<sync::Request<MalakethContext>> for ProtobufCodec {
+impl Codec<sync::Request<EmeraldContext>> for ProtobufCodec {
     type Error = ProtoError;
 
-    fn decode(&self, bytes: Bytes) -> Result<sync::Request<MalakethContext>, Self::Error> {
+    fn decode(&self, bytes: Bytes) -> Result<sync::Request<EmeraldContext>, Self::Error> {
         let proto = proto::SyncRequest::decode(bytes.as_ref())?;
         let request = proto
             .request
@@ -243,7 +243,7 @@ impl Codec<sync::Request<MalakethContext>> for ProtobufCodec {
         }
     }
 
-    fn encode(&self, msg: &sync::Request<MalakethContext>) -> Result<Bytes, Self::Error> {
+    fn encode(&self, msg: &sync::Request<EmeraldContext>) -> Result<Bytes, Self::Error> {
         let proto = match msg {
             sync::Request::ValueRequest(req) => proto::SyncRequest {
                 request: Some(proto::sync_request::Request::ValueRequest(
@@ -259,20 +259,20 @@ impl Codec<sync::Request<MalakethContext>> for ProtobufCodec {
     }
 }
 
-impl Codec<sync::Response<MalakethContext>> for ProtobufCodec {
+impl Codec<sync::Response<EmeraldContext>> for ProtobufCodec {
     type Error = ProtoError;
 
-    fn decode(&self, bytes: Bytes) -> Result<sync::Response<MalakethContext>, Self::Error> {
+    fn decode(&self, bytes: Bytes) -> Result<sync::Response<EmeraldContext>, Self::Error> {
         decode_sync_response(proto::SyncResponse::decode(bytes)?)
     }
 
-    fn encode(&self, response: &sync::Response<MalakethContext>) -> Result<Bytes, Self::Error> {
+    fn encode(&self, response: &sync::Response<EmeraldContext>) -> Result<Bytes, Self::Error> {
         encode_sync_response(response).map(|proto| proto.encode_to_vec().into())
     }
 }
 
-impl HasEncodedLen<sync::Response<MalakethContext>> for ProtobufCodec {
-    fn encoded_len(&self, response: &sync::Response<MalakethContext>) -> Result<usize, ProtoError> {
+impl HasEncodedLen<sync::Response<EmeraldContext>> for ProtobufCodec {
+    fn encoded_len(&self, response: &sync::Response<EmeraldContext>) -> Result<usize, ProtoError> {
         let proto = encode_sync_response(response)?;
         Ok(proto.encoded_len())
     }
@@ -280,7 +280,7 @@ impl HasEncodedLen<sync::Response<MalakethContext>> for ProtobufCodec {
 
 pub fn decode_sync_response(
     proto_response: proto::SyncResponse,
-) -> Result<sync::Response<MalakethContext>, ProtoError> {
+) -> Result<sync::Response<EmeraldContext>, ProtoError> {
     let response = proto_response
         .response
         .ok_or_else(|| ProtoError::missing_field::<proto::SyncResponse>("messages"))?;
@@ -301,7 +301,7 @@ pub fn decode_sync_response(
 }
 
 pub fn encode_sync_response(
-    response: &sync::Response<MalakethContext>,
+    response: &sync::Response<EmeraldContext>,
 ) -> Result<proto::SyncResponse, ProtoError> {
     let proto = match response {
         sync::Response::ValueResponse(value_response) => proto::SyncResponse {
@@ -322,7 +322,7 @@ pub fn encode_sync_response(
 }
 
 pub fn encode_synced_value(
-    synced_value: &sync::RawDecidedValue<MalakethContext>,
+    synced_value: &sync::RawDecidedValue<EmeraldContext>,
 ) -> Result<proto::SyncedValue, ProtoError> {
     Ok(proto::SyncedValue {
         value_bytes: synced_value.value_bytes.clone(),
@@ -332,7 +332,7 @@ pub fn encode_synced_value(
 
 pub fn decode_synced_value(
     proto: proto::SyncedValue,
-) -> Result<sync::RawDecidedValue<MalakethContext>, ProtoError> {
+) -> Result<sync::RawDecidedValue<EmeraldContext>, ProtoError> {
     let certificate = proto
         .certificate
         .ok_or_else(|| ProtoError::missing_field::<proto::SyncedValue>("certificate"))?;
@@ -345,7 +345,7 @@ pub fn decode_synced_value(
 
 pub fn decode_certificate(
     certificate: proto::CommitCertificate,
-) -> Result<CommitCertificate<MalakethContext>, ProtoError> {
+) -> Result<CommitCertificate<EmeraldContext>, ProtoError> {
     let value_id = certificate
         .value_id
         .ok_or_else(|| ProtoError::missing_field::<proto::CommitCertificate>("value_id"))
@@ -355,7 +355,7 @@ pub fn decode_certificate(
         .signatures
         .into_iter()
         .map(
-            |sig| -> Result<CommitSignature<MalakethContext>, ProtoError> {
+            |sig| -> Result<CommitSignature<EmeraldContext>, ProtoError> {
                 let address = sig.validator_address.ok_or_else(|| {
                     ProtoError::missing_field::<proto::CommitSignature>("validator_address")
                 })?;
@@ -380,7 +380,7 @@ pub fn decode_certificate(
 }
 
 pub fn encode_certificate(
-    certificate: &CommitCertificate<MalakethContext>,
+    certificate: &CommitCertificate<EmeraldContext>,
 ) -> Result<proto::CommitCertificate, ProtoError> {
     Ok(proto::CommitCertificate {
         height: certificate.height.as_u64(),
@@ -403,7 +403,7 @@ pub fn encode_certificate(
 
 pub fn decode_extension(
     ext: proto::Extension,
-) -> Result<SignedExtension<MalakethContext>, ProtoError> {
+) -> Result<SignedExtension<EmeraldContext>, ProtoError> {
     let extension = ext.data;
     let signature = ext
         .signature
@@ -414,7 +414,7 @@ pub fn decode_extension(
 }
 
 pub fn encode_extension(
-    ext: &SignedExtension<MalakethContext>,
+    ext: &SignedExtension<EmeraldContext>,
 ) -> Result<proto::Extension, ProtoError> {
     Ok(proto::Extension {
         data: ext.message.clone(),
@@ -433,7 +433,7 @@ pub fn decode_signature(signature: proto::Signature) -> Result<Signature, ProtoE
         .map_err(|err| ProtoError::Other(format!("Invalid signature: {err}")))
 }
 
-pub fn decode_vote(msg: proto::SignedMessage) -> Result<SignedVote<MalakethContext>, ProtoError> {
+pub fn decode_vote(msg: proto::SignedMessage) -> Result<SignedVote<EmeraldContext>, ProtoError> {
     let signature = msg
         .signature
         .ok_or_else(|| ProtoError::missing_field::<proto::SignedMessage>("signature"))?;
@@ -452,7 +452,7 @@ pub fn decode_vote(msg: proto::SignedMessage) -> Result<SignedVote<MalakethConte
 
 pub fn decode_polka_certificate(
     certificate: proto::PolkaCertificate,
-) -> Result<PolkaCertificate<MalakethContext>, ProtoError> {
+) -> Result<PolkaCertificate<EmeraldContext>, ProtoError> {
     let value_id = certificate
         .value_id
         .ok_or_else(|| ProtoError::missing_field::<proto::PolkaCertificate>("value_id"))
@@ -466,7 +466,7 @@ pub fn decode_polka_certificate(
             .signatures
             .into_iter()
             .map(
-                |sig| -> Result<PolkaSignature<MalakethContext>, ProtoError> {
+                |sig| -> Result<PolkaSignature<EmeraldContext>, ProtoError> {
                     let address = sig.validator_address.ok_or_else(|| {
                         ProtoError::missing_field::<proto::PolkaCertificate>("validator_address")
                     })?;
@@ -485,7 +485,7 @@ pub fn decode_polka_certificate(
 
 pub fn decode_round_certificate(
     certificate: proto::RoundCertificate,
-) -> Result<RoundCertificate<MalakethContext>, ProtoError> {
+) -> Result<RoundCertificate<EmeraldContext>, ProtoError> {
     Ok(RoundCertificate {
         height: Height::new(certificate.height),
         round: Round::new(certificate.round),
@@ -499,7 +499,7 @@ pub fn decode_round_certificate(
             .signatures
             .into_iter()
             .map(
-                |sig| -> Result<RoundSignature<MalakethContext>, ProtoError> {
+                |sig| -> Result<RoundSignature<EmeraldContext>, ProtoError> {
                     let vote_type = decode_votetype(sig.vote_type());
                     let address = sig.validator_address.ok_or_else(|| {
                         ProtoError::missing_field::<proto::RoundCertificate>("validator_address")
@@ -523,7 +523,7 @@ pub fn decode_round_certificate(
     })
 }
 
-pub fn encode_vote(vote: &SignedVote<MalakethContext>) -> Result<proto::SignedMessage, ProtoError> {
+pub fn encode_vote(vote: &SignedVote<EmeraldContext>) -> Result<proto::SignedMessage, ProtoError> {
     Ok(proto::SignedMessage {
         message: Some(proto::signed_message::Message::Vote(
             vote.message.to_proto()?,
@@ -533,7 +533,7 @@ pub fn encode_vote(vote: &SignedVote<MalakethContext>) -> Result<proto::SignedMe
 }
 
 pub fn encode_polka_certificate(
-    polka_certificate: &PolkaCertificate<MalakethContext>,
+    polka_certificate: &PolkaCertificate<EmeraldContext>,
 ) -> Result<proto::PolkaCertificate, ProtoError> {
     Ok(proto::PolkaCertificate {
         height: polka_certificate.height.as_u64(),
@@ -558,7 +558,7 @@ pub fn encode_polka_certificate(
 }
 
 pub fn encode_round_certificate(
-    certificate: &RoundCertificate<MalakethContext>,
+    certificate: &RoundCertificate<EmeraldContext>,
 ) -> Result<proto::RoundCertificate, ProtoError> {
     Ok(proto::RoundCertificate {
         height: certificate.height.as_u64(),
@@ -588,10 +588,10 @@ pub fn encode_round_certificate(
     })
 }
 
-impl Codec<LivenessMsg<MalakethContext>> for ProtobufCodec {
+impl Codec<LivenessMsg<EmeraldContext>> for ProtobufCodec {
     type Error = ProtoError;
 
-    fn decode(&self, bytes: Bytes) -> Result<LivenessMsg<MalakethContext>, Self::Error> {
+    fn decode(&self, bytes: Bytes) -> Result<LivenessMsg<EmeraldContext>, Self::Error> {
         let msg = proto::LivenessMessage::decode(bytes.as_ref())?;
         match msg.message {
             Some(proto::liveness_message::Message::Vote(vote)) => {
@@ -609,7 +609,7 @@ impl Codec<LivenessMsg<MalakethContext>> for ProtobufCodec {
         }
     }
 
-    fn encode(&self, msg: &LivenessMsg<MalakethContext>) -> Result<Bytes, Self::Error> {
+    fn encode(&self, msg: &LivenessMsg<EmeraldContext>) -> Result<Bytes, Self::Error> {
         match msg {
             LivenessMsg::Vote(vote) => {
                 let message = encode_vote(vote)?;

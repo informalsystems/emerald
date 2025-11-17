@@ -17,7 +17,7 @@ use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::secp256k1::K256Provider;
 use malachitebft_eth_types::{
-    Address, Block, BlockHash, Genesis, Height, MalakethContext, ProposalData, ProposalFin,
+    Address, Block, BlockHash, EmeraldContext, Genesis, Height, ProposalData, ProposalFin,
     ProposalInit, ProposalPart, RetryConfig, ValidatorSet, Value, ValueId,
 };
 use rand::rngs::StdRng;
@@ -75,7 +75,7 @@ const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB
 /// Contains information about current height, round, proposals and blocks
 pub struct State {
     #[allow(dead_code)]
-    ctx: MalakethContext,
+    ctx: EmeraldContext,
     signing_provider: K256Provider,
     address: Address,
     pub store: Store,
@@ -127,10 +127,10 @@ pub enum ProposalValidationError {
 impl fmt::Display for ProposalValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ProposalValidationError::WrongProposer { actual, expected } => {
+            Self::WrongProposer { actual, expected } => {
                 write!(f, "Wrong proposer: got {actual}, expected {expected}")
             }
-            ProposalValidationError::Signature(err) => {
+            Self::Signature(err) => {
                 write!(f, "Signature verification failed: {err:?}")
             }
         }
@@ -165,7 +165,7 @@ impl State {
     /// Creates a new State instance with the given validator address and starting height
     pub fn new(
         _genesis: Genesis, // all genesis data is in EVM via genesis.json
-        ctx: MalakethContext,
+        ctx: EmeraldContext,
         signing_provider: K256Provider,
         address: Address,
         height: Height,
@@ -176,7 +176,7 @@ impl State {
         // It represents the start time of measuring metrics, not the actual node start time.
         // This allows us to continue accumulating time correctly after a restart
         let start_time =
-            Instant::now() - std::time::Duration::from_secs(state_metrics.elapsed_seconds);
+            Instant::now() - core::time::Duration::from_secs(state_metrics.elapsed_seconds);
 
         Self {
             ctx,
@@ -375,7 +375,7 @@ impl State {
         part: StreamMessage<ProposalPart>,
         engine: &Engine,
         retry_config: &RetryConfig,
-    ) -> eyre::Result<Option<ProposedValue<MalakethContext>>> {
+    ) -> eyre::Result<Option<ProposedValue<EmeraldContext>>> {
         let sequence = part.sequence;
 
         // Check if we have a full proposal
@@ -441,9 +441,9 @@ impl State {
                     return Ok(None);
                 }
                 info!(%value.height, %value.round, %value.proposer, "Storing validated proposal as undecided");
-                self.store.store_undecided_proposal(value.clone()).await?;
                 self.store_undecided_block_data(value.height, value.round, value.value.id(), data)
                     .await?;
+                self.store.store_undecided_proposal(value.clone()).await?;
 
                 Ok(Some(value))
             }
@@ -491,7 +491,7 @@ impl State {
     /// and moving to the next height
     pub async fn commit(
         &mut self,
-        certificate: CommitCertificate<MalakethContext>,
+        certificate: CommitCertificate<EmeraldContext>,
         block_header_bytes: Bytes,
     ) -> eyre::Result<()> {
         info!(
@@ -562,7 +562,7 @@ impl State {
         &self,
         height: Height,
         round: Round,
-    ) -> eyre::Result<Option<LocallyProposedValue<MalakethContext>>> {
+    ) -> eyre::Result<Option<LocallyProposedValue<EmeraldContext>>> {
         let proposals = self.store.get_undecided_proposals(height, round).await?;
 
         assert!(
@@ -601,14 +601,14 @@ impl State {
         height: Height,
         round: Round,
         data: Bytes,
-    ) -> eyre::Result<LocallyProposedValue<MalakethContext>> {
+    ) -> eyre::Result<LocallyProposedValue<EmeraldContext>> {
         assert_eq!(height, self.current_height);
         assert_eq!(round, self.current_round);
 
         // We create a new value.
-        let value = Value::new(data);
+        let value = Value::new(data.clone());
 
-        let proposal = ProposedValue {
+        let proposal: ProposedValue<EmeraldContext> = ProposedValue {
             height,
             round,
             valid_round: Round::Nil,
@@ -616,6 +616,11 @@ impl State {
             value,
             validity: Validity::Valid, // Our proposals are de facto valid
         };
+        // Store the block data at the proposal's height/round,
+        // which will be passed to the execution client (EL) on commit.
+        // WARN: THE ORDER OF THE FOLLOWING TWO OPERATIONS IS IMPORTANT.
+        self.store_undecided_block_data(height, round, proposal.value.id(), data.clone())
+            .await?;
 
         // Insert the new proposal into the undecided proposals.
         self.store
@@ -642,7 +647,7 @@ impl State {
     /// Updates internal sequence number and current proposal.
     pub fn stream_proposal(
         &mut self,
-        value: LocallyProposedValue<MalakethContext>,
+        value: LocallyProposedValue<EmeraldContext>,
         data: Bytes,
         pol_round: Round,
     ) -> impl Iterator<Item = StreamMessage<ProposalPart>> {
@@ -665,7 +670,7 @@ impl State {
 
     fn make_proposal_parts(
         &self,
-        value: LocallyProposedValue<MalakethContext>,
+        value: LocallyProposedValue<EmeraldContext>,
         data: Bytes,
         pol_round: Round,
     ) -> Vec<ProposalPart> {
@@ -719,7 +724,7 @@ impl State {
 /// Re-assemble a [`ProposedValue`] from its [`ProposalParts`].
 ///
 /// This is done by multiplying all the factors in the parts.
-pub fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<MalakethContext>, Bytes) {
+pub fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<EmeraldContext>, Bytes) {
     // Get the init part to extract pol_round
     let init = parts
         .parts

@@ -1,6 +1,6 @@
 //! key and configuration generation
 
-use std::time::Duration;
+use core::time::Duration;
 
 use itertools::Itertools;
 use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, Node};
@@ -77,14 +77,14 @@ pub fn generate_config(
     ephemeral_connection_timeout_ms: u64,
     transport: TransportProtocol,
     logging: LoggingConfig,
-    malaketh_config: MalakethConfig,
+    moniker: String,
 ) -> Config {
     let consensus_port = CONSENSUS_BASE_PORT + index;
     let mempool_port = MEMPOOL_BASE_PORT + index;
     let metrics_port = METRICS_BASE_PORT + index;
 
     Config {
-        moniker: malaketh_config.moniker,
+        moniker,
         consensus: ConsensusConfig {
             timeouts: TimeoutConfig::default(),
             p2p: P2pConfig {

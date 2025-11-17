@@ -13,7 +13,7 @@ members = [
 version      = "0.0.1"
 edition      = "2021"
 readme       = "README.md"
-repository   = "https://github.com/informalsystems/malaketh-layered"
+repository   = "https://github.com/informalsystems/emerald"
 license      = "Apache-2.0"
 rust-version = "1.83"
 publish      = false
@@ -26,7 +26,26 @@ lto             = "thin"
 overflow-checks = true
 
 [workspace.lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = [ 'cfg(coverage_nightly)' ] }
+unexpected_cfgs      = { level = "warn", check-cfg = [ 'cfg(coverage_nightly)' ] }
+unsafe_code          = "forbid"
+dead_code            = "deny"
+rust_2018_idioms     = { level = "deny", priority = -1 }
+trivial_casts        = "deny"
+unused_import_braces = "deny"
+
+[workspace.lints.clippy]
+debug_assert_with_mut_call    = "deny"
+doc_link_with_quotes          = "deny"
+inefficient_to_string         = "deny"
+map_flatten                   = "deny"
+manual_ok_or                  = "deny"
+match_same_arms               = "deny"
+semicolon_if_nothing_returned = "deny"
+uninlined_format_args         = "deny"
+trait_duplication_in_bounds   = "deny"
+use_self                      = "deny"
+redundant_clone               = "deny"
+std_instead_of_core           = "deny"
 
 [workspace.dependencies]
 emerald                 = { version = "0.0.1", path = "app" }
@@ -34,13 +53,15 @@ malachitebft-eth-cli    = { version = "0.0.1", path = "cli" }
 malachitebft-eth-engine = { version = "0.0.1", path = "engine" }
 malachitebft-eth-types  = { version = "0.0.1", path = "types" }
 
-alloy-primitives       = { version = "0.8.21", features = [ "getrandom" ] }
+alloy-primitives       = { version = "0.8.26", features = [ "std", "rand" ] }
 alloy-consensus        = { version = "0.11.1", default-features = false }
 alloy-rpc-types        = { version = "0.11.1", features = [ "eth" ], default-features = false }
 alloy-contract         = { version = "0.11.1", default-features = false }
-alloy-sol-types        = { version = "0.8.15", features = [ "json" ], default-features = false }
+alloy-sol-types        = { version = "0.8.26", features = [ "json" ], default-features = false }
 alloy-rpc-types-eth    = { version = "0.11.1", default-features = false }
 alloy-rpc-types-engine = { version = "0.11.1", features = [ "ssz", "jwt", "serde" ], default-features = false }
+alloy-json-abi         = { version = "0.8.26", default-features = false }
+alloy-dyn-abi          = { version = "0.8.26", default-features = false, features = [ "std" ] }
 
 async-trait        = "0.1.88"
 axum               = "0.7"
@@ -71,6 +92,7 @@ tracing-appender   = "0.2.3"
 tracing-subscriber = { version = "0.3.18", features = [ "env-filter" ] }
 url                = "2"
 k256               = { version = "0.13" }
+test-log           = { version = "0.2", features = [ "trace" ] }
 
 [workspace.dependencies.malachitebft-app]
 package = "informalsystems-malachitebft-app"

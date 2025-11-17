@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::codec::proto::{decode_signature, encode_signature};
 use crate::secp256k1::Signature;
-use crate::{Address, Height, MalakethContext};
+use crate::{Address, EmeraldContext, Height};
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProposalData {
@@ -20,7 +20,7 @@ impl ProposalData {
     }
 
     pub fn size_bytes(&self) -> usize {
-        std::mem::size_of::<u64>()
+        core::mem::size_of::<u64>()
     }
 }
 
@@ -119,7 +119,7 @@ impl ProposalFin {
     }
 }
 
-impl malachitebft_core_types::ProposalPart<MalakethContext> for ProposalPart {
+impl malachitebft_core_types::ProposalPart<EmeraldContext> for ProposalPart {
     fn is_first(&self) -> bool {
         matches!(self, Self::Init(_))
     }

@@ -2,7 +2,7 @@ use core::str::FromStr;
 use std::collections::BTreeMap;
 
 use alloy_genesis::{ChainConfig, Genesis, GenesisAccount};
-use alloy_primitives::{address, Address, B256, U256};
+use alloy_primitives::{address, hex, Address, B256, U256};
 use alloy_signer_local::coins_bip39::English;
 use alloy_signer_local::{MnemonicBuilder, PrivateKeySigner};
 use chrono::NaiveDate;
@@ -24,7 +24,7 @@ const BEACON_ROOTS_ADDRESS: Address = address!("0x000F3df6D732807Ef1319fB7B8bB85
 
 /// EIP-4788 Beacon Roots Contract bytecode
 /// See: https://eips.ethereum.org/EIPS/eip-4788
-const BEACON_ROOTS_CODE: &str = "0x3373fffffffffffffffffffffffffffffffffffffffe14604d57602036146024575f5ffd5b5f35801560495762001fff810690815414603c575f5ffd5b62001fff01545f5260205ff35b5f5ffd5b62001fff42064281555f359062001fff015500";
+const BEACON_ROOTS_CODE: [u8; 97] = hex!("0x3373fffffffffffffffffffffffffffffffffffffffe14604d57602036146024575f5ffd5b5f35801560495762001fff810690815414603c575f5ffd5b62001fff01545f5260205ff35b5f5ffd5b62001fff42064281555f359062001fff015500");
 
 /// Test mnemonic for wallet generation
 const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
@@ -152,16 +152,14 @@ pub(crate) fn generate_evm_genesis(
     }
 
     // Parse PoA owner address or override with first test address
-    let mut poa_address_owner = if let Some(addr_str) = poa_address_owner {
+    let poa_address_owner = if let Some(addr_str) = poa_address_owner {
         Address::from_str(addr_str)
             .map_err(|e| eyre!("invalid PoA owner address '{}': {}", addr_str, e))?
+    } else if *testnet {
+        signers[0].address()
     } else {
-        Address::ZERO
+        unreachable!("unable to determine PoA owner address");
     };
-
-    if *testnet {
-        poa_address_owner = signers[0].address();
-    }
 
     let storage = generate_storage_data(initial_validators, poa_address_owner)?;
     alloc.insert(
@@ -177,11 +175,10 @@ pub(crate) fn generate_evm_genesis(
     // Required for Engine API V3 compliance when parent_beacon_block_root is set
     // reth deploys this contract at genesis but only for chain-id 1 so we add it here manually in
     // order to support arbitrary chain-ids
-    let beacon_roots_bytecode = hex::decode(BEACON_ROOTS_CODE.strip_prefix("0x").unwrap())?;
     alloc.insert(
         BEACON_ROOTS_ADDRESS,
         GenesisAccount {
-            code: Some(beacon_roots_bytecode.into()),
+            code: Some(BEACON_ROOTS_CODE.into()),
             ..Default::default()
         },
     );

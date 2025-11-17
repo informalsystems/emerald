@@ -65,7 +65,7 @@ function wait_for_reth {
     echo "trying 10 times"
     for i in $(seq 1 10); do
         BLOCK_NUMBER=$(cast block-number --rpc-url 127.0.0.1:$NODE_PORT)
-        if [[ $BLOCK_NUMBER -ge 0 ]]; then
+        if [[ $BLOCK_NUMBER -ge 1 ]]; then
             echo "Reth node at port $NODE_PORT has reached height $BLOCK_NUMBER."
             return
         else

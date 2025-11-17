@@ -1,5 +1,5 @@
 use alloy_primitives::Address;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueHint};
 use color_eyre::eyre::Result;
 use genesis::{generate_genesis, make_signers};
 use spammer::Spammer;
@@ -22,16 +22,16 @@ impl Cli {
             Commands::Genesis {
                 public_keys_file,
                 poa_owner_address,
-                testnet,
-                testnet_balance,
+                devnet,
+                devnet_balance,
                 chain_id,
                 evm_genesis_output,
                 emerald_genesis_output,
             } => generate_genesis(
                 public_keys_file,
                 poa_owner_address,
-                testnet,
-                testnet_balance,
+                devnet,
+                devnet_balance,
                 chain_id,
                 evm_genesis_output,
                 emerald_genesis_output,
@@ -49,6 +49,7 @@ pub enum Commands {
         #[clap(
             short,
             long,
+            value_hint = ValueHint::FilePath,
             help = "File containing validator public keys (one per line)"
         )]
         public_keys_file: String,
@@ -56,7 +57,7 @@ pub enum Commands {
         #[clap(
             long,
             short = 'a',
-            required_unless_present = "testnet",
+            required_unless_present = "devnet",
             help = "Address of the Proof-of-Authority owner"
         )]
         poa_owner_address: Option<String>,
@@ -75,19 +76,20 @@ pub enum Commands {
             default_value_t = false,
             help = "Generate test addresses in genesis using mnemonic: 'test test test test test test test test test test test junk'"
         )]
-        testnet: bool,
+        devnet: bool,
 
         #[clap(
             long,
             short = 'b',
-            default_value_t = 15_000u64,
+            default_value_t = 15_000_u64,
             help = "Balance for each testnet wallet (default: 15000)"
         )]
-        testnet_balance: u64,
+        devnet_balance: u64,
 
         #[clap(
             long,
             short = 'g',
+            value_hint = ValueHint::FilePath,
             default_value = "./assets/genesis.json",
             help = "Output path for the generated genesis file"
         )]

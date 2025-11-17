@@ -42,16 +42,16 @@ clean: clean-prometheus
 	rm -rf ./assets/genesis.json
 	rm -rf ./nodes
 	rm -rf ./monitoring/data-grafana
-	docker volume rm --force malaketh-layered-private_reth0
-	docker volume rm --force malaketh-layered-private_reth1
-	docker volume rm --force malaketh-layered-private_reth2
-	docker volume rm --force malaketh-layered-private_reth3
+	docker volume rm --force emerald_reth0
+	docker volume rm --force emerald_reth1
+	docker volume rm --force emerald_reth2
+	docker volume rm --force emerald_reth3
 
 clean-prometheus: stop
 	rm -rf ./monitoring/data-prometheus
 
 spam:
-	cargo run --bin malachitebft-eth-utils spam --time=60 --rate=5000 --rpc-url=127.0.0.1:8545
+	cargo run --bin malachitebft-eth-utils spam --time=60 --rate=5000 --rpc-url=127.0.0.1:8645
 
 spam-contract:
 	@if [ -z "$(CONTRACT)" ]; then \
@@ -72,4 +72,4 @@ spam-contract:
 		--args="$(ARGS)" \
 		--time=60 \
 		--rate=1000 \
-		--rpc-url=127.0.0.1:8545
+		--rpc-url=127.0.0.1:8645

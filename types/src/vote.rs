@@ -3,7 +3,7 @@ pub use malachitebft_core_types::Extension;
 use malachitebft_core_types::{NilOrVal, Round, SignedExtension, VoteType};
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 
-use crate::{proto, Address, Height, MalakethContext, ValueId};
+use crate::{proto, Address, EmeraldContext, Height, ValueId};
 
 /// A vote for a value in a round
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -13,7 +13,7 @@ pub struct Vote {
     pub round: Round,
     pub value: NilOrVal<ValueId>,
     pub validator_address: Address,
-    pub extension: Option<SignedExtension<MalakethContext>>,
+    pub extension: Option<SignedExtension<EmeraldContext>>,
 }
 
 impl Vote {
@@ -62,7 +62,7 @@ impl Vote {
     }
 }
 
-impl malachitebft_core_types::Vote<MalakethContext> for Vote {
+impl malachitebft_core_types::Vote<EmeraldContext> for Vote {
     fn height(&self) -> Height {
         self.height
     }
@@ -87,15 +87,15 @@ impl malachitebft_core_types::Vote<MalakethContext> for Vote {
         &self.validator_address
     }
 
-    fn extension(&self) -> Option<&SignedExtension<MalakethContext>> {
+    fn extension(&self) -> Option<&SignedExtension<EmeraldContext>> {
         self.extension.as_ref()
     }
 
-    fn take_extension(&mut self) -> Option<SignedExtension<MalakethContext>> {
+    fn take_extension(&mut self) -> Option<SignedExtension<EmeraldContext>> {
         self.extension.take()
     }
 
-    fn extend(self, extension: SignedExtension<MalakethContext>) -> Self {
+    fn extend(self, extension: SignedExtension<EmeraldContext>) -> Self {
         Self {
             extension: Some(extension),
             ..self

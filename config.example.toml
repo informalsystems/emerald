@@ -1,11 +1,11 @@
-# This is an example configuration for Malaketh. It is meant to be
+# This is an example configuration for Emerald. It is meant to be
 # used as a reference.
 
 # Moniker prefix used when creating the Malachite configuration file
 moniker = "test-0"
 
 # RPC endpoint for Ethereum execution client
-execution_authrpc_address = "http://localhost:8545"
+execution_authrpc_address = "http://localhost:8645"
 
 # RPC endpoint for Ethereum Engine API
 engine_authrpc_address = "http://localhost:8551"

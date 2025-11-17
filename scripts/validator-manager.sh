@@ -21,7 +21,7 @@
 set -euo pipefail
 
 # Configuration
-RPC_URL="${RPC_URL:-http://127.0.0.1:8545}"
+RPC_URL="${RPC_URL:-http://127.0.0.1:8645}"
 VM_ADDRESS="${VM_ADDRESS:-0x0000000000000000000000000000000000002000}"
 OWNER_KEY="${OWNER_KEY:-0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}"
 ABI_FILE="${ABI_FILE:-./solidity/out/ValidatorManager.sol/ValidatorManager.json}"
@@ -74,7 +74,7 @@ Commands:
   renounce-ownership                    Renounce ownership (irreversible!)
 
 Environment Variables:
-  RPC_URL      RPC endpoint (default: http://127.0.0.1:8545)
+  RPC_URL      RPC endpoint (default: http://127.0.0.1:8645)
   VM_ADDRESS   ValidatorManager contract address (default: 0x0000000000000000000000000000000000002000)
   OWNER_KEY    Owner private key (default: first Hardhat test account)
   ABI_FILE     Path to ValidatorManager ABI JSON (default: ./solidity/out/ValidatorManager.sol/ValidatorManager.json)

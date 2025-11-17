@@ -11,7 +11,7 @@ use malachitebft_app_channel::app::types::core::{CommitCertificate, Round};
 use malachitebft_app_channel::app::types::ProposedValue;
 use malachitebft_eth_types::codec::proto as codec;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::{proto, Height, MalakethContext, Value, ValueId};
+use malachitebft_eth_types::{proto, EmeraldContext, Height, Value, ValueId};
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 use prost::Message;
 use redb::ReadableTable;
@@ -27,16 +27,16 @@ use crate::streaming::ProposalParts;
 #[derive(Clone, Debug)]
 pub struct DecidedValue {
     pub value: Value,
-    pub certificate: CommitCertificate<MalakethContext>,
+    pub certificate: CommitCertificate<EmeraldContext>,
 }
 
-fn decode_certificate(bytes: &[u8]) -> Result<CommitCertificate<MalakethContext>, ProtoError> {
+fn decode_certificate(bytes: &[u8]) -> Result<CommitCertificate<EmeraldContext>, ProtoError> {
     let proto = proto::CommitCertificate::decode(bytes)?;
     codec::decode_certificate(proto)
 }
 
 fn encode_certificate(
-    certificate: &CommitCertificate<MalakethContext>,
+    certificate: &CommitCertificate<EmeraldContext>,
 ) -> Result<Vec<u8>, ProtoError> {
     let proto = codec::encode_certificate(certificate)?;
     Ok(proto.encode_to_vec())
@@ -188,7 +188,7 @@ impl Db {
         height: Height,
         round: Round,
         value_id: ValueId,
-    ) -> Result<Option<ProposedValue<MalakethContext>>, StoreError> {
+    ) -> Result<Option<ProposedValue<EmeraldContext>>, StoreError> {
         let start = Instant::now();
         let mut read_bytes = 0;
 
@@ -220,7 +220,7 @@ impl Db {
         &self,
         height: Height,
         round: Round,
-    ) -> Result<Vec<ProposedValue<MalakethContext>>, StoreError> {
+    ) -> Result<Vec<ProposedValue<EmeraldContext>>, StoreError> {
         let start = Instant::now();
         let mut read_bytes = 0;
 
@@ -255,7 +255,7 @@ impl Db {
 
     fn insert_undecided_proposal(
         &self,
-        proposal: ProposedValue<MalakethContext>,
+        proposal: ProposedValue<EmeraldContext>,
     ) -> Result<(), StoreError> {
         let start = Instant::now();
 
@@ -631,7 +631,7 @@ impl Db {
     fn get_certificate_and_header(
         &self,
         height: Height,
-    ) -> Result<Option<(CommitCertificate<MalakethContext>, Bytes)>, StoreError> {
+    ) -> Result<Option<(CommitCertificate<EmeraldContext>, Bytes)>, StoreError> {
         let start = Instant::now();
         let mut read_bytes = 0;
 
@@ -723,7 +723,7 @@ impl Store {
     /// Called by the application when it `commit`s a value decided by consensus.
     pub async fn store_decided_value(
         &self,
-        certificate: &CommitCertificate<MalakethContext>,
+        certificate: &CommitCertificate<EmeraldContext>,
         value: Value,
         block_header_bytes: Bytes,
     ) -> Result<(), StoreError> {
@@ -743,7 +743,7 @@ impl Store {
     /// Called by the application when receiving new proposals from peers.
     pub async fn store_undecided_proposal(
         &self,
-        value: ProposedValue<MalakethContext>,
+        value: ProposedValue<EmeraldContext>,
     ) -> Result<(), StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.insert_undecided_proposal(value)).await?
@@ -756,7 +756,7 @@ impl Store {
         height: Height,
         round: Round,
         value_id: ValueId,
-    ) -> Result<Option<ProposedValue<MalakethContext>>, StoreError> {
+    ) -> Result<Option<ProposedValue<EmeraldContext>>, StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.get_undecided_proposal(height, round, value_id))
             .await?
@@ -768,7 +768,7 @@ impl Store {
         &self,
         height: Height,
         round: Round,
-    ) -> Result<Vec<ProposedValue<MalakethContext>>, StoreError> {
+    ) -> Result<Vec<ProposedValue<EmeraldContext>>, StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.get_undecided_proposals(height, round)).await?
     }
@@ -847,7 +847,7 @@ impl Store {
     pub async fn get_certificate_and_header(
         &self,
         height: Height,
-    ) -> Result<Option<(CommitCertificate<MalakethContext>, Bytes)>, StoreError> {
+    ) -> Result<Option<(CommitCertificate<EmeraldContext>, Bytes)>, StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.get_certificate_and_header(height)).await?
     }

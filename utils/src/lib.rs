@@ -125,12 +125,12 @@ impl PoaCmd {
                 poa::add_validator(url, address, validator_pubkey, *power, owner_private_key).await
             }
             PoaCommands::RemoveValidator {
-                validator_pubkey,
+                validator_identifier,
                 owner_private_key,
             } => {
                 let url = &self.rpc_url;
                 let address = &self.contract_address;
-                poa::remove_validator(url, address, validator_pubkey, owner_private_key).await
+                poa::remove_validator(url, address, validator_identifier, owner_private_key).await
             }
             PoaCommands::List {} => {
                 let url = &self.rpc_url;
@@ -138,7 +138,7 @@ impl PoaCmd {
                 poa::list_validators(url, address).await
             }
             PoaCommands::UpdateValidator {
-                validator_pubkey,
+                validator_identifier,
                 power,
                 owner_private_key,
             } => {
@@ -147,7 +147,7 @@ impl PoaCmd {
                 poa::update_validator_power(
                     url,
                     address,
-                    validator_pubkey,
+                    validator_identifier,
                     *power,
                     owner_private_key,
                 )
@@ -161,8 +161,8 @@ impl PoaCmd {
 pub enum PoaCommands {
     /// Add a validator
     AddValidator {
-        /// Validator public key (uncompressed secp256k1, hex encoded)
-        #[clap(long, short)]
+        /// Validator public key (128-130 hex chars) or address (40 hex chars)
+        #[clap(long, short = 'v')]
         validator_pubkey: String,
 
         /// Validator power (voting weight)
@@ -175,18 +175,18 @@ pub enum PoaCommands {
     },
     /// Remove a validator
     RemoveValidator {
-        /// Validator public key (uncompressed secp256k1, hex encoded)
-        #[clap(long, short)]
-        validator_pubkey: String,
+        /// Validator public key (128-130 hex chars) or address (40 hex chars)
+        #[clap(long, short = 'v')]
+        validator_identifier: String,
 
         /// Private key of the contract owner
         #[clap(long, short)]
         owner_private_key: String,
     },
     UpdateValidator {
-        /// Validator public key (uncompressed secp256k1, hex encoded)
-        #[clap(long, short)]
-        validator_pubkey: String,
+        /// Validator public key (128-130 hex chars) or address (40 hex chars)
+        #[clap(long, short = 'v')]
+        validator_identifier: String,
 
         /// New validator power (voting weight)
         #[clap(long, short, default_value_t = 100)]

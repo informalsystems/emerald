@@ -71,6 +71,35 @@ pub fn validator_pubkey_to_address(validator_pubkey: &str) -> Result<Address> {
     Ok(Address::from_slice(addr.as_slice()))
 }
 
+/// Parse validator identifier (either a public key or an address) and return an Address
+///
+/// Accepts:
+/// - Public key: 64 bytes (128 hex chars) or 65 bytes (130 hex chars with 04 prefix)
+/// - Address: 20 bytes (40 hex chars)
+///
+/// Both with or without 0x prefix
+pub fn parse_validator_identifier(identifier: &str) -> Result<Address> {
+    let hex_str = identifier.strip_prefix("0x").unwrap_or(identifier);
+    let hex_len = hex_str.len();
+
+    // Check if it's an address (40 hex chars = 20 bytes)
+    if hex_len == 40 {
+        // Parse as address
+        let addr = identifier
+            .parse::<Address>()
+            .context("Failed to parse validator address")?;
+        Ok(addr)
+    } else if hex_len == 128 || hex_len == 130 {
+        // Parse as public key (64 or 65 bytes)
+        validator_pubkey_to_address(identifier)
+    } else {
+        eyre::bail!(
+            "Invalid validator identifier: expected address (40 hex chars) or public key (128-130 hex chars), got {} hex chars",
+            hex_len
+        )
+    }
+}
+
 // list validators
 pub async fn list_validators(rpc_url: &Url, contract_address: &Address) -> Result<()> {
     let provider = ProviderBuilder::new().on_http(rpc_url.clone());
@@ -114,17 +143,15 @@ pub async fn list_validators(rpc_url: &Url, contract_address: &Address) -> Resul
 pub async fn add_validator(
     rpc_url: &Url,
     contract_address: &Address,
-    validator_pubkey: &str,
+    validator_identifier: &str,
     power: u64,
     signer_private_key: &str,
 ) -> Result<()> {
     // Parse the validator public key bytes
-    let pubkey_bytes = hex::decode(
-        validator_pubkey
-            .strip_prefix("0x")
-            .unwrap_or(validator_pubkey),
-    )
-    .context("Failed to decode validator public key")?;
+    let hex_str = validator_identifier
+        .strip_prefix("0x")
+        .unwrap_or(validator_identifier);
+    let pubkey_bytes = hex::decode(hex_str).context("Failed to decode validator public key")?;
 
     // Ensure the public key is in the correct format for the contract
     // Contract accepts: 33 bytes (compressed) or 65 bytes (uncompressed with 0x04 prefix)
@@ -134,12 +161,12 @@ pub async fn add_validator(
         prefixed.push(0x04);
         prefixed.extend_from_slice(&pubkey_bytes);
         prefixed
-    } else if pubkey_bytes.len() == 65 || pubkey_bytes.len() == 33 {
-        // Already in correct format (65 bytes uncompressed or 33 bytes compressed)
+    } else if pubkey_bytes.len() == 65 || pubkey_bytes.len() == 33 || pubkey_bytes.len() == 20 {
+        // Already in correct format (65 bytes uncompressed, 33 bytes compressed, or 20 bytes address)
         pubkey_bytes
     } else {
         return Err(color_eyre::eyre::eyre!(
-            "Invalid public key length: expected 33, 64, or 65 bytes, got {}",
+            "Invalid input length: expected 20 (address), 33 (compressed key), 64, or 65 bytes (uncompressed key), got {}",
             pubkey_bytes.len()
         ));
     };
@@ -158,7 +185,7 @@ pub async fn add_validator(
     let contract = ValidatorManager::new(*contract_address, &provider);
 
     // Call the register function
-    println!("Adding validator with pubkey: {validator_pubkey}");
+    println!("Adding validator with pubkey: {validator_identifier}");
     println!("  Power: {power}");
 
     let tx = contract
@@ -181,10 +208,11 @@ pub async fn add_validator(
 }
 
 /// Remove a validator from the PoA validator set
+/// Accepts either a validator public key or address
 pub async fn remove_validator(
     rpc_url: &Url,
     contract_address: &Address,
-    validator_pubkey: &str,
+    validator_identifier: &str,
     signer_private_key: &str,
 ) -> Result<()> {
     // Set up the signer and provider
@@ -200,11 +228,11 @@ pub async fn remove_validator(
     // Create contract instance
     let contract = ValidatorManager::new(*contract_address, &provider);
 
-    // Get the validator address from the public key
-    let addr = validator_pubkey_to_address(validator_pubkey)?;
+    // Parse the validator identifier (pubkey or address)
+    let addr = parse_validator_identifier(validator_identifier)?;
 
     // Call the unregister function
-    println!("Removing validator with pubkey: {validator_pubkey}");
+    println!("Removing validator: {validator_identifier}");
     println!("  Validator address: {addr:?}");
 
     let tx = contract
@@ -228,18 +256,15 @@ pub async fn remove_validator(
     Ok(())
 }
 
-// update validator vote power
+/// Update validator vote power
+/// Accepts either a validator public key or address
 pub async fn update_validator_power(
     rpc_url: &Url,
     contract_address: &Address,
-    validator_pubkey: &str,
+    validator_identifier: &str,
     new_power: u64,
     signer_private_key: &str,
 ) -> Result<()> {
-    // Parse the validator public key to get (x, y)
-    let (x, y) = pubkey_parser(validator_pubkey)?;
-    let validator_key = ValidatorManager::Secp256k1Key { x, y };
-
     // Set up the signer and provider
     let signer: PrivateKeySigner = signer_private_key
         .parse()
@@ -253,16 +278,11 @@ pub async fn update_validator_power(
     // Create contract instance
     let contract = ValidatorManager::new(*contract_address, &provider);
 
-    // Get the validator address from the contract
-    let validator_address = contract
-        ._validatorAddress(validator_key)
-        .call()
-        .await
-        .context("Failed to get validator address")?
-        ._0;
+    // Parse the validator identifier (pubkey or address)
+    let validator_address = parse_validator_identifier(validator_identifier)?;
 
     // Call the updatePower function
-    println!("Updating validator power with pubkey: {validator_pubkey}");
+    println!("Updating validator power: {validator_identifier}");
     println!("  Validator address: {validator_address:?}");
     println!("  New power: {new_power}");
 

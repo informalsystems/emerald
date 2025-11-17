@@ -4427,6 +4427,7 @@ name = "malachitebft-eth-cli"
 version = "0.0.1"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "bytesize",
  "clap",
  "color-eyre",

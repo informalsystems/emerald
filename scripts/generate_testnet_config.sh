@@ -4,17 +4,24 @@ set -euo pipefail
 
 usage() {
     cat <<EOF >&2
-Usage: $0 --nodes <number> --testnet-config-dir <path>
+Usage: $0 [--nodes <number>] [--node-keys <key>]... --testnet-config-dir <path>
 
 Required arguments:
-    --nodes                Number of nodes to include in the generated config
     --testnet-config-dir   Directory where the testnet configuration should be written
+
+Optional arguments:
+    --nodes                Number of nodes to include in the generated config
+    --node-keys            Private key for a node (can be specified multiple times)
+                          If provided, the number of nodes is inferred from the number of keys
+
+Note: Either --nodes or --node-keys must be provided
 EOF
     exit 2
 }
 
 nodes=""
 testnet_config_dir=""
+node_keys=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -25,6 +32,15 @@ while [[ $# -gt 0 ]]; do
             ;;
         --nodes=*)
             nodes="${1#*=}"
+            shift
+            ;;
+        --node-keys)
+            [[ $# -ge 2 ]] || usage
+            node_keys+=("$2")
+            shift 2
+            ;;
+        --node-keys=*)
+            node_keys+=("${1#*=}")
             shift
             ;;
         --testnet-config-dir)
@@ -50,12 +66,23 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# If node_keys are provided, infer the number of nodes
+if [[ ${#node_keys[@]} -gt 0 ]]; then
+    nodes="${#node_keys[@]}"
+fi
+
 if [[ -z "$nodes" || -z "$testnet_config_dir" ]]; then
     usage
 fi
 
 if ! [[ "$nodes" =~ ^[0-9]+$ ]] || (( nodes <= 0 )); then
     echo "--nodes must be a positive integer" >&2
+    exit 2
+fi
+
+# Validate that if node_keys are provided, the count matches nodes
+if [[ ${#node_keys[@]} -gt 0 && ${#node_keys[@]} -ne $nodes ]]; then
+    echo "Number of node keys (${#node_keys[@]}) doesn't match number of nodes ($nodes)" >&2
     exit 2
 fi
 
@@ -77,6 +104,20 @@ nodes = $nodes
 deterministic = true
 
 EOF
+
+# Add private_keys if provided
+if [[ ${#node_keys[@]} -gt 0 ]]; then
+    printf 'private_keys = [ ' >> "$TESTNET_DIR/testnet_config.toml"
+    for ((i = 0; i < ${#node_keys[@]}; i++)); do
+        printf '"%s"' "${node_keys[i]}" >> "$TESTNET_DIR/testnet_config.toml"
+        if (( i < ${#node_keys[@]} - 1 )); then
+            printf ', ' >> "$TESTNET_DIR/testnet_config.toml"
+        else
+            printf ' ]\n' >> "$TESTNET_DIR/testnet_config.toml"
+        fi
+    done
+    printf '\n' >> "$TESTNET_DIR/testnet_config.toml"
+fi
 
 printf 'configuration_paths = [ ' >> "$TESTNET_DIR/testnet_config.toml"
 

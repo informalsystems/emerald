@@ -104,7 +104,7 @@ pub struct PoaCmd {
     #[clap(
         long,
         short,
-        default_value = "0x0000000000000000000000000000000000002000"
+        default_value_t = alloy_primitives::address!("0x0000000000000000000000000000000000002000")
     )]
     contract_address: alloy_primitives::Address,
 
@@ -166,7 +166,7 @@ pub enum PoaCommands {
         validator_pubkey: String,
 
         /// Validator power (voting weight)
-        #[clap(long, short, default_value = "100")]
+        #[clap(long, short, default_value_t = 100)]
         power: u64,
 
         /// Private key of the contract owner
@@ -180,7 +180,7 @@ pub enum PoaCommands {
         validator_pubkey: String,
 
         /// Private key of the contract owner
-        #[clap(long, short, env = "owner_private_key")]
+        #[clap(long, short)]
         owner_private_key: String,
     },
     UpdateValidator {
@@ -189,7 +189,7 @@ pub enum PoaCommands {
         validator_pubkey: String,
 
         /// New validator power (voting weight)
-        #[clap(long, short, default_value = "100")]
+        #[clap(long, short, default_value_t = 100)]
         power: u64,
 
         /// Private key of the contract owner

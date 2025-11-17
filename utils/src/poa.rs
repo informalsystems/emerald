@@ -3,7 +3,6 @@ use alloy_primitives::{Address, U256};
 use alloy_provider::ProviderBuilder;
 use alloy_signer::utils::raw_public_key_to_address;
 use alloy_signer_local::PrivateKeySigner;
-use alloy_sol_types::sol;
 use color_eyre::eyre;
 use color_eyre::eyre::{Context, Result};
 use k256::elliptic_curve::sec1::ToEncodedPoint;
@@ -11,26 +10,12 @@ use k256::PublicKey;
 use reqwest::Url;
 
 // Define the Solidity contract ABI
-sol! {
+alloy_sol_types::sol!(
+    #[derive(Debug)]
     #[sol(rpc)]
-    contract ValidatorManager {
-        struct Secp256k1Key {
-            uint256 x;
-            uint256 y;
-        }
-
-        struct ValidatorInfo {
-            Secp256k1Key validatorKey;
-            uint64 power;
-        }
-
-        function register(bytes calldata validatorPublicKey, uint64 power) external;
-        function unregister(address validatorAddress) external;
-        function updatePower(address validatorAddress, uint64 newPower) external;
-        function getValidators() external view returns (ValidatorInfo[] memory validators);
-        function _validatorAddress(Secp256k1Key memory validatorKey) external pure returns (address);
-    }
-}
+    ValidatorManager,
+    "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
+);
 
 pub fn pubkey_parser(validator_pubkey: &str) -> Result<(U256, U256)> {
     let pubkey_bytes = hex::decode(
@@ -57,11 +42,44 @@ pub fn pubkey_parser(validator_pubkey: &str) -> Result<(U256, U256)> {
     Ok((x, y))
 }
 
+pub fn validator_pubkey_to_address(validator_pubkey: &str) -> Result<Address> {
+    let pubkey_bytes = hex::decode(
+        validator_pubkey
+            .strip_prefix("0x")
+            .unwrap_or(validator_pubkey),
+    )
+    .context("Failed to decode validator public key")?;
+
+    // Add 0x04 prefix if needed (uncompressed format)
+    let pubkey_bytes_full: Vec<u8> = if pubkey_bytes.len() == 64 {
+        let mut prefixed = Vec::with_capacity(65);
+        prefixed.push(0x04);
+        prefixed.extend_from_slice(&pubkey_bytes);
+        prefixed
+    } else if pubkey_bytes.len() == 65 {
+        pubkey_bytes
+    } else {
+        eyre::bail!(
+            "Invalid public key length: expected 64 or 65 bytes, got {}",
+            pubkey_bytes.len()
+        );
+    };
+
+    let pubkey = PublicKey::from_sec1_bytes(&pubkey_bytes_full)
+        .map_err(|e| color_eyre::eyre::eyre!("Invalid public key bytes: {}", e))?;
+    let addr = raw_public_key_to_address(&pubkey.to_encoded_point(false).as_bytes()[1..]);
+    Ok(Address::from_slice(addr.as_slice()))
+}
+
 // list validators
 pub async fn list_validators(rpc_url: &Url, contract_address: &Address) -> Result<()> {
     let provider = ProviderBuilder::new().on_http(rpc_url.clone());
 
     let contract = ValidatorManager::new(*contract_address, &provider);
+
+    let poa_owner_address = contract.owner().call().await?._0;
+    println!("POA Owner Address: 0x{poa_owner_address:x}");
+    println!();
 
     let validators = contract.getValidators().call().await?.validators;
 
@@ -169,10 +187,6 @@ pub async fn remove_validator(
     validator_pubkey: &str,
     signer_private_key: &str,
 ) -> Result<()> {
-    // Parse the validator public key to get (x, y)
-    let (x, y) = pubkey_parser(validator_pubkey)?;
-    let validator_key = ValidatorManager::Secp256k1Key { x, y };
-
     // Set up the signer and provider
     let signer: PrivateKeySigner = signer_private_key
         .parse()
@@ -186,20 +200,15 @@ pub async fn remove_validator(
     // Create contract instance
     let contract = ValidatorManager::new(*contract_address, &provider);
 
-    // Get the validator address from the contract
-    let validator_address = contract
-        ._validatorAddress(validator_key)
-        .call()
-        .await
-        .context("Failed to get validator address")?
-        ._0;
+    // Get the validator address from the public key
+    let addr = validator_pubkey_to_address(validator_pubkey)?;
 
     // Call the unregister function
     println!("Removing validator with pubkey: {validator_pubkey}");
-    println!("  Validator address: {validator_address:?}");
+    println!("  Validator address: {addr:?}");
 
     let tx = contract
-        .unregister(validator_address)
+        .unregister(addr)
         .send()
         .await
         .context("Failed to send unregister transaction")?;
@@ -211,7 +220,10 @@ pub async fn remove_validator(
         .await
         .context("Failed to get transaction receipt")?;
 
-    println!("Transaction confirmed in block: {:?}", receipt.block_number);
+    println!(
+        "Transaction confirmed in block: {:?}",
+        receipt.block_number.unwrap()
+    );
 
     Ok(())
 }

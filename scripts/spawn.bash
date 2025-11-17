@@ -119,9 +119,9 @@ if [[ -z "$NO_DELAY" ]]; then
     
     # Wait for first node to reach height 10
     NODE=$((NODES_COUNT - 1))
-    echo "[Node $NODE] Waiting for first node (port 8545) to reach height 100 before starting the last node..."
+    echo "[Node $NODE] Waiting for first node (port 8645) to reach height 100 before starting the last node..."
     for i in $(seq 1 100); do
-        BLOCK_NUMBER=$(cast block-number --rpc-url 127.0.0.1:8545 2>/dev/null || echo "0")
+        BLOCK_NUMBER=$(cast block-number --rpc-url 127.0.0.1:8645 2>/dev/null || echo "0")
         if [[ $BLOCK_NUMBER -ge 100 ]]; then
             echo "First node has reached height $BLOCK_NUMBER."
             break
@@ -141,15 +141,15 @@ else
     done
 fi
 
-wait_for_reth 8545
+wait_for_reth 8645
 
-for NODE_PORT in 8545 18545 28545; do
+for NODE_PORT in 8645 18645 28645; do
     check_reth_progress $NODE_PORT || exit_and_cleanup 1
 done
 
 # Check progress for additional node only if 4 nodes and not in sync mode
 if [[ $NODES_COUNT -ge 4 ]] && [[ -n "$NO_DELAY" ]]; then
-    check_reth_progress 38545 || exit_and_cleanup 1
+    check_reth_progress 38645 || exit_and_cleanup 1
 fi
 
 # Trap the INT signal (Ctrl+C) to run the cleanup function

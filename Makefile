@@ -4,7 +4,7 @@ build:
 	docker build -t emerald:latest .
 
 # Default values
-BASE_HTTP_PORT ?= 8545
+BASE_HTTP_PORT ?= 9545
 BASE_WS_PORT ?= 8946
 BASE_ENGINE_PORT ?= 9551
 BASE_METRICS_PORT ?= 9000
@@ -59,7 +59,7 @@ start:
 		NODE_ID=$$i HTTP_PORT=$$HTTP_PORT WS_PORT=$$WS_PORT P2P_PORT=$$P2P_PORT ENGINE_PORT=$$ENGINE_PORT METRICS_PORT=$$METRICS_PORT \
 			docker compose -p reth-node-$$i -f reth-node-compose.yaml up -d;
 	done
-	./scripts/add_dynamic_peers.sh --nodes $(NODE_COUNT)
+	./scripts/add_dynamic_peers.sh --nodes $(NODE_COUNT) --rpc-base-port $(BASE_HTTP_PORT)
 	for i in $$(seq 0 $$(($(NODE_COUNT) - 1))); do
 		NODE_ID=$$i \
 			docker compose -p emerald-node-$$i -f emerald-compose.yaml up -d
@@ -84,7 +84,7 @@ start-node:
 	METRICS_PORT=$$(($(BASE_METRICS_PORT) + $(NODE_ID))) \
 		docker compose -p reth-node-$(NODE_ID) -f reth-node-compose.yaml up -d;
 	sleep 2
-	./scripts/add_dynamic_peers.sh --nodes $(NODE_COUNT)
+	./scripts/add_dynamic_peers.sh --nodes $(NODE_COUNT) --rpc-base-port $(BASE_HTTP_PORT)
 	NODE_ID=$(NODE_ID) \
 		docker compose -p emerald-node-$(NODE_ID) -f emerald-compose.yaml up -d;
 

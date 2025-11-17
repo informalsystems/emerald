@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 
 # Script to manually add peers (their enodes) to each node
-
+PORT=8545
 NODES_COUNT=0
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --nodes) NODES_COUNT="$2"; shift ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
+        --rpc-base-port)
+            [[ $# -ge 2 ]] || usage
+            PORT="$2"
+            shift 2
+            ;;
     esac
     shift
 done
 
 LIMIT=0
-PORT=8545
 for i in $(seq 0 $((NODES_COUNT - 1))); do
     echo "Waiting for Reth node ${i} on port $((PORT + i)) to be ready..."
     until cast rpc --rpc-url "127.0.0.1:$((PORT + i))" net_listening > /dev/null 2>&1; do

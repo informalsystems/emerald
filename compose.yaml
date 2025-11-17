@@ -28,4 +28,4 @@ services:
     image: otterscan/otterscan:develop
     network_mode: host # frontend is at http://127.0.0.1:80
     environment:
-      ERIGON_URL: "http://127.0.0.1:8545"
+      ERIGON_URL: "http://127.0.0.1:9545"

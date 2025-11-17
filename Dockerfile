@@ -44,6 +44,6 @@ USER mbft:mbft
 
 VOLUME ["/home/mbft/.malachite"]
 
-RUN mkdir -p /home/mbft/.malaketh/config /home/mbft/.malachite
+RUN mkdir -p /home/mbft/.emerald/config /home/mbft/.malachite
 
 ENTRYPOINT ["/usr/local/bin/malachitebft-eth-app"]

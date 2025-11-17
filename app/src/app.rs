@@ -8,11 +8,11 @@ use malachitebft_app_channel::app::streaming::StreamContent;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
 use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
-use malachitebft_eth_cli::config::MalakethConfig;
+use malachitebft_eth_cli::config::EmeraldConfig;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::secp256k1::PublicKey;
-use malachitebft_eth_types::{Block, BlockHash, Height, MalakethContext, Validator, ValidatorSet};
+use malachitebft_eth_types::{Block, BlockHash, EmeraldContext, Height, Validator, ValidatorSet};
 use ssz::{Decode, Encode};
 use tracing::{debug, error, info, warn};
 
@@ -51,7 +51,7 @@ pub async fn initialize_state_from_existing_block(
     state: &mut State,
     engine: &Engine,
     start_height: Height,
-    malaketh_config: &MalakethConfig,
+    emerald_config: &EmeraldConfig,
 ) -> eyre::Result<()> {
     // If there was somethign stored in the store for height, we should be able to retrieve
     // block data as well.
@@ -64,7 +64,7 @@ pub async fn initialize_state_from_existing_block(
     let payload_status = engine
         .send_forkchoice_updated(
             latest_block_candidate_from_store.block_hash,
-            &malaketh_config.retry_config,
+            &emerald_config.retry_config,
         )
         .await?;
     match payload_status.status {
@@ -141,9 +141,9 @@ pub async fn read_validators_from_contract(
 
 pub async fn run(
     state: &mut State,
-    channels: &mut Channels<MalakethContext>,
+    channels: &mut Channels<EmeraldContext>,
     engine: Engine,
-    malaketh_config: MalakethConfig,
+    emerald_config: EmeraldConfig,
 ) -> eyre::Result<()> {
     while let Some(msg) = channels.consensus.recv().await {
         match msg {
@@ -162,7 +162,7 @@ pub async fn run(
                 let mut start_height: Height = Height::default();
                 match start_height_from_store {
                     Some(s) => {
-                        initialize_state_from_existing_block(state, &engine, s, &malaketh_config)
+                        initialize_state_from_existing_block(state, &engine, s, &emerald_config)
                             .await?;
                         start_height = state.current_height.increment();
                         debug!(
@@ -209,12 +209,6 @@ pub async fn run(
                 debug!(%height, %round, "Found {} pending proposal parts, validating...", pending_parts.len());
 
                 for parts in &pending_parts {
-                    // Remove the parts from pending
-                    state
-                        .store
-                        .remove_pending_proposal_parts(parts.clone())
-                        .await?;
-
                     match state.validate_proposal_parts(parts) {
                         Ok(()) => {
                             // Validate execution payload with the execution engine before storing it as undecided proposal
@@ -226,7 +220,7 @@ pub async fn run(
                                     parts.height,
                                     parts.round,
                                     &engine,
-                                    &malaketh_config.retry_config,
+                                    &emerald_config.retry_config,
                                 )
                                 .await?;
 
@@ -240,6 +234,7 @@ pub async fn run(
                             }
 
                             state.store.store_undecided_proposal(value.clone()).await?;
+
                             state
                                 .store
                                 .store_undecided_block_data(
@@ -266,7 +261,11 @@ pub async fn run(
                                 "Removed invalid pending proposal"
                             );
                         }
-                    }
+                    } // Remove the parts from pending
+                    state
+                        .store
+                        .remove_pending_proposal_parts(parts.clone())
+                        .await?;
                 }
 
                 // If we have already built or seen values for this height and round,
@@ -284,7 +283,7 @@ pub async fn run(
             AppMsg::GetValue {
                 height,
                 round,
-                timeout: _,
+                timeout,
                 reply,
             } => {
                 // NOTE: We can ignore the timeout as we are building the value right away.
@@ -295,32 +294,44 @@ pub async fn run(
 
                 // Here it is important that, if we have previously built a value for this height and round,
                 // we send back the very same value.
-                let (proposal, bytes) =
-                    match state.get_previously_built_value(height, round).await? {
-                        Some(proposal) => {
-                            info!(value = %proposal.value.id(), "Re-using previously built value");
-                            // Fetch the block data for the previously built value
-                            let bytes = state
-                                .store
-                                .get_block_data(height, round, proposal.value.id())
-                                .await?
-                                .ok_or_else(|| {
-                                    eyre!("Block data not found for previously built value")
-                                })?;
-                            (proposal, bytes)
-                        }
-                        None => {
+                let (proposal, bytes) = match state
+                    .get_previously_built_value(height, round)
+                    .await?
+                {
+                    Some(proposal) => {
+                        info!(value = %proposal.value.id(), "Re-using previously built value");
+                        // Fetch the block data for the previously built value
+                        let bytes = state
+                            .store
+                            .get_block_data(height, round, proposal.value.id())
+                            .await?
+                            .ok_or_else(|| {
+                                eyre!("Block data not found for previously built value")
+                            })?;
+                        (proposal, bytes)
+                    }
+                    None => {
+                        // Check if the execution client is syncing and behind the consensus height
+                        let (is_syncing, highest_chain_height) = engine.is_syncing().await?;
+                        if is_syncing && highest_chain_height >= height.as_u64() {
+                            warn!(
+                                    "⚠️  Execution client is syncing (current: {}, target: {}), waiting for timeout",
+                                    highest_chain_height,
+                                    height.as_u64()
+                                );
+                            tokio::time::sleep(timeout * 2).await; // Sleep long enough to trigger timeout_propose
+                            continue;
+                        } else {
                             // If we have not previously built a value for that very same height and round,
                             // we need to create a new value to propose and send it back to consensus.
                             info!("Building a new value to propose");
-
                             // We need to ask the execution engine for a new value to
                             // propose. Then we send it back to consensus.
 
                             let latest_block =
                                 state.latest_block.expect("Head block hash is not set");
                             let execution_payload = engine
-                                .generate_block(&Some(latest_block), &malaketh_config.retry_config)
+                                .generate_block(&Some(latest_block), &emerald_config.retry_config)
                                 .await?;
 
                             debug!("🌈 Got execution payload: {:?}", execution_payload);
@@ -330,23 +341,13 @@ pub async fn run(
                             debug!("🎁 block size: {:?}, height: {}", bytes.len(), height);
 
                             // Prepare block proposal.
-                            let proposal: LocallyProposedValue<MalakethContext> =
+                            let proposal: LocallyProposedValue<EmeraldContext> =
                                 state.propose_value(height, round, bytes.clone()).await?;
-
-                            // Store the block data at the proposal's height/round,
-                            // which will be passed to the execution client (EL) on commit.
-                            state
-                                .store_undecided_block_data(
-                                    height,
-                                    round,
-                                    proposal.value.id(),
-                                    bytes.clone(),
-                                )
-                                .await?;
 
                             (proposal, bytes)
                         }
-                    };
+                    }
+                };
 
                 // Send it to consensus
                 if reply.send(proposal.clone()).is_err() {
@@ -389,7 +390,7 @@ pub async fn run(
                 // parsing or validation fails. Keep the outer `Option` and send it
                 // back to the caller (consensus) regardless.
                 let proposed_value = state
-                    .received_proposal_part(from, part, &engine, &malaketh_config.retry_config)
+                    .received_proposal_part(from, part, &engine, &emerald_config.retry_config)
                     .await?;
 
                 if let Some(proposed_value) = proposed_value.clone() {
@@ -542,7 +543,7 @@ pub async fn run(
                 // Notify the execution client (EL) of the new block.
                 // Update the execution head state to this block.
                 let latest_valid_hash = engine
-                    .set_latest_forkchoice_state(new_block_hash, &malaketh_config.retry_config)
+                    .set_latest_forkchoice_state(new_block_hash, &emerald_config.retry_config)
                     .await?;
                 debug!(
                     "🚀 Forkchoice updated to height {} for block hash={} and latest_valid_hash={}",
@@ -570,9 +571,6 @@ pub async fn run(
                         .await?;
                 debug!("🌈 Got validator set: {:?}", new_validator_set);
                 state.set_validator_set(new_validator_set);
-
-                // Pause briefly before starting next height, just to make following the logs easier
-                // tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
                 // And then we instruct consensus to start the next height
                 if reply
@@ -632,7 +630,7 @@ pub async fn run(
                     &engine,
                     &execution_payload,
                     &versioned_hashes,
-                    &malaketh_config.retry_config,
+                    &emerald_config.retry_config,
                     height,
                     round,
                 )
@@ -660,7 +658,7 @@ pub async fn run(
                     "💡 Sync block validated at height {} with hash: {}",
                     height, new_block_hash
                 );
-                let proposed_value = ProposedValue {
+                let proposed_value: ProposedValue<EmeraldContext> = ProposedValue {
                     height,
                     round,
                     valid_round: Round::Nil,
@@ -668,15 +666,6 @@ pub async fn run(
                     value,
                     validity: Validity::Valid,
                 };
-
-                // Store the synced value and block data
-                if let Err(e) = state
-                    .store
-                    .store_undecided_proposal(proposed_value.clone())
-                    .await
-                {
-                    error!(%height, %round, error = %e, "Failed to store synced value");
-                }
 
                 if let Err(e) = state
                     .store
@@ -689,6 +678,14 @@ pub async fn run(
                     .await
                 {
                     error!(%height, %round, error = %e, "Failed to store synced block data");
+                }
+                // Store the synced value and block data
+                if let Err(e) = state
+                    .store
+                    .store_undecided_proposal(proposed_value.clone())
+                    .await
+                {
+                    error!(%height, %round, error = %e, "Failed to store synced value");
                 }
 
                 // Send to consensus to see if it has been decided on

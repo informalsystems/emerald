@@ -58,7 +58,7 @@ pub enum Commands {
 #[derive(Parser, Debug, Clone, Default, PartialEq)]
 pub struct SpamCmd {
     /// URL of the execution client's RPC endpoint
-    #[clap(long, default_value = "127.0.0.1:8545")]
+    #[clap(long, default_value = "127.0.0.1:8645")]
     rpc_url: String,
     /// Number of transactions to send
     #[clap(short, long, default_value = "0")]
@@ -211,7 +211,7 @@ pub struct SpamContractCmd {
     #[clap(long, value_delimiter = ',', num_args = 0..)]
     args: Vec<String>,
     /// URL of the execution client's RPC endpoint
-    #[clap(long, default_value = "127.0.0.1:8545")]
+    #[clap(long, default_value = "127.0.0.1:8645")]
     rpc_url: String,
     /// Number of transactions to send
     #[clap(short, long, default_value_t = 0)]

@@ -2,7 +2,7 @@ use bytes::Bytes;
 use malachitebft_core_types::Round;
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 
-use crate::{Address, Height, MalakethContext, Value};
+use crate::{Address, EmeraldContext, Height, Value};
 
 /// A proposal for a value in a round
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -40,7 +40,7 @@ impl Proposal {
     }
 }
 
-impl malachitebft_core_types::Proposal<MalakethContext> for Proposal {
+impl malachitebft_core_types::Proposal<EmeraldContext> for Proposal {
     fn height(&self) -> Height {
         self.height
     }

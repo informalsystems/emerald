@@ -132,9 +132,7 @@ impl Engine {
                 block_hash = lb.block_hash;
 
                 payload_attributes = PayloadAttributes {
-                    // Unix timestamp for when the payload is expected to be executed.
-                    // Use actual current time to enable sub-second block production.
-                    // Ensure we never go backwards in time (timestamp >= parent).
+                    // Use current time to enable sub-second block production.
                     timestamp: std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap()

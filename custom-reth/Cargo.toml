@@ -1,0 +1,28 @@
+[workspace]
+# Keep this crate out of the parent workspace
+
+[package]
+name = "custom-reth"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.83"
+license = "Apache-2.0"
+repository = "https://github.com/informalsystems/emerald"
+publish = false
+
+[dependencies]
+# Reth dependencies, version ghcr.io/paradigmxyz/reth:v1.9.2
+reth-ethereum = { git = "https://github.com/paradigmxyz/reth", rev = "e22a51176473e5f4eee80d776f1905f46e74b308", features = ["node", "consensus", "evm", "cli"] }
+reth-ethereum-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "e22a51176473e5f4eee80d776f1905f46e74b308" }
+reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", rev = "e22a51176473e5f4eee80d776f1905f46e74b308" }
+reth-engine-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "e22a51176473e5f4eee80d776f1905f46e74b308" }
+reth-node-api = { git = "https://github.com/paradigmxyz/reth", rev = "e22a51176473e5f4eee80d776f1905f46e74b308" }
+reth-node-builder = { git = "https://github.com/paradigmxyz/reth", rev = "e22a51176473e5f4eee80d776f1905f46e74b308" }
+reth-payload-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "e22a51176473e5f4eee80d776f1905f46e74b308" }
+alloy-rpc-types-engine = { version = "1.0" }
+
+eyre = "0.6"
+
+[[bin]]
+name = "custom-reth"
+path = "src/main.rs"

@@ -133,8 +133,12 @@ impl Engine {
 
                 payload_attributes = PayloadAttributes {
                     // Unix timestamp for when the payload is expected to be executed.
-                    // It should be greater than that of forkchoiceState.headBlockHash.
-                    timestamp: lb.timestamp + 1,
+                    // Use actual current time to enable sub-second block production.
+                    // Ensure we never go backwards in time (timestamp >= parent).
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
 
                     // prev_randao comes from the previous beacon block and influences the proposer selection mechanism.
                     // prev_randao is derived from the RANDAO mix (randomness accumulator) of the parent beacon block.

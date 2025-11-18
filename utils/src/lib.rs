@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::Result;
 use genesis::{generate_genesis, make_signers};
+use reqwest::Url;
 use spammer::Spammer;
 
 pub mod genesis;
@@ -76,15 +77,7 @@ impl SpamCmd {
             signer_index,
         } = self;
 
-        // check if url contains valid http/https scheme
-        let url = if rpc_url.starts_with("http://") || rpc_url.starts_with("https://") {
-            rpc_url.clone().parse::<url::Url>()?
-        } else {
-            return Err(color_eyre::eyre::eyre!(
-                "Invalid RPC URL scheme. Please provide a valid http:// or https:// URL."
-            ));
-        };
-
+        let url: Url = rpc_url.parse()?;
         Spammer::new(url, *signer_index, *num_txs, *time, *rate, *blobs)?
             .run()
             .await

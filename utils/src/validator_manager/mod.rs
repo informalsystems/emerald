@@ -13,11 +13,13 @@ pub mod types;
 use std::collections::{BTreeMap, HashSet};
 
 use alloy_primitives::{Address, B256, U256};
-pub use error::{Result, StorageError};
+pub use error::{Error as ValidatroManagerError, Result};
 pub use storage::StorageSlotCalculator;
 pub use types::{Validator, ValidatorKey, ValidatorSet};
 
-use crate::validator_manager::storage::{set_validator_entries_mapping, set_validator_keys_set};
+use crate::validator_manager::storage::{
+    set_validator_addresses_set, set_validator_entries_mapping,
+};
 
 /// Generate storage slots and values for a given validator list
 pub fn generate_storage_data(
@@ -26,13 +28,13 @@ pub fn generate_storage_data(
 ) -> Result<BTreeMap<B256, B256>> {
     // Validate validators
     if validators.is_empty() {
-        return Err(StorageError::EmptyValidatorSet);
+        return Err(ValidatroManagerError::EmptyValidatorSet);
     }
 
     for validator in &validators {
         if validator.power == 0 {
             let (x, y) = validator.validator_key;
-            return Err(StorageError::InvalidPower { x, y });
+            return Err(ValidatroManagerError::InvalidPower { x, y });
         }
     }
 
@@ -41,14 +43,14 @@ pub fn generate_storage_data(
     for validator in &validators {
         let key = validator.validator_key;
         if !seen_keys.insert(key) {
-            return Err(StorageError::DuplicateValidator { x: key.0, y: key.1 });
+            return Err(ValidatroManagerError::DuplicateValidator { x: key.0, y: key.1 });
         }
     }
 
     // Create validator set
     let mut validator_set = ValidatorSet::default();
     for validator in validators {
-        validator_set.add_validator(validator);
+        validator_set.add_validator(validator)?;
     }
 
     // Generate storage data
@@ -63,9 +65,10 @@ pub fn generate_from_validator_set(
     // Storage layout for ValidatorManager contract:
     // Slot 0: Ownable._owner (set separately by deployment or genesis tooling)
     // Slot 1: ReentrancyGuard._status (set to 1)
-    // Slot 2: _validatorKeys._values (EnumerableSet internal storage)
-    // Slot 3: _validatorKeys._positions
-    // Slot 4: _validators mapping(bytes32 => ValidatorInfo)
+    // Slot 2: _validatorAddresses._values (EnumerableSet internal storage)
+    // Slot 3: _validatorAddresses._positions
+    // Slot 4: _validators mapping(address => ValidatorInfo)
+    // Slot 5: _totalPower
 
     let mut storage = BTreeMap::new();
 
@@ -79,8 +82,15 @@ pub fn generate_from_validator_set(
         B256::from(U256::from(1u64).to_be_bytes::<32>()),
     );
 
-    set_validator_keys_set(&mut storage, validator_set, U256::from(2))?; // _validatorKeys base at slot 2
+    set_validator_addresses_set(&mut storage, validator_set, U256::from(2))?; // _validatorAddresses base at slot 2
     set_validator_entries_mapping(&mut storage, validator_set, U256::from(4))?; // _validators mapping at slot 4
+
+    let total_power_slot = B256::from(U256::from(5u64).to_be_bytes::<32>()); // _totalPower at slot 5
+    let total_power = validator_set.total_power()?;
+    storage.insert(
+        total_power_slot,
+        B256::from(U256::from(total_power).to_be_bytes::<32>()),
+    );
 
     Ok(storage)
 }

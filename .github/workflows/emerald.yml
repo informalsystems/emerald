@@ -1,4 +1,4 @@
-name: Malaketh CI
+name: Emerald
 
 on:
   merge_group:
@@ -25,12 +25,12 @@ env:
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
-  malaketh:
-    name: Malaketh Block Production
+  emerald-block-production:
+    name: Block Production
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
       - name: Install Protoc
@@ -45,13 +45,21 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run Forge build
         run: forge build
-      - name: Run malaketh
+      - name: Run emerald
         run: |
           cargo build
+          # `make all` equivalent but with --no-wait
           ./scripts/generate_testnet_config.sh --nodes 3 --testnet-config-dir .testnet
-          cargo run --bin malachitebft-eth-app -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
-          ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin malachitebft-eth-app show-pubkey {} > nodes/validator_public_keys.txt
-          cargo run --bin malachitebft-eth-utils genesis --public-keys-file ./nodes/validator_public_keys.txt
+          cargo run --bin emerald -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
+          ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt
+          cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt
           docker compose up -d
-          ./scripts/add_peers.sh
+          ./scripts/add_peers.sh --nodes 3
           bash scripts/spawn.bash --nodes 3 --home nodes --no-delay --no-wait
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: emerald-test-logs
+          path: nodes/**/logs/*.log

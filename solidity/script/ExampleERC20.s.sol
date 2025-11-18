@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "forge-std/Script.sol";
-import "../src/ExampleERC20.sol";
+import {Script, console} from "forge-std/Script.sol";
+import {TestToken} from "../src/ExampleERC20.sol";
 
 contract DeployTokenScript is Script {
     function run() external {

@@ -96,7 +96,7 @@ version = "0.1.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "996564c1782285d4e0299c29b318bc74f24b1d7f456cef3e040810b061ee3256"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "num_enum",
  "serde",
@@ -110,7 +110,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69e32ef5c74bbeb1733c37f4ac7f866f8c8af208b7b4265e21af609dcac5bd5e"
 dependencies = [
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "alloy-serde",
  "alloy-trie",
@@ -128,7 +128,7 @@ checksum = "0fa13b7b1e1e3fedc42f0728103bfa3b4d566d3d42b606db449504d88dbdbdcf"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "alloy-serde",
  "serde",
@@ -144,7 +144,7 @@ dependencies = [
  "alloy-json-abi",
  "alloy-network",
  "alloy-network-primitives",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-provider",
  "alloy-rpc-types-eth",
  "alloy-sol-types",
@@ -156,12 +156,12 @@ dependencies = [
 
 [[package]]
 name = "alloy-dyn-abi"
-version = "0.8.22"
+version = "0.8.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00e08c581811006021970bf07f2ecf3213f6237c125f7fd99607004b23627b61"
+checksum = "cf69d3061e2e908a4370bda5d8d6529d5080232776975489eec0b49ce971027e"
 dependencies = [
  "alloy-json-abi",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-sol-type-parser",
  "alloy-sol-types",
  "const-hex",
@@ -177,7 +177,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "675264c957689f0fd75f5993a73123c2cc3b5c235a38f5b9037fe6c826bfb2c0"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "crc",
  "serde",
@@ -190,7 +190,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0069cf0642457f87a01a014f6dc29d5d893cd4fd8fddf0c3cdfad1bb3ebafc41"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "serde",
 ]
@@ -201,7 +201,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b15b13d38b366d01e818fe8e710d4d702ef7499eacd44926a06171dd9585d0c"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "k256",
  "serde",
@@ -217,7 +217,7 @@ dependencies = [
  "alloy-eip2124",
  "alloy-eip2930",
  "alloy-eip7702",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "alloy-serde",
  "auto_impl",
@@ -237,7 +237,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cded3a2d4bd7173f696458c5d4c98c18a628dfcc9f194385e80a486e412e2e0"
 dependencies = [
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-serde",
  "alloy-trie",
  "serde",
@@ -245,11 +245,11 @@ dependencies = [
 
 [[package]]
 name = "alloy-json-abi"
-version = "0.8.22"
+version = "0.8.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "125601804507fef5ae7debcbf800906b12741f19800c1c05b953d0f1b990131a"
+checksum = "4584e3641181ff073e9d5bec5b3b8f78f9749d9fb108a1cfbc4399a4a139c72a"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-sol-type-parser",
  "serde",
  "serde_json",
@@ -261,7 +261,7 @@ version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "762414662d793d7aaa36ee3af6928b6be23227df1681ce9c039f6f11daadef64"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-sol-types",
  "serde",
  "serde_json",
@@ -280,7 +280,7 @@ dependencies = [
  "alloy-eips",
  "alloy-json-rpc",
  "alloy-network-primitives",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rpc-types-any",
  "alloy-rpc-types-eth",
  "alloy-serde",
@@ -302,7 +302,7 @@ checksum = "3a00ce618ae2f78369918be0c20f620336381502c83b6ed62c2f7b2db27698b0"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-serde",
  "serde",
 ]
@@ -315,7 +315,7 @@ checksum = "81a3906afb50446392eb798dae4b918ba4ffcca47542efda7215776ddc8b5037"
 dependencies = [
  "alloy-genesis",
  "alloy-network",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-signer",
  "alloy-signer-local",
  "k256",
@@ -329,9 +329,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-primitives"
-version = "0.8.22"
+version = "0.8.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c66bb6715b7499ea755bde4c96223ae8eb74e05c014ab38b9db602879ffb825"
+checksum = "777d58b30eb9a4db0e5f59bc30e8c2caef877fee7dc8734cf242a51a60f22e05"
 dependencies = [
  "alloy-rlp",
  "bytes",
@@ -339,7 +339,7 @@ dependencies = [
  "const-hex",
  "derive_more 2.0.1",
  "foldhash",
- "getrandom 0.2.15",
+ "getrandom 0.3.1",
  "hashbrown 0.15.2",
  "indexmap 2.7.1",
  "itoa",
@@ -394,7 +394,7 @@ dependencies = [
  "alloy-json-rpc",
  "alloy-network",
  "alloy-network-primitives",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rpc-client",
  "alloy-rpc-types-eth",
  "alloy-sol-types",
@@ -448,7 +448,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b37cc3c7883dc41be1b01460127ad7930466d0a4bb6ba15a02ee34d2745e2d7c"
 dependencies = [
  "alloy-json-rpc",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-transport",
  "alloy-transport-http",
  "futures",
@@ -470,7 +470,7 @@ version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f18e68a3882f372e045ddc89eb455469347767d17878ca492cfbac81e71a111"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rpc-types-eth",
  "alloy-serde",
  "serde",
@@ -495,7 +495,7 @@ checksum = "e83dde9fcf1ccb9b815cc0c89bba26bbbbaae5150a53ae624ed0fc63cb3676c1"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "alloy-serde",
  "derive_more 1.0.0",
@@ -517,11 +517,11 @@ dependencies = [
  "alloy-consensus-any",
  "alloy-eips",
  "alloy-network-primitives",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "alloy-serde",
  "alloy-sol-types",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
@@ -533,7 +533,7 @@ version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "21d8dd5bd94993eda3d56a8c4c0d693548183a35462523ffc4385c0b020d3b0c"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rpc-types-eth",
  "alloy-serde",
  "serde",
@@ -545,7 +545,7 @@ version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8732058f5ca28c1d53d241e8504620b997ef670315d7c8afab856b3e3b80d945"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "serde",
  "serde_json",
 ]
@@ -556,7 +556,7 @@ version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f96b3526fdd779a4bd0f37319cfb4172db52a7ac24cdbb8804b72091c18e1701"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "async-trait",
  "auto_impl",
  "either",
@@ -573,7 +573,7 @@ checksum = "fe8f78cd6b7501c7e813a1eb4a087b72d23af51f5bb66d4e948dc840bdd207d8"
 dependencies = [
  "alloy-consensus",
  "alloy-network",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-signer",
  "async-trait",
  "coins-bip32",
@@ -586,9 +586,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-macro"
-version = "0.8.22"
+version = "0.8.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7f9c3c7bc1f4e334e5c5fc59ec8dac894973a71b11da09065affc6094025049"
+checksum = "e68b32b6fa0d09bb74b4cefe35ccc8269d711c26629bc7cd98a47eeb12fe353f"
 dependencies = [
  "alloy-sol-macro-expander",
  "alloy-sol-macro-input",
@@ -600,9 +600,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-macro-expander"
-version = "0.8.22"
+version = "0.8.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46ff7aa715eb2404cb87fa94390d2c5d5addd70d9617e20b2398ee6f48cb21f0"
+checksum = "2afe6879ac373e58fd53581636f2cce843998ae0b058ebe1e4f649195e2bd23c"
 dependencies = [
  "alloy-json-abi",
  "alloy-sol-macro-input",
@@ -619,14 +619,15 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-macro-input"
-version = "0.8.22"
+version = "0.8.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f105fa700140c0cc6e2c3377adef650c389ac57b8ead8318a2e6bd52f1ae841"
+checksum = "c3ba01aee235a8c699d07e5be97ba215607564e71be72f433665329bec307d28"
 dependencies = [
  "alloy-json-abi",
  "const-hex",
  "dunce",
  "heck",
+ "macro-string",
  "proc-macro2",
  "quote",
  "serde_json",
@@ -636,9 +637,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-type-parser"
-version = "0.8.25"
+version = "0.8.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d162f8524adfdfb0e4bd0505c734c985f3e2474eb022af32eef0d52a4f3935c"
+checksum = "4c13fc168b97411e04465f03e632f31ef94cad1c7c8951bf799237fd7870d535"
 dependencies = [
  "serde",
  "winnow",
@@ -646,12 +647,12 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-types"
-version = "0.8.22"
+version = "0.8.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f819635439ebb06aa13c96beac9b2e7360c259e90f5160a6848ae0d94d10452"
+checksum = "6e960c4b52508ef2ae1e37cae5058e905e9ae099b107900067a503f8c454036f"
 dependencies = [
  "alloy-json-abi",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-sol-macro",
  "const-hex",
  "serde",
@@ -702,7 +703,7 @@ version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d95a94854e420f07e962f7807485856cde359ab99ab6413883e15235ad996e8b"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "arrayvec",
  "derive_more 1.0.0",
@@ -1413,6 +1414,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "caches"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9988519e5f642c7ea3db4b6a31a50667ec61a26344e9c0bce3f8124931d8bb3f"
+dependencies = [
+ "bitvec",
+ "cfg-if",
+ "getrandom 0.2.15",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "cbor4ii"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1961,7 +1974,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "18e4fdb82bd54a12e42fb58a800dcae6b9e13982238ce2296dc3570b92148e1f"
 dependencies = [
  "data-encoding",
- "syn 1.0.109",
+ "syn 2.0.99",
 ]
 
 [[package]]
@@ -2217,6 +2230,92 @@ dependencies = [
 ]
 
 [[package]]
+name = "emerald"
+version = "0.0.1"
+dependencies = [
+ "alloy-consensus",
+ "alloy-contract",
+ "alloy-primitives 0.8.26",
+ "alloy-provider",
+ "alloy-rpc-types-engine",
+ "alloy-rpc-types-eth",
+ "alloy-sol-types",
+ "async-trait",
+ "bytes",
+ "caches",
+ "color-eyre",
+ "derive-where",
+ "ethereum_ssz",
+ "hex",
+ "informalsystems-malachitebft-app-channel",
+ "informalsystems-malachitebft-proto",
+ "k256",
+ "libp2p-identity",
+ "malachitebft-eth-cli",
+ "malachitebft-eth-engine",
+ "malachitebft-eth-types",
+ "prost",
+ "rand 0.8.5",
+ "redb",
+ "serde",
+ "serde_json",
+ "sha3",
+ "thiserror 2.0.12",
+ "tokio",
+ "toml",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "emerald-utils"
+version = "0.0.1"
+dependencies = [
+ "alloy-consensus",
+ "alloy-contract",
+ "alloy-dyn-abi",
+ "alloy-eips",
+ "alloy-genesis",
+ "alloy-json-abi",
+ "alloy-network",
+ "alloy-node-bindings",
+ "alloy-primitives 0.8.26",
+ "alloy-provider",
+ "alloy-rlp",
+ "alloy-rpc-types",
+ "alloy-rpc-types-engine",
+ "alloy-rpc-types-txpool",
+ "alloy-signer",
+ "alloy-signer-local",
+ "alloy-sol-types",
+ "alloy-transport-http",
+ "async-trait",
+ "chrono",
+ "clap",
+ "color-eyre",
+ "ethereum_serde_utils 0.8.0",
+ "hex",
+ "jsonrpsee-core",
+ "jsonrpsee-http-client",
+ "jsonwebtoken",
+ "k256",
+ "malachitebft-eth-types",
+ "rand 0.8.5",
+ "reqwest",
+ "reth-primitives",
+ "reth-transaction-pool",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "test-log",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
 name = "enum-as-inner"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2237,6 +2336,27 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.99",
+]
+
+[[package]]
+name = "env_filter"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bf3c259d255ca70051b30e2e95b5446cdb8949ac4cd22c0d7fd634d89f568e2"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.11.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13c863f0904021b108aa8b2f55046443e6b1ebde8fd4a15c399893aae4fa069f"
+dependencies = [
+ "anstream",
+ "anstyle",
+ "env_filter",
+ "log",
 ]
 
 [[package]]
@@ -2283,7 +2403,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "70cbccfccf81d67bff0ab36e591fa536c8a935b078a7b0e58c1d00d418332fc9"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "hex",
  "serde",
  "serde_derive",
@@ -2309,7 +2429,7 @@ version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86da3096d1304f5f28476ce383005385459afeaf0eea08592b65ddbc9b258d16"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "ethereum_serde_utils 0.7.0",
  "itertools 0.13.0",
  "serde",
@@ -3406,6 +3526,7 @@ dependencies = [
  "bytes",
  "derive-where",
  "informalsystems-malachitebft-peer",
+ "serde",
  "thiserror 2.0.12",
 ]
 
@@ -4339,40 +4460,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75761162ae2b0e580d7e7c390558127e5f01b4194debd6221fd8c207fc80e3f5"
 
 [[package]]
-name = "malachitebft-eth-app"
-version = "0.0.1"
+name = "macro-string"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b27834086c65ec3f9387b096d66e99f221cf081c2b738042aa252bcd41204e3"
 dependencies = [
- "alloy-consensus",
- "alloy-contract",
- "alloy-primitives 0.8.22",
- "alloy-provider",
- "alloy-rpc-types-engine",
- "alloy-rpc-types-eth",
- "alloy-sol-types",
- "async-trait",
- "bytes",
- "color-eyre",
- "derive-where",
- "ethereum_ssz",
- "hex",
- "informalsystems-malachitebft-app-channel",
- "informalsystems-malachitebft-proto",
- "k256",
- "libp2p-identity",
- "malachitebft-eth-cli",
- "malachitebft-eth-engine",
- "malachitebft-eth-types",
- "prost",
- "rand 0.8.5",
- "redb",
- "serde",
- "serde_json",
- "sha3",
- "thiserror 2.0.12",
- "tokio",
- "toml",
- "tracing",
- "url",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.99",
 ]
 
 [[package]]
@@ -4380,6 +4475,7 @@ name = "malachitebft-eth-cli"
 version = "0.0.1"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "bytesize",
  "clap",
  "color-eyre",
@@ -4431,10 +4527,11 @@ name = "malachitebft-eth-types"
 version = "0.0.1"
 dependencies = [
  "alloy-consensus",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "async-trait",
  "bytes",
  "hex",
+ "humantime-serde",
  "informalsystems-malachitebft-app",
  "informalsystems-malachitebft-codec",
  "informalsystems-malachitebft-config",
@@ -4445,6 +4542,7 @@ dependencies = [
  "informalsystems-malachitebft-signing-ecdsa",
  "informalsystems-malachitebft-signing-ed25519",
  "informalsystems-malachitebft-sync",
+ "k256",
  "prost",
  "prost-build",
  "prost-types",
@@ -4452,51 +4550,6 @@ dependencies = [
  "serde",
  "serde_json",
  "signature",
-]
-
-[[package]]
-name = "malachitebft-eth-utils"
-version = "0.0.1"
-dependencies = [
- "alloy-consensus",
- "alloy-contract",
- "alloy-eips",
- "alloy-genesis",
- "alloy-network",
- "alloy-node-bindings",
- "alloy-primitives 0.8.22",
- "alloy-provider",
- "alloy-rlp",
- "alloy-rpc-types",
- "alloy-rpc-types-engine",
- "alloy-rpc-types-txpool",
- "alloy-signer",
- "alloy-signer-local",
- "alloy-sol-types",
- "alloy-transport-http",
- "async-trait",
- "chrono",
- "clap",
- "color-eyre",
- "ethereum_serde_utils 0.8.0",
- "hex",
- "jsonrpsee-core",
- "jsonrpsee-http-client",
- "jsonwebtoken",
- "k256",
- "malachitebft-eth-types",
- "rand 0.8.5",
- "reqwest",
- "reth-primitives",
- "reth-transaction-pool",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.12",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "url",
 ]
 
 [[package]]
@@ -4976,7 +5029,7 @@ checksum = "6ed6cad421e41d400667a06df8bd306dd316c3e1fed803df065b1c65d7de6795"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "alloy-serde",
  "derive_more 1.0.0",
@@ -5446,7 +5499,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
  "heck",
- "itertools 0.10.5",
+ "itertools 0.14.0",
  "log",
  "multimap",
  "once_cell",
@@ -5466,7 +5519,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.99",
@@ -5837,7 +5890,7 @@ source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "derive_more 1.0.0",
  "metrics",
  "parking_lot",
@@ -5865,7 +5918,7 @@ dependencies = [
  "alloy-consensus",
  "alloy-eips",
  "alloy-genesis",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-trie",
  "auto_impl",
  "derive_more 1.0.0",
@@ -5883,7 +5936,7 @@ dependencies = [
  "alloy-consensus",
  "alloy-eips",
  "alloy-genesis",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-trie",
  "bytes",
  "modular-bitfield",
@@ -5910,7 +5963,7 @@ source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "auto_impl",
  "derive_more 1.0.0",
  "reth-primitives-traits",
@@ -5922,7 +5975,7 @@ version = "1.2.0"
 source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a31c0d2662ba1b590938db"
 dependencies = [
  "alloy-consensus",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "bytes",
  "derive_more 1.0.0",
  "reth-db-api",
@@ -5947,7 +6000,7 @@ source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a
 dependencies = [
  "alloy-consensus",
  "alloy-genesis",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "bytes",
  "derive_more 1.0.0",
  "metrics",
@@ -5971,7 +6024,7 @@ version = "1.2.0"
 source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a31c0d2662ba1b590938db"
 dependencies = [
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "bytes",
  "modular-bitfield",
  "reth-codecs",
@@ -5999,7 +6052,7 @@ dependencies = [
  "alloy-chains",
  "alloy-consensus",
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "bytes",
  "derive_more 1.0.0",
@@ -6019,7 +6072,7 @@ source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a
 dependencies = [
  "alloy-chains",
  "alloy-eip2124",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "auto_impl",
  "dyn-clone",
  "once_cell",
@@ -6035,7 +6088,7 @@ dependencies = [
  "alloy-consensus",
  "alloy-eips",
  "alloy-network",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "alloy-rpc-types-eth",
  "alloy-serde",
@@ -6055,7 +6108,7 @@ version = "1.2.0"
 source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a31c0d2662ba1b590938db"
 dependencies = [
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "nybbles",
  "reth-storage-errors",
@@ -6069,7 +6122,7 @@ source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "reth-execution-errors",
  "reth-primitives",
  "reth-primitives-traits",
@@ -6104,7 +6157,7 @@ name = "reth-network-peers"
 version = "1.2.0"
 source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a31c0d2662ba1b590938db"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "secp256k1",
  "serde_with",
@@ -6151,7 +6204,7 @@ dependencies = [
  "alloy-consensus",
  "alloy-eips",
  "alloy-genesis",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "alloy-trie",
  "auto_impl",
@@ -6175,7 +6228,7 @@ name = "reth-prune-types"
 version = "1.2.0"
 source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a31c0d2662ba1b590938db"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "derive_more 1.0.0",
  "modular-bitfield",
  "reth-codecs",
@@ -6188,7 +6241,7 @@ name = "reth-stages-types"
 version = "1.2.0"
 source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a31c0d2662ba1b590938db"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "bytes",
  "modular-bitfield",
  "reth-codecs",
@@ -6201,7 +6254,7 @@ name = "reth-static-file-types"
 version = "1.2.0"
 source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a31c0d2662ba1b590938db"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "derive_more 1.0.0",
  "serde",
  "strum 0.26.3",
@@ -6214,7 +6267,7 @@ source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rpc-types-engine",
  "auto_impl",
  "reth-chainspec",
@@ -6238,7 +6291,7 @@ version = "1.2.0"
 source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a31c0d2662ba1b590938db"
 dependencies = [
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "derive_more 1.0.0",
  "reth-primitives-traits",
@@ -6285,7 +6338,7 @@ source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "aquamarine",
  "auto_impl",
@@ -6323,7 +6376,7 @@ source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "alloy-trie",
  "auto_impl",
@@ -6344,7 +6397,7 @@ version = "1.2.0"
 source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a31c0d2662ba1b590938db"
 dependencies = [
  "alloy-consensus",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "alloy-rpc-types-eth",
  "alloy-serde",
@@ -6366,7 +6419,7 @@ name = "reth-trie-db"
 version = "1.2.0"
 source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a31c0d2662ba1b590938db"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "derive_more 1.0.0",
  "reth-db",
@@ -6384,7 +6437,7 @@ name = "reth-trie-sparse"
 version = "1.2.0"
 source = "git+https://github.com/paradigmxyz/reth?tag=v1.2.0#1e965caf5fa176f244a31c0d2662ba1b590938db"
 dependencies = [
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "alloy-rlp",
  "reth-execution-errors",
  "reth-primitives-traits",
@@ -6453,7 +6506,7 @@ checksum = "f0f987564210317706def498421dfba2ae1af64a8edce82c6102758b48133fcb"
 dependencies = [
  "alloy-eip2930",
  "alloy-eip7702",
- "alloy-primitives 0.8.22",
+ "alloy-primitives 0.8.26",
  "auto_impl",
  "bitflags 2.9.0",
  "bitvec",
@@ -6589,6 +6642,9 @@ name = "rustc-hash"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
+dependencies = [
+ "rand 0.8.5",
+]
 
 [[package]]
 name = "rustc-hex"
@@ -7293,9 +7349,9 @@ dependencies = [
 
 [[package]]
 name = "syn-solidity"
-version = "0.8.22"
+version = "0.8.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac9f9798a84bca5cd4d1760db691075fda8f2c3a5d9647e8bfd29eb9b3fabb87"
+checksum = "ab4e6eed052a117409a1a744c8bda9c3ea6934597cf7419f791cb7d590871c4c"
 dependencies = [
  "paste",
  "proc-macro2",
@@ -7381,6 +7437,28 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "test-log"
+version = "0.2.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e33b98a582ea0be1168eba097538ee8dd4bbe0f2b01b22ac92ea30054e5be7b"
+dependencies = [
+ "env_logger",
+ "test-log-macros",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "test-log-macros"
+version = "0.2.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "451b374529930d7601b1eef8d32bc79ae870b6079b069401709c2a8bf9e75f36"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.99",
 ]
 
 [[package]]

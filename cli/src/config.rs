@@ -7,6 +7,7 @@ pub use malachitebft_config::{
     MempoolLoadConfig, MetricsConfig, P2pConfig, PubSubProtocol, RuntimeConfig, ScoringStrategy,
     Selector, TestConfig, TimeoutConfig, TransportProtocol, ValuePayload, ValueSyncConfig,
 };
+use malachitebft_eth_types::RetryConfig;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -23,7 +24,7 @@ pub enum ElNodeType {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct MalakethConfig {
+pub struct EmeraldConfig {
     /// A custom human-readable name for this node
     pub moniker: String,
 
@@ -36,25 +37,13 @@ pub struct MalakethConfig {
     /// Path of the JWT token file
     pub jwt_token_path: String,
 
-    /// Maximum time to wait for execution client to sync before crashing
-    #[serde(default = "default_sync_timeout")]
-    pub sync_timeout_ms: u64,
-
-    /// Initial retry delay for execution client sync validation
-    #[serde(default = "default_sync_initial_delay")]
-    pub sync_initial_delay_ms: u64,
+    /// Retry configuration for execution client sync operations
+    #[serde(default)]
+    pub retry_config: RetryConfig,
 
     /// Type of execution layer node (archive, full, or custom)
     #[serde(default)]
     pub el_node_type: ElNodeType,
-}
-
-fn default_sync_timeout() -> u64 {
-    10000
-}
-
-fn default_sync_initial_delay() -> u64 {
-    100
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

@@ -37,15 +37,14 @@ build:
 stop:
 	docker compose down
 
-clean: clean-prometheus
+clean-volumes:
+	docker volume ls --format '{{.Name}}' | grep -E 'reth' | xargs -r docker volume rm || true
+
+clean: clean-prometheus clean-volumes
 	rm -rf ./.testnet
 	rm -rf ./assets/genesis.json
 	rm -rf ./nodes
 	rm -rf ./monitoring/data-grafana
-	docker volume rm --force emerald_reth0
-	docker volume rm --force emerald_reth1
-	docker volume rm --force emerald_reth2
-	docker volume rm --force emerald_reth3
 
 clean-prometheus: stop
 	rm -rf ./monitoring/data-prometheus

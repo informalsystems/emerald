@@ -13,14 +13,6 @@ use tracing::debug;
 use super::{generate_storage_data, Validator};
 use crate::validator_manager::contract::ValidatorManager;
 
-fn encode_uncompressed_key(key: ValidatorManager::Secp256k1Key) -> Vec<u8> {
-    let mut out = Vec::with_capacity(65);
-    out.push(0x04);
-    out.extend_from_slice(&key.x.to_be_bytes::<32>());
-    out.extend_from_slice(&key.y.to_be_bytes::<32>());
-    out
-}
-
 /// Generate validators from "test test ... junk" mnemonic using sequential derivation paths.
 ///
 /// Each validator is derived from path `m/44'/60'/0'/0/{index}` and includes both
@@ -161,7 +153,13 @@ async fn deploy_and_register_validators(
     let owner_contract = ValidatorManager::new(contract_address, deployer_provider.clone());
     for (i, validator) in validators.iter().enumerate() {
         let info: ValidatorManager::ValidatorInfo = validator.clone().into();
-        let pubkey_bytes = encode_uncompressed_key(info.validatorKey);
+
+        // Encode the public key as uncompressed format (65 bytes: 0x04 + x + y)
+        let mut pubkey_bytes = Vec::with_capacity(65);
+        pubkey_bytes.push(0x04);
+        pubkey_bytes.extend_from_slice(&info.validatorKey.x.to_be_bytes::<32>());
+        pubkey_bytes.extend_from_slice(&info.validatorKey.y.to_be_bytes::<32>());
+
         let pending_tx = owner_contract
             .register(pubkey_bytes.into(), info.power)
             .send()

@@ -41,4 +41,7 @@ pub enum Error {
 
     #[error("Missing moniker for node {0}")]
     MissingMoniker(usize),
+
+    #[error("Invalid configuration: {0}")]
+    InvalidConfig(String),
 }

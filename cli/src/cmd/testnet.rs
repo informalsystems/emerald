@@ -4,18 +4,22 @@ use core::str::FromStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use base64::Engine;
 use clap::Parser;
 use color_eyre::eyre::eyre;
 use color_eyre::Result;
 use directories::BaseDirs;
 use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, Node};
 use malachitebft_config::*;
+use malachitebft_core_types::{Context, SigningScheme};
 use serde::Deserialize;
 use tracing::info;
 
 use crate::args::Args;
 use crate::error::Error;
 use crate::file::{save_config, save_genesis, save_priv_validator_key};
+
+type PrivateKey<C> = <<C as Context>::SigningScheme as SigningScheme>::PrivateKey;
 
 const TESTNET_FOLDER: &str = ".malachite_testnet";
 
@@ -108,6 +112,7 @@ impl TestnetCmd {
     pub fn run<N>(&self, node: &N, home_dir: &Path, logging: LoggingConfig) -> Result<()>
     where
         N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
+        PrivateKey<N::Context>: serde::de::DeserializeOwned,
     {
         let runtime = match self.runtime {
             RuntimeFlavour::SingleThreaded => RuntimeConfig::SingleThreaded,
@@ -162,10 +167,36 @@ pub fn testnet<N>(
 ) -> core::result::Result<(), Error>
 where
     N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
+    PrivateKey<N::Context>: serde::de::DeserializeOwned,
 {
     let nodes = testnet_config.nodes;
     let deterministic = testnet_config.deterministic;
-    let private_keys = crate::new::generate_private_keys(node, nodes, deterministic);
+
+    // Use provided private keys if available, otherwise generate them
+    let private_keys: Vec<PrivateKey<N::Context>> = if let Some(ref keys_hex) =
+        testnet_config.private_keys
+    {
+        if keys_hex.len() != nodes {
+            return Err(Error::InvalidConfig(format!(
+                "Number of private keys ({}) doesn't match number of nodes ({})",
+                keys_hex.len(),
+                nodes
+            )));
+        }
+
+        keys_hex
+            .iter()
+            .enumerate()
+            .map(|(i, key_str)| {
+                parse_private_key(node, key_str).map_err(|e| {
+                    Error::InvalidConfig(format!("Failed to parse private key at index {i}: {e}"))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        crate::new::generate_private_keys(node, nodes, deterministic)
+    };
+
     let public_keys = private_keys
         .iter()
         .map(|pk| node.get_public_key(pk))
@@ -242,4 +273,49 @@ pub struct TestnetConfig {
     pub deterministic: bool,
     pub configuration_paths: Vec<PathBuf>,
     pub monikers: Vec<String>,
+    pub private_keys: Option<Vec<String>>,
+}
+
+/// Parse a private key from either:
+/// 1. Base64-encoded bytes
+/// 2. Ethereum hex string (with or without `0x` prefix)
+///
+/// This function:
+/// 1. Normalizes into a 32-byte array (disambiguating hex vs base64)
+/// 2. Creates a concrete Ethereum PrivateKey from the bytes
+/// 3. Converts through serde to the generic type
+fn parse_private_key<N>(
+    _node: &N,
+    key_str: &str,
+) -> core::result::Result<PrivateKey<N::Context>, String>
+where
+    N: Node,
+    PrivateKey<N::Context>: serde::de::DeserializeOwned,
+{
+    use malachitebft_eth_types::secp256k1::PrivateKey as EthPrivateKey;
+
+    let trimmed = key_str.trim();
+    let bytes: [u8; 32] =
+        if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(trimmed) {
+            decoded
+                .try_into()
+                .map_err(|_| "Base64 private key must decode to 32 bytes".to_string())?
+        } else {
+            let hex_str = trimmed.strip_prefix("0x").unwrap_or(trimmed);
+            let decoded = hex::decode(hex_str)
+                .map_err(|e| format!("Invalid hex string for private key: {e}"))?;
+            decoded
+                .try_into()
+                .map_err(|_| "Hex private key must decode to 32 bytes".to_string())?
+        };
+
+    // Create the concrete Ethereum PrivateKey from bytes
+    let eth_key =
+        EthPrivateKey::from_slice(&bytes).map_err(|e| format!("Invalid private key bytes: {e}"))?;
+
+    // Convert through serde (both types have the same serde representation)
+    let json = serde_json::to_string(&eth_key)
+        .map_err(|e| format!("Failed to serialize private key: {e}"))?;
+
+    serde_json::from_str(&json).map_err(|e| format!("Failed to deserialize private key: {e}"))
 }

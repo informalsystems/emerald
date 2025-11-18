@@ -2230,6 +2230,92 @@ dependencies = [
 ]
 
 [[package]]
+name = "emerald"
+version = "0.0.1"
+dependencies = [
+ "alloy-consensus",
+ "alloy-contract",
+ "alloy-primitives 0.8.26",
+ "alloy-provider",
+ "alloy-rpc-types-engine",
+ "alloy-rpc-types-eth",
+ "alloy-sol-types",
+ "async-trait",
+ "bytes",
+ "caches",
+ "color-eyre",
+ "derive-where",
+ "ethereum_ssz",
+ "hex",
+ "informalsystems-malachitebft-app-channel",
+ "informalsystems-malachitebft-proto",
+ "k256",
+ "libp2p-identity",
+ "malachitebft-eth-cli",
+ "malachitebft-eth-engine",
+ "malachitebft-eth-types",
+ "prost",
+ "rand 0.8.5",
+ "redb",
+ "serde",
+ "serde_json",
+ "sha3",
+ "thiserror 2.0.12",
+ "tokio",
+ "toml",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "emerald-utils"
+version = "0.0.1"
+dependencies = [
+ "alloy-consensus",
+ "alloy-contract",
+ "alloy-dyn-abi",
+ "alloy-eips",
+ "alloy-genesis",
+ "alloy-json-abi",
+ "alloy-network",
+ "alloy-node-bindings",
+ "alloy-primitives 0.8.26",
+ "alloy-provider",
+ "alloy-rlp",
+ "alloy-rpc-types",
+ "alloy-rpc-types-engine",
+ "alloy-rpc-types-txpool",
+ "alloy-signer",
+ "alloy-signer-local",
+ "alloy-sol-types",
+ "alloy-transport-http",
+ "async-trait",
+ "chrono",
+ "clap",
+ "color-eyre",
+ "ethereum_serde_utils 0.8.0",
+ "hex",
+ "jsonrpsee-core",
+ "jsonrpsee-http-client",
+ "jsonwebtoken",
+ "k256",
+ "malachitebft-eth-types",
+ "rand 0.8.5",
+ "reqwest",
+ "reth-primitives",
+ "reth-transaction-pool",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "test-log",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
 name = "enum-as-inner"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4385,48 +4471,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "malachitebft-eth-app"
-version = "0.0.1"
-dependencies = [
- "alloy-consensus",
- "alloy-contract",
- "alloy-primitives 0.8.26",
- "alloy-provider",
- "alloy-rpc-types-engine",
- "alloy-rpc-types-eth",
- "alloy-sol-types",
- "async-trait",
- "bytes",
- "caches",
- "color-eyre",
- "derive-where",
- "ethereum_ssz",
- "hex",
- "informalsystems-malachitebft-app-channel",
- "informalsystems-malachitebft-proto",
- "k256",
- "libp2p-identity",
- "malachitebft-eth-cli",
- "malachitebft-eth-engine",
- "malachitebft-eth-types",
- "prost",
- "rand 0.8.5",
- "redb",
- "serde",
- "serde_json",
- "sha3",
- "thiserror 2.0.12",
- "tokio",
- "toml",
- "tracing",
- "url",
-]
-
-[[package]]
 name = "malachitebft-eth-cli"
 version = "0.0.1"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "bytesize",
  "clap",
  "color-eyre",
@@ -4501,53 +4550,6 @@ dependencies = [
  "serde",
  "serde_json",
  "signature",
-]
-
-[[package]]
-name = "malachitebft-eth-utils"
-version = "0.0.1"
-dependencies = [
- "alloy-consensus",
- "alloy-contract",
- "alloy-dyn-abi",
- "alloy-eips",
- "alloy-genesis",
- "alloy-json-abi",
- "alloy-network",
- "alloy-node-bindings",
- "alloy-primitives 0.8.26",
- "alloy-provider",
- "alloy-rlp",
- "alloy-rpc-types",
- "alloy-rpc-types-engine",
- "alloy-rpc-types-txpool",
- "alloy-signer",
- "alloy-signer-local",
- "alloy-sol-types",
- "alloy-transport-http",
- "async-trait",
- "chrono",
- "clap",
- "color-eyre",
- "ethereum_serde_utils 0.8.0",
- "hex",
- "jsonrpsee-core",
- "jsonrpsee-http-client",
- "jsonwebtoken",
- "k256",
- "malachitebft-eth-types",
- "rand 0.8.5",
- "reqwest",
- "reth-primitives",
- "reth-transaction-pool",
- "serde",
- "serde_json",
- "tempfile",
- "test-log",
- "thiserror 2.0.12",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

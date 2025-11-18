@@ -1,5 +1,5 @@
 [package]
-name         = "malachitebft-eth-utils"
+name         = "emerald-utils"
 version      = { workspace = true }
 edition      = { workspace = true }
 repository   = { workspace = true }
@@ -51,6 +51,7 @@ jsonrpsee-core        = { version = "0.25.0" }
 jsonrpsee-http-client = { version = "0.25.0" }
 
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.2.0" }
+url             = { workspace = true }
 
 [dev-dependencies]
 reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", tag = "v1.2.0" }

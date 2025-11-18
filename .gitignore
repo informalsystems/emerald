@@ -5,6 +5,7 @@ monitoring/data-grafana/
 monitoring/data-prometheus/
 assets
 .testnet
+.claude
 
 # Custom-reth build artifacts
 custom-reth/target/

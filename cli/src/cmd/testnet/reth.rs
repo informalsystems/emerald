@@ -7,6 +7,7 @@ use std::process::{Child, Command, Stdio};
 use color_eyre::eyre::{eyre, Context as _};
 use color_eyre::Result;
 
+use super::rpc::RpcClient;
 use super::types::{ProcessHandle, RethNode};
 
 /// Check if reth is installed and return version
@@ -110,6 +111,7 @@ impl RethNode {
 
         let start = Instant::now();
         let timeout = Duration::from_secs(timeout_secs);
+        let rpc = RpcClient::new(self.ports.http);
 
         loop {
             if start.elapsed() > timeout {
@@ -120,19 +122,9 @@ impl RethNode {
             }
 
             // Try to query block number (should return 0 for genesis)
-            let output = Command::new("cast")
-                .args([
-                    "block-number",
-                    "--rpc-url",
-                    &format!("http://127.0.0.1:{}", self.ports.http),
-                ])
-                .output();
-
-            if let Ok(output) = output {
-                if output.status.success() {
-                    // RPC is responding, node is ready
-                    return Ok(());
-                }
+            if rpc.get_block_number().is_ok() {
+                // RPC is responding, node is ready
+                return Ok(());
             }
 
             sleep(Duration::from_millis(500));
@@ -146,6 +138,7 @@ impl RethNode {
 
         let start = Instant::now();
         let timeout = Duration::from_secs(timeout_secs);
+        let rpc = RpcClient::new(self.ports.http);
 
         loop {
             if start.elapsed() > timeout {
@@ -156,24 +149,10 @@ impl RethNode {
                 ));
             }
 
-            // Use cast to check block number
-            let output = Command::new("cast")
-                .args([
-                    "block-number",
-                    "--rpc-url",
-                    &format!("http://127.0.0.1:{}", self.ports.http),
-                ])
-                .output();
-
-            if let Ok(output) = output {
-                if output.status.success() {
-                    if let Ok(block_str) = String::from_utf8(output.stdout) {
-                        if let Ok(block_num) = block_str.trim().parse::<u64>() {
-                            if block_num >= height {
-                                return Ok(());
-                            }
-                        }
-                    }
+            // Check block number via RPC
+            if let Ok(block_num) = rpc.get_block_number() {
+                if block_num >= height {
+                    return Ok(());
                 }
             }
 
@@ -183,59 +162,14 @@ impl RethNode {
 
     /// Get enode address for this reth node
     pub fn get_enode(&self) -> Result<String> {
-        let output = Command::new("cast")
-            .args([
-                "rpc",
-                "--rpc-url",
-                &format!("http://127.0.0.1:{}", self.ports.http),
-                "admin_nodeInfo",
-            ])
-            .output()
-            .context("Failed to get enode via cast rpc")?;
-
-        if !output.status.success() {
-            return Err(eyre!("cast rpc admin_nodeInfo failed"));
-        }
-
-        let json_str = String::from_utf8_lossy(&output.stdout);
-        let json: serde_json::Value = serde_json::from_str(&json_str)
-            .context("Failed to parse admin_nodeInfo response")?;
-
-        let enode = json
-            .get("enode")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| eyre!("No enode field in admin_nodeInfo response"))?;
-
-        Ok(enode.to_string())
+        let rpc = RpcClient::new(self.ports.http);
+        rpc.get_enode()
     }
 
     /// Add peer to this reth node
     pub fn add_peer(&self, enode: &str) -> Result<()> {
-        // Add as trusted peer
-        Command::new("cast")
-            .args([
-                "rpc",
-                "--rpc-url",
-                &format!("http://127.0.0.1:{}", self.ports.http),
-                "admin_addTrustedPeer",
-                enode,
-            ])
-            .output()
-            .context("Failed to add trusted peer")?;
-
-        // Add as regular peer
-        Command::new("cast")
-            .args([
-                "rpc",
-                "--rpc-url",
-                &format!("http://127.0.0.1:{}", self.ports.http),
-                "admin_addPeer",
-                enode,
-            ])
-            .output()
-            .context("Failed to add peer")?;
-
-        Ok(())
+        let rpc = RpcClient::new(self.ports.http);
+        rpc.add_peer(enode)
     }
 }
 

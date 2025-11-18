@@ -11,11 +11,14 @@ use malachitebft_core_types::{Context, SigningScheme};
 mod generate;
 mod init;
 pub mod reth;
+mod rpc;
+mod status;
 pub mod types;
 
 pub use generate::{RuntimeFlavour, TestnetConfig, TestnetGenerateCmd};
 pub use init::TestnetInitCmd;
 pub use reth::check_installation;
+pub use status::TestnetStatusCmd;
 pub use types::{ProcessHandle, RethNode, RethPorts, TestnetMetadata};
 
 type PrivateKey<C> = <<C as Context>::SigningScheme as SigningScheme>::PrivateKey;
@@ -37,6 +40,9 @@ pub enum TestnetSubcommand {
 
     /// Initialize and run a complete testnet with Reth + Emerald nodes
     Init(TestnetInitCmd),
+
+    /// Show status of all nodes in the testnet
+    Status(TestnetStatusCmd),
 }
 
 impl TestnetCmd {
@@ -49,6 +55,7 @@ impl TestnetCmd {
         match &self.command {
             Some(TestnetSubcommand::Generate(cmd)) => cmd.run(node, home_dir, logging),
             Some(TestnetSubcommand::Init(cmd)) => cmd.run(node, home_dir, logging),
+            Some(TestnetSubcommand::Status(cmd)) => cmd.run(home_dir),
             // Backward compatibility: if no subcommand, use generate with flattened opts
             None => self.generate_opts.run(node, home_dir, logging),
         }

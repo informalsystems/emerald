@@ -1,6 +1,6 @@
 //! RPC helper utilities for testnet commands
 
-use std::time::Duration;
+use core::time::Duration;
 
 use color_eyre::eyre::Context as _;
 use color_eyre::Result;
@@ -16,7 +16,7 @@ pub struct RpcClient {
 impl RpcClient {
     pub fn new(port: u16) -> Self {
         Self {
-            url: format!("http://127.0.0.1:{}", port),
+            url: format!("http://127.0.0.1:{port}"),
         }
     }
 

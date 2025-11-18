@@ -1,7 +1,8 @@
 //! Shared types for testnet commands
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
+use core::time::Duration;
 
 use color_eyre::Result;
 

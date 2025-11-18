@@ -1,4 +1,4 @@
-//! Testnet init command - Initialize and run a complete testnet with Reth + Emerald nodes
+//! Testnet start command - Initialize and run a complete testnet with Reth + Emerald nodes
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -17,7 +17,7 @@ use super::types::RethNode;
 type PrivateKey<C> = <<C as Context>::SigningScheme as SigningScheme>::PrivateKey;
 
 #[derive(Parser, Debug, Clone, PartialEq)]
-pub struct TestnetInitCmd {
+pub struct TestnetStartCmd {
     /// Number of node pairs to create
     #[clap(short, long, default_value = "3")]
     pub nodes: usize,
@@ -26,10 +26,14 @@ pub struct TestnetInitCmd {
     /// Supports both hex format (0x...) and JSON format from init command
     #[clap(long = "node-keys")]
     pub node_keys: Vec<String>,
+
+    /// Don't wait for Ctrl+C, detach processes and exit immediately
+    #[clap(long)]
+    pub no_wait: bool,
 }
 
-impl TestnetInitCmd {
-    /// Execute the testnet init command
+impl TestnetStartCmd {
+    /// Execute the testnet start command
     pub fn run<N>(&self, node: &N, home_dir: &Path, logging: LoggingConfig) -> Result<()>
     where
         N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
@@ -92,19 +96,25 @@ impl TestnetInitCmd {
         let emerald_processes = self.spawn_emerald_nodes(home_dir)?;
         println!("✓ All Emerald nodes started");
 
-        println!("\n✅ Testnet initialized successfully!");
+        println!("\n✅ Testnet started successfully!");
         println!("\n📊 Status:");
         println!("  Reth processes: {} running", reth_processes.len());
         println!("  Emerald processes: {} running", emerald_processes.len());
         println!("\n📁 Logs:");
         println!("  Reth: nodes/{{0..{}}}/logs/reth.log", self.nodes - 1);
         println!("  Emerald: nodes/{{0..{}}}/logs/emerald.log", self.nodes - 1);
-        println!("\n💡 Tip: Use 'emerald testnet stop' to stop all nodes");
-        println!("    Or press Ctrl+C to stop (note: may leave processes running)");
 
-        // Keep the processes running
-        println!("\nTestnet is running. Press Ctrl+C to exit...");
-        std::thread::park();
+        if self.no_wait {
+            println!("\n💡 Tip: Use 'emerald testnet status' to check status");
+            println!("    Use 'emerald testnet stop' to stop all nodes");
+        } else {
+            println!("\n💡 Tip: Use 'emerald testnet stop' to stop all nodes");
+            println!("    Or press Ctrl+C to exit (note: may leave processes running)");
+
+            // Keep the command running
+            println!("\nTestnet is running. Press Ctrl+C to exit...");
+            std::thread::park();
+        }
 
         Ok(())
     }
@@ -121,7 +131,7 @@ impl TestnetInitCmd {
     {
         use super::generate::{generate_testnet, TestnetConfig};
         use malachitebft_config::*;
-        use std::str::FromStr;
+        use core::str::FromStr;
 
         // Create testnet config directory
         let testnet_dir = PathBuf::from(".testnet");
@@ -135,7 +145,7 @@ impl TestnetInitCmd {
             // Note: emerald config is now at nodes/{N}/config/emerald.toml
             let config_path = home_dir.join(i.to_string()).join("config").join("emerald.toml");
             config_paths.push(config_path);
-            monikers.push(format!("node-{}", i));
+            monikers.push(format!("node-{i}"));
         }
 
         let testnet_config = TestnetConfig {
@@ -194,7 +204,7 @@ el_node_type = "archive"
             );
 
             fs::write(&config_path, config_content)
-                .context(format!("Failed to write Emerald config for node {}", i))?;
+                .context(format!("Failed to write Emerald config for node {i}"))?;
         }
 
         Ok(())
@@ -258,13 +268,13 @@ el_node_type = "archive"
 
         for i in 0..self.nodes {
             let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
-            print!("  Starting Reth node {}... ", i);
+            print!("  Starting Reth node {i}... ");
             let process = reth_node.spawn()?;
             println!("✓ (PID: {})", process.pid);
             processes.push(process);
 
             // Small delay between spawns
-            std::thread::sleep(std::time::Duration::from_millis(500));
+            std::thread::sleep(core::time::Duration::from_millis(500));
         }
 
         Ok(processes)
@@ -275,7 +285,7 @@ el_node_type = "archive"
 
         for i in 0..self.nodes {
             let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
-            print!("  Waiting for Reth node {} to be ready... ", i);
+            print!("  Waiting for Reth node {i} to be ready... ");
             reth_node.wait_for_ready(30)?;
             println!("✓");
         }
@@ -290,7 +300,7 @@ el_node_type = "archive"
         // Get all enodes
         for i in 0..self.nodes {
             let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
-            print!("  Getting enode for Reth node {}... ", i);
+            print!("  Getting enode for Reth node {i}... ");
             let enode = reth_node.get_enode()?;
             println!("✓");
             enodes.push(enode);
@@ -301,7 +311,7 @@ el_node_type = "archive"
             let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
             for (j, enode) in enodes.iter().enumerate() {
                 if i != j {
-                    print!("  Connecting node {} -> {}... ", i, j);
+                    print!("  Connecting node {i} -> {j}... ");
                     reth_node.add_peer(enode)?;
                     println!("✓");
                 }
@@ -315,13 +325,13 @@ el_node_type = "archive"
         let mut processes = Vec::new();
 
         for i in 0..self.nodes {
-            print!("  Starting Emerald node {}... ", i);
+            print!("  Starting Emerald node {i}... ");
             let process = self.spawn_emerald_node(i, home_dir)?;
             println!("✓ (PID: {})", process.pid);
             processes.push(process);
 
             // Small delay between spawns
-            std::thread::sleep(std::time::Duration::from_millis(500));
+            std::thread::sleep(core::time::Duration::from_millis(500));
         }
 
         Ok(processes)

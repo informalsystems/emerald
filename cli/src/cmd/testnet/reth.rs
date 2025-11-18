@@ -107,7 +107,8 @@ impl RethNode {
     /// Wait for reth to be ready (RPC responding)
     pub fn wait_for_ready(&self, timeout_secs: u64) -> Result<()> {
         use std::thread::sleep;
-        use std::time::{Duration, Instant};
+        use std::time::Instant;
+        use core::time::Duration;
 
         let start = Instant::now();
         let timeout = Duration::from_secs(timeout_secs);
@@ -134,7 +135,8 @@ impl RethNode {
     /// Wait for reth to reach a specific block height
     pub fn wait_for_height(&self, height: u64, timeout_secs: u64) -> Result<()> {
         use std::thread::sleep;
-        use std::time::{Duration, Instant};
+        use std::time::Instant;
+        use core::time::Duration;
 
         let start = Instant::now();
         let timeout = Duration::from_secs(timeout_secs);

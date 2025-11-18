@@ -157,9 +157,17 @@ impl SpamCmd {
         } = self;
 
         let url: Url = rpc_url.parse()?;
-        Spammer::new(url, *signer_index, *num_txs, *time, *rate, *blobs)?
-            .run()
-            .await
+        Spammer::new(
+            url,
+            *signer_index,
+            *num_txs,
+            *time,
+            *rate,
+            *blobs,
+            *chain_id,
+        )?
+        .run()
+        .await
     }
 }
 

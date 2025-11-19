@@ -7,11 +7,14 @@ RUN apt-get update && apt-get install -y \
     libclang-dev \
     && rm -rf /var/lib/apt/lists/*
 
+
 WORKDIR /build
 
-COPY custom-reth ./custom-reth
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
 
-WORKDIR /build/custom-reth
+RUN ls -la
+
 RUN cargo build --release --bin custom-reth
 
 FROM ubuntu:22.04
@@ -21,8 +24,8 @@ RUN apt-get update && apt-get install -y \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /build/custom-reth/target/release/custom-reth /usr/local/bin/custom-reth
+COPY --from=builder /build/target/release/custom-reth /usr/local/bin
 
-ENTRYPOINT ["custom-reth"]
+ENTRYPOINT ["/usr/local/bin/custom-reth"]
 
-CMD ["node"]
+CMD["node"]

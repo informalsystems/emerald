@@ -7,10 +7,7 @@ volumes:
 services:
   reth0:
     network_mode: host
-    build:
-      context: .
-      dockerfile: custom-reth/Dockerfile
-    image: custom-reth:latest
+    image: ghcr.io/informalsystems/custom-reth:latest
     container_name: reth0
     volumes:
       - reth0:/data
@@ -48,10 +45,7 @@ services:
       # - "--txpool.queued-max-count=50000" # default=10000
   reth1:
     network_mode: host
-    build:
-      context: .
-      dockerfile: custom-reth/Dockerfile
-    image: custom-reth:latest
+    image: ghcr.io/informalsystems/custom-reth:latest
     container_name: reth1
     volumes:
       - reth1:/data
@@ -89,10 +83,7 @@ services:
       # - "--txpool.queued-max-count=50000" # default=10000
   reth2:
     network_mode: host
-    build:
-      context: .
-      dockerfile: custom-reth/Dockerfile
-    image: custom-reth:latest
+    image: ghcr.io/informalsystems/custom-reth:latest
     container_name: reth2
     volumes:
       - reth2:/data
@@ -130,10 +121,7 @@ services:
       # - "--txpool.queued-max-count=50000" # default=10000
   reth3:
     network_mode: host
-    build:
-      context: .
-      dockerfile: custom-reth/Dockerfile
-    image: custom-reth:latest
+    image: ghcr.io/informalsystems/custom-reth:latest
     container_name: reth3
     volumes:
       - reth3:/data

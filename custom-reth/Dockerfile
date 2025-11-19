@@ -27,5 +27,3 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /build/target/release/custom-reth /usr/local/bin
 
 ENTRYPOINT ["/usr/local/bin/custom-reth"]
-
-CMD["node"]

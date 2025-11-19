@@ -205,7 +205,7 @@ impl State {
             chain_bytes: state_metrics.chain_bytes,
             start_time,
             metrics: state_metrics.metrics,
-            min_block_time: min_block_time,
+            min_block_time,
             last_block_time: Instant::now(),
         }
     }

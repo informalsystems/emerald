@@ -14,6 +14,7 @@ services:
       - ./assets:/root/assets/
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      RUST_LOG: info
     command:
       - "node"
       - "-vvvvv"
@@ -52,6 +53,7 @@ services:
       - ./assets:/root/assets/
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      RUST_LOG: info
     command:
       - "node"
       - "-vvvvv"
@@ -90,6 +92,7 @@ services:
       - ./assets:/root/assets/
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      RUST_LOG: info
     command:
       - "node"
       - "-vvvvv"

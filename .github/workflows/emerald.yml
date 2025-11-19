@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 # If new code is pushed to a PR branch, then cancel in progress workflows for that PR.
 # Ensures that we don't waste CI time, and returns results quicker.
@@ -45,6 +46,12 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run Forge build
         run: forge build
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Run emerald
         run: |
           cargo build

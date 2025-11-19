@@ -1,4 +1,4 @@
-FROM rustlang/rust:nightly-bookworm AS builder
+FROM rustlang/rust:nightly-trixie-slim AS builder
 
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -10,14 +10,14 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /build
 
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml ./
 COPY src ./src
 
 RUN ls -la
 
 RUN cargo build --release --bin custom-reth
 
-FROM ubuntu:22.04
+FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \

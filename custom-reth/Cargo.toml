@@ -12,13 +12,13 @@ publish      = false
 
 [dependencies]
 # Reth dependencies, version ghcr.io/paradigmxyz/reth:v1.9.2
-reth-ethereum            = { git = "https://github.com/paradigmxyz/reth", rev = "e22a51176473e5f4eee80d776f1905f46e74b308", features = [ "node", "consensus", "evm", "cli" ] }
-reth-ethereum-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "e22a51176473e5f4eee80d776f1905f46e74b308" }
-reth-primitives-traits   = { git = "https://github.com/paradigmxyz/reth", rev = "e22a51176473e5f4eee80d776f1905f46e74b308" }
-reth-engine-primitives   = { git = "https://github.com/paradigmxyz/reth", rev = "e22a51176473e5f4eee80d776f1905f46e74b308" }
-reth-node-api            = { git = "https://github.com/paradigmxyz/reth", rev = "e22a51176473e5f4eee80d776f1905f46e74b308" }
-reth-node-builder        = { git = "https://github.com/paradigmxyz/reth", rev = "e22a51176473e5f4eee80d776f1905f46e74b308" }
-reth-payload-primitives  = { git = "https://github.com/paradigmxyz/reth", rev = "e22a51176473e5f4eee80d776f1905f46e74b308" }
+reth-ethereum            = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.2", features = [ "node", "consensus", "evm", "cli" ] }
+reth-ethereum-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.2" }
+reth-primitives-traits   = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.2" }
+reth-engine-primitives   = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.2" }
+reth-node-api            = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.2" }
+reth-node-builder        = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.2" }
+reth-payload-primitives  = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.2" }
 alloy-rpc-types-engine   = { version = "1.0" }
 
 eyre = "0.6"

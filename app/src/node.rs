@@ -199,6 +199,7 @@ impl Node for App {
         };
 
         let min_block_time = emerald_config.min_block_time;
+
         let mut state = State::new(
             genesis,
             ctx,

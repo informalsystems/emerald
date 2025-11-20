@@ -50,7 +50,7 @@ pub struct EmeraldConfig {
     // before moving onto the next height.
     // Malachite does not have a notion of min_block_time, thus
     // this has to be handled by the application.
-    // Default: 0
+    // Default: 500ms
     #[serde(with = "humantime_serde", default = "default_min_block_time")]
     pub min_block_time: Duration,
 }

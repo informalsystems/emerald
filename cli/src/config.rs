@@ -9,6 +9,7 @@ pub use malachitebft_config::{
 };
 use malachitebft_eth_types::RetryConfig;
 use serde::{Deserialize, Serialize};
+use tokio::time::Duration;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -44,6 +45,18 @@ pub struct EmeraldConfig {
     /// Type of execution layer node (archive, full, or custom)
     #[serde(default)]
     pub el_node_type: ElNodeType,
+
+    // Application set min_block_time forcing the app to sleep
+    // before moving onto the next height.
+    // Malachite does not have a notion of min_block_time, thus
+    // this has to be handled by the application.
+    // Default: 500ms
+    #[serde(with = "humantime_serde", default = "default_min_block_time")]
+    pub min_block_time: Duration,
+}
+
+fn default_min_block_time() -> Duration {
+    Duration::from_millis(500)
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

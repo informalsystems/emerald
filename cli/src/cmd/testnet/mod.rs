@@ -11,6 +11,8 @@ use malachitebft_core_types::{Context, SigningScheme};
 mod add_node;
 mod generate;
 mod start;
+mod start_node;
+mod stop_node;
 pub mod reth;
 mod rpc;
 mod status;
@@ -19,6 +21,8 @@ pub mod types;
 pub use add_node::TestnetAddNodeCmd;
 pub use generate::{RuntimeFlavour, TestnetConfig, TestnetGenerateCmd};
 pub use start::TestnetStartCmd;
+pub use start_node::TestnetStartNodeCmd;
+pub use stop_node::TestnetStopNodeCmd;
 pub use reth::check_installation;
 pub use status::TestnetStatusCmd;
 pub use types::{ProcessHandle, RethNode, RethPorts, TestnetMetadata};
@@ -48,6 +52,12 @@ pub enum TestnetSubcommand {
 
     /// Add a non-validator node to an existing testnet
     AddNode(TestnetAddNodeCmd),
+
+    /// Start a specific node by ID
+    StartNode(TestnetStartNodeCmd),
+
+    /// Stop a specific node by ID
+    StopNode(TestnetStopNodeCmd),
 }
 
 impl TestnetCmd {
@@ -62,6 +72,8 @@ impl TestnetCmd {
             Some(TestnetSubcommand::Start(cmd)) => cmd.run(node, home_dir, logging),
             Some(TestnetSubcommand::Status(cmd)) => cmd.run(home_dir),
             Some(TestnetSubcommand::AddNode(cmd)) => cmd.run(home_dir),
+            Some(TestnetSubcommand::StartNode(cmd)) => cmd.run(home_dir),
+            Some(TestnetSubcommand::StopNode(cmd)) => cmd.run(home_dir),
             // Backward compatibility: if no subcommand, use generate with flattened opts
             None => self.generate_opts.run(node, home_dir, logging),
         }

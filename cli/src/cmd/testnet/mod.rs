@@ -8,6 +8,7 @@ use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, CanMakePriva
 use malachitebft_config::LoggingConfig;
 use malachitebft_core_types::{Context, SigningScheme};
 
+mod add_node;
 mod generate;
 mod start;
 pub mod reth;
@@ -15,6 +16,7 @@ mod rpc;
 mod status;
 pub mod types;
 
+pub use add_node::TestnetAddNodeCmd;
 pub use generate::{RuntimeFlavour, TestnetConfig, TestnetGenerateCmd};
 pub use start::TestnetStartCmd;
 pub use reth::check_installation;
@@ -43,6 +45,9 @@ pub enum TestnetSubcommand {
 
     /// Show status of all nodes in the testnet
     Status(TestnetStatusCmd),
+
+    /// Add a non-validator node to an existing testnet
+    AddNode(TestnetAddNodeCmd),
 }
 
 impl TestnetCmd {
@@ -56,6 +61,7 @@ impl TestnetCmd {
             Some(TestnetSubcommand::Generate(cmd)) => cmd.run(node, home_dir, logging),
             Some(TestnetSubcommand::Start(cmd)) => cmd.run(node, home_dir, logging),
             Some(TestnetSubcommand::Status(cmd)) => cmd.run(home_dir),
+            Some(TestnetSubcommand::AddNode(cmd)) => cmd.run(home_dir),
             // Backward compatibility: if no subcommand, use generate with flattened opts
             None => self.generate_opts.run(node, home_dir, logging),
         }

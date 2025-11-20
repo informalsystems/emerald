@@ -14,7 +14,7 @@ use super::types::{ProcessHandle, RethNode};
 pub fn check_installation(use_cargo: bool) -> Result<String> {
     let output = if use_cargo {
         Command::new("cargo")
-            .args(["run", "--bin", "custom-reth", "--", "--version"])
+            .args(["run", "--manifest-path", "custom-reth/Cargo.toml", "--bin", "custom-reth", "--", "--version"])
             .output()
             .context("Failed to execute 'cargo run --bin custom-reth -- --version'. Is custom-reth available?")?
     } else {
@@ -89,7 +89,14 @@ impl RethNode {
         println!("  Logs: {}", log_file_path.display());
 
         let child = if use_cargo {
-            let mut cargo_args = vec!["run".to_string(), "--bin".to_string(), "custom-reth".to_string(), "--".to_string()];
+            let mut cargo_args = vec![
+                "run".to_string(),
+                "--manifest-path".to_string(),
+                "custom-reth/Cargo.toml".to_string(),
+                "--bin".to_string(),
+                "custom-reth".to_string(),
+                "--".to_string(),
+            ];
             cargo_args.extend(args);
 
             Command::new("cargo")

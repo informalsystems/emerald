@@ -257,6 +257,8 @@ el_node_type = "archive"
                 "genesis",
                 "--public-keys-file",
                 "./nodes/validator_public_keys.txt",
+                "--poa-owner-address",
+                "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
             ])
             .output()
             .context("Failed to generate genesis file")?;

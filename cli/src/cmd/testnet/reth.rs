@@ -11,11 +11,18 @@ use super::rpc::RpcClient;
 use super::types::{ProcessHandle, RethNode};
 
 /// Check if reth is installed and return version
-pub fn check_installation() -> Result<String> {
-    let output = Command::new("reth")
-        .arg("--version")
-        .output()
-        .context("Failed to execute 'reth --version'. Is reth installed?")?;
+pub fn check_installation(use_cargo: bool) -> Result<String> {
+    let output = if use_cargo {
+        Command::new("cargo")
+            .args(["run", "--bin", "custom-reth", "--", "--version"])
+            .output()
+            .context("Failed to execute 'cargo run --bin custom-reth -- --version'. Is custom-reth available?")?
+    } else {
+        Command::new("reth")
+            .arg("--version")
+            .output()
+            .context("Failed to execute 'reth --version'. Is reth installed?")?
+    };
 
     if !output.status.success() {
         return Err(eyre!("reth command failed"));
@@ -32,7 +39,7 @@ impl RethNode {
     pub fn build_args(&self) -> Vec<String> {
         vec![
             "node".to_string(),
-            "-vvvvv".to_string(),
+            "-vvvv".to_string(),
             "-d".to_string(),
             format!("--datadir={}", self.data_dir.display()),
             format!("--chain={}", self.genesis_file.display()),
@@ -54,8 +61,8 @@ impl RethNode {
         ]
     }
 
-    /// Spawn reth process with log redirection
-    pub fn spawn(&self) -> Result<RethProcess> {
+    /// Spawn reth process
+    pub fn spawn(&self, use_cargo: bool) -> Result<RethProcess> {
         // Ensure directories exist
         if let Some(parent) = self.data_dir.parent() {
             fs::create_dir_all(parent)?;
@@ -79,13 +86,26 @@ impl RethNode {
         println!("  AuthRPC: {}", self.ports.authrpc);
         println!("  Metrics: {}", self.ports.metrics);
         println!("  P2P: {}", self.ports.p2p);
+        println!("  Logs: {}", log_file_path.display());
 
-        let child = Command::new("reth")
-            .args(&args)
-            .stdout(Stdio::from(log_file.try_clone()?))
-            .stderr(Stdio::from(log_file))
-            .spawn()
-            .context("Failed to spawn reth process")?;
+        let child = if use_cargo {
+            let mut cargo_args = vec!["run".to_string(), "--bin".to_string(), "custom-reth".to_string(), "--".to_string()];
+            cargo_args.extend(args);
+
+            Command::new("cargo")
+                .args(&cargo_args)
+                .stdout(Stdio::from(log_file.try_clone()?))
+                .stderr(Stdio::from(log_file))
+                .spawn()
+                .context("Failed to spawn reth process via cargo")?
+        } else {
+            Command::new("reth")
+                .args(&args)
+                .stdout(Stdio::from(log_file.try_clone()?))
+                .stderr(Stdio::from(log_file))
+                .spawn()
+                .context("Failed to spawn reth process")?
+        };
 
         let pid = child.id();
         let handle = ProcessHandle {

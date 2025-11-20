@@ -30,6 +30,10 @@ pub struct TestnetStartCmd {
     /// Don't wait for Ctrl+C, detach processes and exit immediately
     #[clap(long)]
     pub no_wait: bool,
+
+    /// Use 'cargo run --bin custom-reth' instead of 'reth' binary
+    #[clap(long)]
+    pub use_cargo_reth: bool,
 }
 
 impl TestnetStartCmd {
@@ -43,16 +47,19 @@ impl TestnetStartCmd {
 
         // 1. Check if reth is installed
         print!("Checking reth installation... ");
-        match reth::check_installation() {
+        match reth::check_installation(self.use_cargo_reth) {
             Ok(version) => {
                 println!("✓ {}", version.lines().next().unwrap_or(&version));
             }
             Err(e) => {
                 println!("✗");
-                return Err(e.wrap_err(
+                let error_msg = if self.use_cargo_reth {
+                    "Custom reth is not available. Make sure custom-reth/ directory exists and contains a valid reth binary."
+                } else {
                     "Reth is not installed. Please install reth first.\n\
                      See: https://github.com/paradigmxyz/reth"
-                ));
+                };
+                return Err(e.wrap_err(error_msg));
             }
         }
 
@@ -101,8 +108,8 @@ impl TestnetStartCmd {
         println!("  Reth processes: {} running", reth_processes.len());
         println!("  Emerald processes: {} running", emerald_processes.len());
         println!("\n📁 Logs:");
-        println!("  Reth: nodes/{{0..{}}}/logs/reth.log", self.nodes - 1);
-        println!("  Emerald: nodes/{{0..{}}}/logs/emerald.log", self.nodes - 1);
+        println!("  Reth: {}/{{0..{}}}/logs/reth.log", home_dir.display(), self.nodes - 1);
+        println!("  Emerald: {}/{{0..{}}}/logs/emerald.log", home_dir.display(), self.nodes - 1);
 
         if self.no_wait {
             println!("\n💡 Tip: Use 'emerald testnet status' to check status");
@@ -269,7 +276,7 @@ el_node_type = "archive"
         for i in 0..self.nodes {
             let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
             print!("  Starting Reth node {i}... ");
-            let process = reth_node.spawn()?;
+            let process = reth_node.spawn(self.use_cargo_reth)?;
             println!("✓ (PID: {})", process.pid);
             processes.push(process);
 

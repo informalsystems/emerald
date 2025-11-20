@@ -559,7 +559,7 @@ impl State {
         self.current_round = Round::new(0);
 
         // Sleep to reduce the block speed, if set via config.
-        debug!("timeout commit is {:?}", self.min_block_time);
+        debug!(timeout_commit = ?self.min_block_time);
         let elapsed_height_time = self.last_block_time.elapsed();
 
         info!(

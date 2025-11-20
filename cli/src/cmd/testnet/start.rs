@@ -30,10 +30,6 @@ pub struct TestnetStartCmd {
     /// Don't wait for Ctrl+C, detach processes and exit immediately
     #[clap(long)]
     pub no_wait: bool,
-
-    /// Use 'cargo run --bin custom-reth' instead of 'reth' binary
-    #[clap(long)]
-    pub use_cargo_reth: bool,
 }
 
 impl TestnetStartCmd {
@@ -45,21 +41,17 @@ impl TestnetStartCmd {
     {
         println!("🚀 Initializing testnet with {} nodes...\n", self.nodes);
 
-        // 1. Check if reth is installed
-        print!("Checking reth installation... ");
-        match reth::check_installation(self.use_cargo_reth) {
+        // 1. Check if custom-reth is available
+        print!("Checking custom-reth installation... ");
+        match reth::check_installation() {
             Ok(version) => {
                 println!("✓ {}", version.lines().next().unwrap_or(&version));
             }
             Err(e) => {
                 println!("✗");
-                let error_msg = if self.use_cargo_reth {
+                return Err(e.wrap_err(
                     "Custom reth is not available. Make sure custom-reth/ directory exists and contains a valid reth binary."
-                } else {
-                    "Reth is not installed. Please install reth first.\n\
-                     See: https://github.com/paradigmxyz/reth"
-                };
-                return Err(e.wrap_err(error_msg));
+                ));
             }
         }
 
@@ -278,7 +270,7 @@ el_node_type = "archive"
         for i in 0..self.nodes {
             let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
             print!("  Starting Reth node {i}... ");
-            let process = reth_node.spawn(self.use_cargo_reth)?;
+            let process = reth_node.spawn()?;
             println!("✓ (PID: {})", process.pid);
             processes.push(process);
 

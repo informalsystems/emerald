@@ -10,22 +10,15 @@ use color_eyre::Result;
 use super::rpc::RpcClient;
 use super::types::{ProcessHandle, RethNode};
 
-/// Check if reth is installed and return version
-pub fn check_installation(use_cargo: bool) -> Result<String> {
-    let output = if use_cargo {
-        Command::new("cargo")
-            .args(["run", "--manifest-path", "custom-reth/Cargo.toml", "--bin", "custom-reth", "--", "--version"])
-            .output()
-            .context("Failed to execute 'cargo run --bin custom-reth -- --version'. Is custom-reth available?")?
-    } else {
-        Command::new("reth")
-            .arg("--version")
-            .output()
-            .context("Failed to execute 'reth --version'. Is reth installed?")?
-    };
+/// Check if custom-reth is available and return version
+pub fn check_installation() -> Result<String> {
+    let output = Command::new("cargo")
+        .args(["run", "--manifest-path", "custom-reth/Cargo.toml", "--bin", "custom-reth", "--", "--version"])
+        .output()
+        .context("Failed to execute 'cargo run --bin custom-reth -- --version'. Is custom-reth available?")?;
 
     if !output.status.success() {
-        return Err(eyre!("reth command failed"));
+        return Err(eyre!("custom-reth command failed"));
     }
 
     let version = String::from_utf8_lossy(&output.stdout)
@@ -61,8 +54,8 @@ impl RethNode {
         ]
     }
 
-    /// Spawn reth process
-    pub fn spawn(&self, use_cargo: bool) -> Result<RethProcess> {
+    /// Spawn reth process using custom-reth via cargo
+    pub fn spawn(&self) -> Result<RethProcess> {
         // Ensure directories exist
         if let Some(parent) = self.data_dir.parent() {
             fs::create_dir_all(parent)?;
@@ -88,31 +81,22 @@ impl RethNode {
         println!("  P2P: {}", self.ports.p2p);
         println!("  Logs: {}", log_file_path.display());
 
-        let child = if use_cargo {
-            let mut cargo_args = vec![
-                "run".to_string(),
-                "--manifest-path".to_string(),
-                "custom-reth/Cargo.toml".to_string(),
-                "--bin".to_string(),
-                "custom-reth".to_string(),
-                "--".to_string(),
-            ];
-            cargo_args.extend(args);
+        let mut cargo_args = vec![
+            "run".to_string(),
+            "--manifest-path".to_string(),
+            "custom-reth/Cargo.toml".to_string(),
+            "--bin".to_string(),
+            "custom-reth".to_string(),
+            "--".to_string(),
+        ];
+        cargo_args.extend(args);
 
-            Command::new("cargo")
-                .args(&cargo_args)
-                .stdout(Stdio::from(log_file.try_clone()?))
-                .stderr(Stdio::from(log_file))
-                .spawn()
-                .context("Failed to spawn reth process via cargo")?
-        } else {
-            Command::new("reth")
-                .args(&args)
-                .stdout(Stdio::from(log_file.try_clone()?))
-                .stderr(Stdio::from(log_file))
-                .spawn()
-                .context("Failed to spawn reth process")?
-        };
+        let child = Command::new("cargo")
+            .args(&cargo_args)
+            .stdout(Stdio::from(log_file.try_clone()?))
+            .stderr(Stdio::from(log_file))
+            .spawn()
+            .context("Failed to spawn custom-reth process via cargo")?;
 
         let pid = child.id();
         let handle = ProcessHandle {

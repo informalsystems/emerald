@@ -14,32 +14,24 @@ use super::reth::{self, RethProcess};
 use super::types::RethNode;
 
 #[derive(Parser, Debug, Clone, PartialEq)]
-pub struct TestnetAddNodeCmd {
-    /// Use 'cargo run --bin custom-reth' instead of 'reth' binary
-    #[clap(long)]
-    pub use_cargo_reth: bool,
-}
+pub struct TestnetAddNodeCmd {}
 
 impl TestnetAddNodeCmd {
     /// Execute the add-node command
     pub fn run(&self, home_dir: &Path) -> Result<()> {
         println!("📝 Adding non-validator node to testnet...\n");
 
-        // 1. Check if reth is installed
-        print!("Checking reth installation... ");
-        match reth::check_installation(self.use_cargo_reth) {
+        // 1. Check if custom-reth is available
+        print!("Checking custom-reth installation... ");
+        match reth::check_installation() {
             Ok(version) => {
                 println!("✓ {}", version.lines().next().unwrap_or(&version));
             }
             Err(e) => {
                 println!("✗");
-                let error_msg = if self.use_cargo_reth {
+                return Err(e.wrap_err(
                     "Custom reth is not available. Make sure custom-reth/ directory exists and contains a valid reth binary."
-                } else {
-                    "Reth is not installed. Please install reth first.\n\
-                     See: https://github.com/paradigmxyz/reth"
-                };
-                return Err(e.wrap_err(error_msg));
+                ));
             }
         }
 
@@ -302,7 +294,7 @@ el_node_type = "archive"
     fn spawn_reth_node(&self, home_dir: &Path, node_id: usize) -> Result<RethProcess> {
         let assets_dir = PathBuf::from("./assets");
         let reth_node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir);
-        reth_node.spawn(self.use_cargo_reth)
+        reth_node.spawn()
     }
 
     fn connect_to_peers(&self, home_dir: &Path, node_id: usize) -> Result<()> {

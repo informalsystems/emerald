@@ -1,5 +1,5 @@
 use alloy_primitives::Address;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueHint};
 use color_eyre::eyre::Result;
 use genesis::{generate_genesis, make_signers};
 use reqwest::Url;
@@ -23,8 +23,21 @@ impl Cli {
         match &self.command {
             Commands::Genesis {
                 public_keys_file,
-                output,
-            } => generate_genesis(public_keys_file, output),
+                poa_owner_address,
+                devnet,
+                devnet_balance,
+                chain_id,
+                evm_genesis_output,
+                emerald_genesis_output,
+            } => generate_genesis(
+                public_keys_file,
+                poa_owner_address,
+                devnet,
+                devnet_balance,
+                chain_id,
+                evm_genesis_output,
+                emerald_genesis_output,
+            ),
             Commands::Spam(spam_cmd) => spam_cmd.run().await,
             Commands::Poa(poa_cmd) => poa_cmd.run().await,
             Commands::SpamContract(spam_contract_cmd) => spam_contract_cmd.run().await,
@@ -36,11 +49,62 @@ impl Cli {
 pub enum Commands {
     /// Generate genesis file
     Genesis {
-        #[clap(short, long)]
+        #[clap(
+            short,
+            long,
+            value_hint = ValueHint::FilePath,
+            help = "File containing validator public keys (one per line)"
+        )]
         public_keys_file: String,
 
-        #[clap(long, default_value = "./assets/genesis.json")]
-        output: String,
+        #[clap(
+            long,
+            short = 'a',
+            required_unless_present = "devnet",
+            help = "Address of the Proof-of-Authority owner"
+        )]
+        poa_owner_address: Option<String>,
+
+        #[clap(
+            long,
+            short = 'c',
+            help = "Chain ID for the genesis file (default: 12345)",
+            default_value_t = 12345
+        )]
+        chain_id: u64,
+
+        #[clap(
+            short,
+            long,
+            default_value_t = false,
+            help = "Generate test addresses in genesis using mnemonic: 'test test test test test test test test test test test junk'"
+        )]
+        devnet: bool,
+
+        #[clap(
+            long,
+            short = 'b',
+            default_value_t = 15_000_u64,
+            help = "Balance for each testnet wallet (default: 15000)"
+        )]
+        devnet_balance: u64,
+
+        #[clap(
+            long,
+            short = 'g',
+            value_hint = ValueHint::FilePath,
+            default_value = "./assets/genesis.json",
+            help = "Output path for the generated genesis file"
+        )]
+        evm_genesis_output: String,
+
+        #[clap(
+            long,
+            short = 'e',
+            default_value = "./assets/emerald_genesis.json",
+            help = "Output path for the generated Emerald genesis file"
+        )]
+        emerald_genesis_output: String,
     },
 
     /// Spam transactions
@@ -57,8 +121,8 @@ pub enum Commands {
 
 #[derive(Parser, Debug, Clone, Default, PartialEq)]
 pub struct SpamCmd {
-    /// URL of the execution client's RPC endpoint
-    #[clap(long, default_value = "127.0.0.1:8645")]
+    /// URL of the execution client's RPC endpoint (e.g., http://127.0.0.1:8545, https://eth.example.com)
+    #[clap(long, default_value = "http://127.0.0.1:8545")]
     rpc_url: String,
     /// Number of transactions to send
     #[clap(short, long, default_value = "0")]
@@ -75,6 +139,9 @@ pub struct SpamCmd {
 
     #[clap(long, default_value = "0")]
     signer_index: usize,
+
+    #[clap(long, short)]
+    chain_id: u64,
 }
 
 impl SpamCmd {
@@ -86,11 +153,21 @@ impl SpamCmd {
             time,
             blobs,
             signer_index,
+            chain_id,
         } = self;
-        let url = format!("http://{rpc_url}").parse()?;
-        Spammer::new(url, *signer_index, *num_txs, *time, *rate, *blobs)?
-            .run()
-            .await
+
+        let url: Url = rpc_url.parse()?;
+        Spammer::new(
+            url,
+            *signer_index,
+            *num_txs,
+            *time,
+            *rate,
+            *blobs,
+            *chain_id,
+        )?
+        .run()
+        .await
     }
 }
 
@@ -225,6 +302,8 @@ pub struct SpamContractCmd {
 
     #[clap(long, default_value_t = 0)]
     signer_index: usize,
+    #[clap(long, short)]
+    chain_id: u64,
 }
 
 impl SpamContractCmd {
@@ -238,6 +317,7 @@ impl SpamContractCmd {
             rate,
             time,
             signer_index,
+            chain_id,
         } = self;
         let url = format!("http://{rpc_url}").parse()?;
         Spammer::new_contract(
@@ -249,6 +329,7 @@ impl SpamContractCmd {
             contract,
             function,
             args,
+            *chain_id,
         )?
         .run()
         .await

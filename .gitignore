@@ -8,6 +8,10 @@ assets
 .claude
 reth
 
+# Custom-reth build artifacts
+custom-reth/target/
+custom-reth/Cargo.lock
+
 # Docs and env
 example/docs/
 .env

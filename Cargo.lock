@@ -2247,6 +2247,7 @@ dependencies = [
  "derive-where",
  "ethereum_ssz",
  "hex",
+ "humantime-serde",
  "informalsystems-malachitebft-app-channel",
  "informalsystems-malachitebft-proto",
  "k256",
@@ -2312,6 +2313,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]
@@ -4481,6 +4483,7 @@ dependencies = [
  "config",
  "directories",
  "hex",
+ "humantime-serde",
  "informalsystems-malachitebft-app",
  "informalsystems-malachitebft-config",
  "informalsystems-malachitebft-core-types",

@@ -17,6 +17,8 @@ malachitebft-metrics    = { workspace = true }
 malachitebft-config     = { workspace = true }
 malachitebft-app        = { workspace = true }
 
+
+humantime-serde = { workspace = true }
 axum = { workspace = true }
 base64 = "0.22"
 bytesize = { workspace = true }

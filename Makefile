@@ -2,7 +2,7 @@ all: clean build
 	./scripts/generate_testnet_config.sh --nodes 3 --testnet-config-dir .testnet
 	cargo run --bin emerald -- testnet --home nodes --testnet-config .testnet/testnet_config.toml --log-level info
 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt
-	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt
+	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
 	docker compose up -d reth0 reth1 reth2 prometheus grafana otterscan
 	./scripts/add_peers.sh --nodes 3
 	@echo 👉 Grafana dashboard is available at http://localhost:3000
@@ -12,7 +12,7 @@ four: clean build
 	./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet
 	cargo run --bin emerald -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt
-	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt
+	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
 	docker compose up -d reth0 reth1 reth2 reth3 prometheus grafana otterscan
 	./scripts/add_peers.sh --nodes 4
 	@echo 👉 Grafana dashboard is available at http://localhost:3000
@@ -22,7 +22,7 @@ sync: clean build
 	./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet
 	cargo run --bin emerald -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt
-	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt
+	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
 	docker compose up -d
 	./scripts/add_peers.sh --nodes 4
 	@echo 👉 Grafana dashboard is available at http://localhost:3000
@@ -37,15 +37,14 @@ build:
 stop:
 	docker compose down
 
-clean: clean-prometheus
+clean-volumes:
+	docker volume ls --format '{{.Name}}' | grep -E 'reth' | xargs -r docker volume rm || true
+
+clean: clean-prometheus clean-volumes
 	rm -rf ./.testnet
 	rm -rf ./assets/genesis.json
 	rm -rf ./nodes
 	rm -rf ./monitoring/data-grafana
-	docker volume rm --force emerald_reth0
-	docker volume rm --force emerald_reth1
-	docker volume rm --force emerald_reth2
-	docker volume rm --force emerald_reth3
 
 clean-prometheus: stop
 	rm -rf ./monitoring/data-prometheus

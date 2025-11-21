@@ -16,10 +16,6 @@ use super::types::RethNode;
 pub struct TestnetStartNodeCmd {
     /// Node ID to start
     pub node_id: usize,
-
-    /// Use 'cargo run --bin ...' instead of checking for built binaries
-    #[clap(long)]
-    pub cargo: bool,
 }
 
 impl TestnetStartNodeCmd {
@@ -51,7 +47,7 @@ impl TestnetStartNodeCmd {
         println!("\n🔗 Starting Reth execution client...");
         let assets_dir = home_dir.join("assets");
         let reth_node = RethNode::new(self.node_id, home_dir.to_path_buf(), assets_dir);
-        let reth_process = reth_node.spawn(self.cargo)?;
+        let reth_process = reth_node.spawn()?;
         println!("✓ Reth node started (PID: {})", reth_process.pid);
 
         // Wait for Reth to be ready
@@ -124,30 +120,22 @@ impl TestnetStartNodeCmd {
         let log_file_path = log_dir.join("emerald.log");
         let pid_file = node_home.join("emerald.pid");
 
-        let cmd = if self.cargo {
+        // Check for built binary first, then fallback to PATH
+        let debug_binary = std::path::Path::new("./target/debug/emerald");
+        let cmd = if debug_binary.exists() {
             format!(
-                "cargo run --bin emerald -q -- start --home {} --config {} --log-level info",
+                "{} start --home {} --config {} --log-level info",
+                debug_binary.display(),
                 node_home.display(),
                 config_file.display()
             )
         } else {
-            // Check for built binary first, then fallback to PATH
-            let debug_binary = std::path::Path::new("./target/debug/emerald");
-            if debug_binary.exists() {
-                format!(
-                    "{} start --home {} --config {} --log-level info",
-                    debug_binary.display(),
-                    node_home.display(),
-                    config_file.display()
-                )
-            } else {
-                // Try PATH - will fail at spawn time if not found
-                format!(
-                    "emerald start --home {} --config {} --log-level info",
-                    node_home.display(),
-                    config_file.display()
-                )
-            }
+            // Try PATH - will fail at spawn time if not found
+            format!(
+                "emerald start --home {} --config {} --log-level info",
+                node_home.display(),
+                config_file.display()
+            )
         };
 
         let shell_cmd = format!(

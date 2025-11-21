@@ -26,10 +26,6 @@ pub struct TestnetStartCmd {
     /// Supports both hex format (0x...) and JSON format from init command
     #[clap(long = "node-keys")]
     pub node_keys: Vec<String>,
-
-    /// Use 'cargo run --bin ...' instead of checking for built binaries
-    #[clap(long)]
-    pub cargo: bool,
 }
 
 impl TestnetStartCmd {
@@ -257,27 +253,19 @@ min_block_time = "500ms"
                 .join("config")
                 .join("priv_validator_key.json");
 
-            let output = if self.cargo {
-                Command::new("cargo")
-                    .args(["run", "--bin", "emerald", "--", "show-pubkey"])
-                    .arg(&key_file)
-                    .output()
-                    .context("Failed to extract public key")?
+            // Check for built binary first, then fallback to PATH
+            let debug_binary = std::path::Path::new("./target/debug/emerald");
+            let cmd = if debug_binary.exists() {
+                debug_binary.to_str().unwrap()
             } else {
-                // Check for built binary first, then fallback to PATH
-                let debug_binary = std::path::Path::new("./target/debug/emerald");
-                let cmd = if debug_binary.exists() {
-                    debug_binary.to_str().unwrap()
-                } else {
-                    "emerald"
-                };
-
-                Command::new(cmd)
-                    .args(["show-pubkey"])
-                    .arg(&key_file)
-                    .output()
-                    .context("Failed to extract public key")?
+                "emerald"
             };
+
+            let output = Command::new(cmd)
+                .args(["show-pubkey"])
+                .arg(&key_file)
+                .output()
+                .context("Failed to extract public key")?;
 
             if !output.status.success() {
                 return Err(eyre!("Failed to extract public key for node {}", i));
@@ -304,57 +292,32 @@ min_block_time = "500ms"
         let genesis_output = assets_dir.join("genesis.json");
         let emerald_genesis_output = assets_dir.join("emerald_genesis.json");
 
-        let output = if self.cargo {
-            Command::new("cargo")
-                .args([
-                    "run",
-                    "--bin",
-                    "emerald-utils",
-                    "--",
-                    "genesis",
-                    "--public-keys-file",
-                ])
-                .arg(&pubkeys_file)
-                .args([
-                    "--poa-owner-address",
-                    "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-                    "--evm-genesis-output",
-                ])
-                .arg(&genesis_output)
-                .args([
-                    "--emerald-genesis-output",
-                ])
-                .arg(&emerald_genesis_output)
-                .output()
-                .context("Failed to generate genesis file")?
+        // Check for built binary first, then fallback to PATH
+        let debug_binary = std::path::Path::new("./target/debug/emerald-utils");
+        let cmd = if debug_binary.exists() {
+            debug_binary.to_str().unwrap()
         } else {
-            // Check for built binary first, then fallback to PATH
-            let debug_binary = std::path::Path::new("./target/debug/emerald-utils");
-            let cmd = if debug_binary.exists() {
-                debug_binary.to_str().unwrap()
-            } else {
-                "emerald-utils"
-            };
-
-            Command::new(cmd)
-                .args([
-                    "genesis",
-                    "--public-keys-file",
-                ])
-                .arg(&pubkeys_file)
-                .args([
-                    "--poa-owner-address",
-                    "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-                    "--evm-genesis-output",
-                ])
-                .arg(&genesis_output)
-                .args([
-                    "--emerald-genesis-output",
-                ])
-                .arg(&emerald_genesis_output)
-                .output()
-                .context("Failed to generate genesis file")?
+            "emerald-utils"
         };
+
+        let output = Command::new(cmd)
+            .args([
+                "genesis",
+                "--public-keys-file",
+            ])
+            .arg(&pubkeys_file)
+            .args([
+                "--poa-owner-address",
+                "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+                "--evm-genesis-output",
+            ])
+            .arg(&genesis_output)
+            .args([
+                "--emerald-genesis-output",
+            ])
+            .arg(&emerald_genesis_output)
+            .output()
+            .context("Failed to generate genesis file")?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -371,7 +334,7 @@ min_block_time = "500ms"
         for i in 0..self.nodes {
             let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
             print!("  Starting Reth node {i}... ");
-            let process = reth_node.spawn(self.cargo)?;
+            let process = reth_node.spawn()?;
             println!("✓ (PID: {})", process.pid);
             processes.push(process);
 
@@ -428,7 +391,7 @@ min_block_time = "500ms"
 
         for i in 0..self.nodes {
             print!("  Starting Emerald node {i}... ");
-            let process = self.spawn_emerald_node(i, home_dir, self.cargo)?;
+            let process = self.spawn_emerald_node(i, home_dir)?;
             println!("✓ (PID: {})", process.pid);
             processes.push(process);
 
@@ -439,7 +402,7 @@ min_block_time = "500ms"
         Ok(processes)
     }
 
-    fn spawn_emerald_node(&self, node_id: usize, home_dir: &Path, use_cargo: bool) -> Result<EmeraldProcess> {
+    fn spawn_emerald_node(&self, node_id: usize, home_dir: &Path) -> Result<EmeraldProcess> {
         let node_home = home_dir.join(node_id.to_string());
         let config_file = node_home.join("config").join("emerald.toml");
 
@@ -450,34 +413,22 @@ min_block_time = "500ms"
         let log_file_path = log_dir.join("emerald.log");
         let pid_file = node_home.join("emerald.pid");
 
-        // Create a shell command that:
-        // 1. Runs in background with setsid (new session)
-        // 2. Captures the actual process PID
-        // 3. Writes PID to file
-        let cmd = if use_cargo {
+        // Check for built binary first, then fallback to PATH
+        let debug_binary = std::path::Path::new("./target/debug/emerald");
+        let cmd = if debug_binary.exists() {
             format!(
-                "cargo run --bin emerald -q -- start --home {} --config {} --log-level info",
+                "{} start --home {} --config {} --log-level info",
+                debug_binary.display(),
                 node_home.display(),
                 config_file.display()
             )
         } else {
-            // Check for built binary first, then fallback to PATH
-            let debug_binary = std::path::Path::new("./target/debug/emerald");
-            if debug_binary.exists() {
-                format!(
-                    "{} start --home {} --config {} --log-level info",
-                    debug_binary.display(),
-                    node_home.display(),
-                    config_file.display()
-                )
-            } else {
-                // Try PATH - will fail at spawn time if not found
-                format!(
-                    "emerald start --home {} --config {} --log-level info",
-                    node_home.display(),
-                    config_file.display()
-                )
-            }
+            // Try PATH - will fail at spawn time if not found
+            format!(
+                "emerald start --home {} --config {} --log-level info",
+                node_home.display(),
+                config_file.display()
+            )
         };
 
         let shell_cmd = format!(

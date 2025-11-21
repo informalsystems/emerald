@@ -65,8 +65,8 @@ impl RethNode {
         ]
     }
 
-    /// Spawn reth process using custom-reth via cargo
-    pub fn spawn(&self, use_cargo: bool) -> Result<RethProcess> {
+    /// Spawn reth process using custom-reth binary
+    pub fn spawn(&self) -> Result<RethProcess> {
         // Ensure directories exist
         if let Some(parent) = self.data_dir.parent() {
             fs::create_dir_all(parent)?;
@@ -89,30 +89,13 @@ impl RethNode {
 
         let pid_file = self.home_dir.join(self.node_id.to_string()).join("reth.pid");
 
-        // Create a shell command that:
-        // 1. Runs in background with setsid (new session)
-        // 2. Captures the actual process PID
-        // 3. Writes PID to file
-        let cmd = if use_cargo {
-            let mut cargo_args = vec![
-                "run".to_string(),
-                "--manifest-path".to_string(),
-                "custom-reth/Cargo.toml".to_string(),
-                "--bin".to_string(),
-                "custom-reth".to_string(),
-                "--".to_string(),
-            ];
-            cargo_args.extend(args);
-            format!("cargo {}", cargo_args.join(" "))
+        // Check for built binary first, then fallback to PATH
+        let debug_binary = std::path::Path::new("./custom-reth/target/debug/custom-reth");
+        let cmd = if debug_binary.exists() {
+            format!("{} {}", debug_binary.display(), args.join(" "))
         } else {
-            // Check for built binary first, then fallback to PATH
-            let debug_binary = std::path::Path::new("./custom-reth/target/debug/custom-reth");
-            if debug_binary.exists() {
-                format!("{} {}", debug_binary.display(), args.join(" "))
-            } else {
-                // Try PATH - will fail at spawn time if not found
-                format!("custom-reth {}", args.join(" "))
-            }
+            // Try PATH - will fail at spawn time if not found
+            format!("custom-reth {}", args.join(" "))
         };
 
         let shell_cmd = format!(

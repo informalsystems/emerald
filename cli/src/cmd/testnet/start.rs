@@ -18,7 +18,7 @@ type PrivateKey<C> = <<C as Context>::SigningScheme as SigningScheme>::PrivateKe
 
 #[derive(Parser, Debug, Clone, PartialEq)]
 pub struct TestnetStartCmd {
-    /// Number of node pairs to create
+    /// Number of node pairs to create (max 20)
     #[clap(short, long, default_value = "3")]
     pub nodes: usize,
 
@@ -35,6 +35,11 @@ impl TestnetStartCmd {
         N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
         PrivateKey<N::Context>: serde::de::DeserializeOwned,
     {
+        // Validate node count
+        if self.nodes == 0 || self.nodes > 20 {
+            return Err(eyre!("Number of nodes must be between 1 and 20 (got {})", self.nodes));
+        }
+
         println!("🚀 Initializing testnet with {} nodes...\n", self.nodes);
 
         // 1. Check if custom-reth is available

@@ -32,7 +32,8 @@ sync: clean build
 
 build:
 	forge build
-	cargo build --release
+	cargo build
+	cd custom-reth && cargo build
 
 stop:
 	docker compose down

@@ -26,6 +26,10 @@ pub struct TestnetStartCmd {
     /// Supports both hex format (0x...) and JSON format from init command
     #[clap(long = "node-keys")]
     pub node_keys: Vec<String>,
+
+    /// Use 'cargo run --bin ...' instead of checking for built binaries
+    #[clap(long)]
+    pub cargo: bool,
 }
 
 impl TestnetStartCmd {
@@ -68,7 +72,7 @@ impl TestnetStartCmd {
 
         // 4. Generate genesis file
         println!("\n⚙️  Generating genesis file...");
-        self.generate_genesis()?;
+        self.generate_genesis(home_dir)?;
         println!("✓ Genesis file created");
 
         // 5. Spawn Reth processes
@@ -239,7 +243,9 @@ min_block_time = "500ms"
         Ok(())
     }
 
-    fn generate_genesis(&self) -> Result<()> {
+    fn generate_genesis(&self, home_dir: &Path) -> Result<()> {
+        let pubkeys_file = home_dir.join("validator_public_keys.txt");
+
         let output = Command::new("cargo")
             .args([
                 "run",
@@ -248,7 +254,9 @@ min_block_time = "500ms"
                 "--",
                 "genesis",
                 "--public-keys-file",
-                "./nodes/validator_public_keys.txt",
+            ])
+            .arg(&pubkeys_file)
+            .args([
                 "--poa-owner-address",
                 "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
             ])
@@ -270,7 +278,7 @@ min_block_time = "500ms"
         for i in 0..self.nodes {
             let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
             print!("  Starting Reth node {i}... ");
-            let process = reth_node.spawn()?;
+            let process = reth_node.spawn(self.cargo)?;
             println!("✓ (PID: {})", process.pid);
             processes.push(process);
 
@@ -327,7 +335,7 @@ min_block_time = "500ms"
 
         for i in 0..self.nodes {
             print!("  Starting Emerald node {i}... ");
-            let process = self.spawn_emerald_node(i, home_dir)?;
+            let process = self.spawn_emerald_node(i, home_dir, self.cargo)?;
             println!("✓ (PID: {})", process.pid);
             processes.push(process);
 
@@ -338,7 +346,7 @@ min_block_time = "500ms"
         Ok(processes)
     }
 
-    fn spawn_emerald_node(&self, node_id: usize, home_dir: &Path) -> Result<EmeraldProcess> {
+    fn spawn_emerald_node(&self, node_id: usize, home_dir: &Path, use_cargo: bool) -> Result<EmeraldProcess> {
         let node_home = home_dir.join(node_id.to_string());
         let config_file = node_home.join("config").join("emerald.toml");
 
@@ -353,10 +361,35 @@ min_block_time = "500ms"
         // 1. Runs in background with setsid (new session)
         // 2. Captures the actual process PID
         // 3. Writes PID to file
+        let cmd = if use_cargo {
+            format!(
+                "cargo run --bin emerald -q -- start --home {} --config {} --log-level info",
+                node_home.display(),
+                config_file.display()
+            )
+        } else {
+            // Check for built binary first, then fallback to PATH
+            let debug_binary = std::path::Path::new("./target/debug/emerald");
+            if debug_binary.exists() {
+                format!(
+                    "{} start --home {} --config {} --log-level info",
+                    debug_binary.display(),
+                    node_home.display(),
+                    config_file.display()
+                )
+            } else {
+                // Try PATH - will fail at spawn time if not found
+                format!(
+                    "emerald start --home {} --config {} --log-level info",
+                    node_home.display(),
+                    config_file.display()
+                )
+            }
+        };
+
         let shell_cmd = format!(
-            "setsid cargo run --bin emerald -q -- start --home {} --config {} --log-level info > {} 2>&1 & echo $! > {}",
-            node_home.display(),
-            config_file.display(),
+            "setsid {} > {} 2>&1 & echo $! > {}",
+            cmd,
             log_file_path.display(),
             pid_file.display()
         );

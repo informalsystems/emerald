@@ -2,7 +2,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::time::Duration;
 
 use clap::Parser;
@@ -14,7 +14,11 @@ use super::reth::{self, RethProcess};
 use super::types::RethNode;
 
 #[derive(Parser, Debug, Clone, PartialEq)]
-pub struct TestnetAddNodeCmd {}
+pub struct TestnetAddNodeCmd {
+    /// Use 'cargo run --bin ...' instead of checking for built binaries
+    #[clap(long)]
+    pub cargo: bool,
+}
 
 impl TestnetAddNodeCmd {
     /// Execute the add-node command
@@ -294,7 +298,7 @@ el_node_type = "archive"
     fn spawn_reth_node(&self, home_dir: &Path, node_id: usize) -> Result<RethProcess> {
         let assets_dir = PathBuf::from("./assets");
         let reth_node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir);
-        reth_node.spawn()
+        reth_node.spawn(self.cargo)
     }
 
     fn connect_to_peers(&self, home_dir: &Path, node_id: usize) -> Result<()> {
@@ -342,41 +346,59 @@ el_node_type = "archive"
         fs::create_dir_all(&log_dir)?;
 
         let log_file_path = log_dir.join("emerald.log");
-        let log_file = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_file_path)?;
+        let pid_file = node_home.join("emerald.pid");
 
         // For non-validator nodes, we don't pass a priv_validator_key.json
         // Emerald should handle this gracefully and run as a non-validator
-        let child = Command::new("cargo")
-            .args([
-                "run",
-                "--bin",
-                "emerald",
-                "-q",
-                "--",
-                "start",
-                "--home",
-            ])
-            .arg(&node_home)
-            .arg("--config")
-            .arg(&config_file)
-            .arg("--log-level")
-            .arg("info")
-            .stdout(Stdio::from(log_file.try_clone()?))
-            .stderr(Stdio::from(log_file))
+        let cmd = if self.cargo {
+            format!(
+                "cargo run --bin emerald -q -- start --home {} --config {} --log-level info",
+                node_home.display(),
+                config_file.display()
+            )
+        } else {
+            // Check for built binary first, then fallback to PATH
+            let debug_binary = std::path::Path::new("./target/debug/emerald");
+            if debug_binary.exists() {
+                format!(
+                    "{} start --home {} --config {} --log-level info",
+                    debug_binary.display(),
+                    node_home.display(),
+                    config_file.display()
+                )
+            } else {
+                // Try PATH - will fail at spawn time if not found
+                format!(
+                    "emerald start --home {} --config {} --log-level info",
+                    node_home.display(),
+                    config_file.display()
+                )
+            }
+        };
+
+        let shell_cmd = format!(
+            "setsid {} > {} 2>&1 & echo $! > {}",
+            cmd,
+            log_file_path.display(),
+            pid_file.display()
+        );
+
+        Command::new("sh")
+            .arg("-c")
+            .arg(&shell_cmd)
             .spawn()
             .context("Failed to spawn emerald process")?;
 
-        let pid = child.id();
+        // Wait a moment for PID file to be written
+        std::thread::sleep(Duration::from_millis(100));
 
-        // Write PID to file
-        let pid_file = node_home.join("emerald.pid");
-        fs::write(&pid_file, pid.to_string())?;
+        // Read PID from file
+        let pid_str = fs::read_to_string(&pid_file)
+            .context("Failed to read PID file")?;
+        let pid = pid_str.trim().parse::<u32>()
+            .context("Failed to parse PID")?;
 
         Ok(EmeraldProcess {
-            child,
             pid,
             log_file: log_file_path,
         })
@@ -385,7 +407,6 @@ el_node_type = "archive"
 
 #[allow(dead_code)]
 struct EmeraldProcess {
-    child: std::process::Child,
     pid: u32,
     log_file: PathBuf,
 }

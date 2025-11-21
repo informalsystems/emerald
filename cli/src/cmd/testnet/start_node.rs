@@ -2,7 +2,8 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
+use std::time::Duration;
 
 use clap::Parser;
 use color_eyre::eyre::{eyre, Context as _};
@@ -15,6 +16,10 @@ use super::types::RethNode;
 pub struct TestnetStartNodeCmd {
     /// Node ID to start
     pub node_id: usize,
+
+    /// Use 'cargo run --bin ...' instead of checking for built binaries
+    #[clap(long)]
+    pub cargo: bool,
 }
 
 impl TestnetStartNodeCmd {
@@ -46,7 +51,7 @@ impl TestnetStartNodeCmd {
         println!("\n🔗 Starting Reth execution client...");
         let assets_dir = PathBuf::from("./assets");
         let reth_node = RethNode::new(self.node_id, home_dir.to_path_buf(), assets_dir);
-        let reth_process = reth_node.spawn()?;
+        let reth_process = reth_node.spawn(self.cargo)?;
         println!("✓ Reth node started (PID: {})", reth_process.pid);
 
         // Wait for Reth to be ready
@@ -76,39 +81,57 @@ impl TestnetStartNodeCmd {
         fs::create_dir_all(&log_dir)?;
 
         let log_file_path = log_dir.join("emerald.log");
-        let log_file = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_file_path)?;
+        let pid_file = node_home.join("emerald.pid");
 
-        let child = Command::new("cargo")
-            .args([
-                "run",
-                "--bin",
-                "emerald",
-                "-q",
-                "--",
-                "start",
-                "--home",
-            ])
-            .arg(&node_home)
-            .arg("--config")
-            .arg(&config_file)
-            .arg("--log-level")
-            .arg("info")
-            .stdout(Stdio::from(log_file.try_clone()?))
-            .stderr(Stdio::from(log_file))
+        let cmd = if self.cargo {
+            format!(
+                "cargo run --bin emerald -q -- start --home {} --config {} --log-level info",
+                node_home.display(),
+                config_file.display()
+            )
+        } else {
+            // Check for built binary first, then fallback to PATH
+            let debug_binary = std::path::Path::new("./target/debug/emerald");
+            if debug_binary.exists() {
+                format!(
+                    "{} start --home {} --config {} --log-level info",
+                    debug_binary.display(),
+                    node_home.display(),
+                    config_file.display()
+                )
+            } else {
+                // Try PATH - will fail at spawn time if not found
+                format!(
+                    "emerald start --home {} --config {} --log-level info",
+                    node_home.display(),
+                    config_file.display()
+                )
+            }
+        };
+
+        let shell_cmd = format!(
+            "setsid {} > {} 2>&1 & echo $! > {}",
+            cmd,
+            log_file_path.display(),
+            pid_file.display()
+        );
+
+        Command::new("sh")
+            .arg("-c")
+            .arg(&shell_cmd)
             .spawn()
             .context("Failed to spawn emerald process")?;
 
-        let pid = child.id();
+        // Wait a moment for PID file to be written
+        std::thread::sleep(Duration::from_millis(100));
 
-        // Write PID to file
-        let pid_file = node_home.join("emerald.pid");
-        fs::write(&pid_file, pid.to_string())?;
+        // Read PID from file
+        let pid_str = fs::read_to_string(&pid_file)
+            .context("Failed to read PID file")?;
+        let pid = pid_str.trim().parse::<u32>()
+            .context("Failed to parse PID")?;
 
         Ok(EmeraldProcess {
-            child,
             pid,
             log_file: log_file_path,
         })
@@ -117,7 +140,6 @@ impl TestnetStartNodeCmd {
 
 #[allow(dead_code)]
 struct EmeraldProcess {
-    child: std::process::Child,
     pid: u32,
     log_file: PathBuf,
 }

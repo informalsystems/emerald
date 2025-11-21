@@ -2,7 +2,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use clap::Parser;
 use color_eyre::eyre::{eyre, Context as _};
@@ -26,10 +26,6 @@ pub struct TestnetStartCmd {
     /// Supports both hex format (0x...) and JSON format from init command
     #[clap(long = "node-keys")]
     pub node_keys: Vec<String>,
-
-    /// Don't wait for Ctrl+C, detach processes and exit immediately
-    #[clap(long)]
-    pub no_wait: bool,
 }
 
 impl TestnetStartCmd {
@@ -100,20 +96,20 @@ impl TestnetStartCmd {
         println!("  Reth processes: {} running", reth_processes.len());
         println!("  Emerald processes: {} running", emerald_processes.len());
         println!("\n📁 Logs:");
-        println!("  Reth: {}/{{0..{}}}/logs/reth.log", home_dir.display(), self.nodes - 1);
-        println!("  Emerald: {}/{{0..{}}}/logs/emerald.log", home_dir.display(), self.nodes - 1);
+        println!(
+            "  Reth: {}/{{0..{}}}/logs/reth.log",
+            home_dir.display(),
+            self.nodes - 1
+        );
+        println!(
+            "  Emerald: {}/{{0..{}}}/logs/emerald.log",
+            home_dir.display(),
+            self.nodes - 1
+        );
 
-        if self.no_wait {
-            println!("\n💡 Tip: Use 'emerald testnet status' to check status");
-            println!("    Use 'emerald testnet stop' to stop all nodes");
-        } else {
-            println!("\n💡 Tip: Use 'emerald testnet stop' to stop all nodes");
-            println!("    Or press Ctrl+C to exit (note: may leave processes running)");
-
-            // Keep the command running
-            println!("\nTestnet is running. Press Ctrl+C to exit...");
-            std::thread::park();
-        }
+        println!("\n💡 Tip: Use 'emerald testnet status' to check status");
+        println!("    Use 'emerald testnet stop-node <id>' to stop a specific node");
+        println!("    Use 'emerald testnet stop' to stop all nodes");
 
         Ok(())
     }
@@ -129,8 +125,8 @@ impl TestnetStartCmd {
         PrivateKey<N::Context>: serde::de::DeserializeOwned,
     {
         use super::generate::{generate_testnet, TestnetConfig};
-        use malachitebft_config::*;
         use core::str::FromStr;
+        use malachitebft_config::*;
 
         // Create testnet config directory
         let testnet_dir = PathBuf::from(".testnet");
@@ -142,7 +138,10 @@ impl TestnetStartCmd {
         let mut monikers = Vec::new();
         for i in 0..self.nodes {
             // Note: emerald config is now at nodes/{N}/config/emerald.toml
-            let config_path = home_dir.join(i.to_string()).join("config").join("emerald.toml");
+            let config_path = home_dir
+                .join(i.to_string())
+                .join("config")
+                .join("emerald.toml");
             config_paths.push(config_path);
             monikers.push(format!("node-{i}"));
         }
@@ -168,9 +167,9 @@ impl TestnetStartCmd {
             false, // enable_discovery
             BootstrapProtocol::from_str("full").unwrap(),
             Selector::from_str("random").unwrap(),
-            20,    // num_outbound_peers
-            20,    // num_inbound_peers
-            5000,  // ephemeral_connection_timeout_ms
+            20,   // num_outbound_peers
+            20,   // num_inbound_peers
+            5000, // ephemeral_connection_timeout_ms
             TransportProtocol::from_str("tcp").unwrap(),
             logging,
         )
@@ -193,9 +192,10 @@ impl TestnetStartCmd {
 execution_authrpc_address = "http://localhost:{}"
 engine_authrpc_address = "http://localhost:{}"
 jwt_token_path = "./assets/jwtsecret"
-sync_timeout_ms = 10000
+sync_timeout_ms = 100000
 sync_initial_delay_ms = 100
 el_node_type = "archive"
+min_block_time = "500ms"
 "#,
                 i,
                 ports.http,    // execution RPC port
@@ -347,39 +347,36 @@ el_node_type = "archive"
         fs::create_dir_all(&log_dir)?;
 
         let log_file_path = log_dir.join("emerald.log");
-        let log_file = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_file_path)?;
+        let pid_file = node_home.join("emerald.pid");
 
-        let child = Command::new("cargo")
-            .args([
-                "run",
-                "--bin",
-                "emerald",
-                "-q",
-                "--",
-                "start",
-                "--home",
-            ])
-            .arg(&node_home)
-            .arg("--config")
-            .arg(&config_file)
-            .arg("--log-level")
-            .arg("info")
-            .stdout(Stdio::from(log_file.try_clone()?))
-            .stderr(Stdio::from(log_file))
+        // Create a shell command that:
+        // 1. Runs in background with setsid (new session)
+        // 2. Captures the actual process PID
+        // 3. Writes PID to file
+        let shell_cmd = format!(
+            "setsid cargo run --bin emerald -q -- start --home {} --config {} --log-level info > {} 2>&1 & echo $! > {}",
+            node_home.display(),
+            config_file.display(),
+            log_file_path.display(),
+            pid_file.display()
+        );
+
+        Command::new("sh")
+            .arg("-c")
+            .arg(&shell_cmd)
             .spawn()
             .context("Failed to spawn emerald process")?;
 
-        let pid = child.id();
+        // Wait a moment for PID file to be written
+        std::thread::sleep(core::time::Duration::from_millis(100));
 
-        // Write PID to file
-        let pid_file = node_home.join("emerald.pid");
-        fs::write(&pid_file, pid.to_string())?;
+        // Read PID from file
+        let pid_str = fs::read_to_string(&pid_file)
+            .context("Failed to read PID file")?;
+        let pid = pid_str.trim().parse::<u32>()
+            .context("Failed to parse PID")?;
 
         Ok(EmeraldProcess {
-            child,
             pid,
             log_file: log_file_path,
         })
@@ -388,7 +385,6 @@ el_node_type = "archive"
 
 #[allow(dead_code)]
 struct EmeraldProcess {
-    child: std::process::Child,
     pid: u32,
     log_file: PathBuf,
 }

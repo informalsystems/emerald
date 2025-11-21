@@ -2,7 +2,7 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::Command;
 
 use color_eyre::eyre::{eyre, Context as _};
 use color_eyre::Result;
@@ -66,11 +66,6 @@ impl RethNode {
         fs::create_dir_all(&log_dir)?;
 
         let log_file_path = log_dir.join("reth.log");
-        let log_file = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_file_path)
-            .context("Failed to open reth log file")?;
 
         let args = self.build_args();
 
@@ -91,25 +86,36 @@ impl RethNode {
         ];
         cargo_args.extend(args);
 
-        let child = Command::new("cargo")
-            .args(&cargo_args)
-            .stdout(Stdio::from(log_file.try_clone()?))
-            .stderr(Stdio::from(log_file))
+        let pid_file = self.home_dir.join(self.node_id.to_string()).join("reth.pid");
+
+        // Create a shell command that:
+        // 1. Runs in background with setsid (new session)
+        // 2. Captures the actual process PID
+        // 3. Writes PID to file
+        let cargo_cmd = format!("cargo {}", cargo_args.join(" "));
+        let shell_cmd = format!(
+            "setsid {} > {} 2>&1 & echo $! > {}",
+            cargo_cmd,
+            log_file_path.display(),
+            pid_file.display()
+        );
+
+        Command::new("sh")
+            .arg("-c")
+            .arg(&shell_cmd)
             .spawn()
             .context("Failed to spawn custom-reth process via cargo")?;
 
-        let pid = child.id();
-        let handle = ProcessHandle {
-            pid,
-            name: format!("reth-{}", self.node_id),
-        };
+        // Wait a moment for PID file to be written
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
-        // Write PID to file
-        let pid_file = self.home_dir.join(self.node_id.to_string()).join("reth.pid");
-        handle.write_to_file(&pid_file)?;
+        // Read PID from file
+        let pid_str = fs::read_to_string(&pid_file)
+            .context("Failed to read PID file")?;
+        let pid = pid_str.trim().parse::<u32>()
+            .context("Failed to parse PID")?;
 
         Ok(RethProcess {
-            child,
             pid,
             log_file: log_file_path,
         })
@@ -188,7 +194,6 @@ impl RethNode {
 
 /// Running Reth process
 pub struct RethProcess {
-    pub child: Child,
     pub pid: u32,
     pub log_file: PathBuf,
 }

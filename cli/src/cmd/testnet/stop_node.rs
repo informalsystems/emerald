@@ -2,13 +2,11 @@
 
 use std::fs;
 use std::path::Path;
-use std::time::Duration;
+use std::process::Command;
 
 use clap::Parser;
 use color_eyre::eyre::eyre;
 use color_eyre::Result;
-
-use super::types::ProcessHandle;
 
 #[derive(Parser, Debug, Clone, PartialEq)]
 pub struct TestnetStopNodeCmd {
@@ -35,25 +33,18 @@ impl TestnetStopNodeCmd {
             match fs::read_to_string(&reth_pid_file) {
                 Ok(pid_str) => {
                     if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                        let handle = ProcessHandle {
-                            pid,
-                            name: format!("reth-{}", self.node_id),
-                        };
-
-                        if handle.is_running() {
-                            print!("  Stopping Reth process (PID: {})... ", pid);
-                            if handle.stop(Duration::from_secs(10)).is_ok() {
+                        print!("  Stopping Reth process (PID: {})... ", pid);
+                        match Command::new("kill").args(["-9", &pid.to_string()]).output() {
+                            Ok(output) if output.status.success() => {
                                 println!("✓");
                                 stopped_count += 1;
-                                // Remove PID file
-                                let _ = fs::remove_file(&reth_pid_file);
-                            } else {
+                            }
+                            _ => {
                                 println!("✗ (failed to stop)");
                             }
-                        } else {
-                            println!("  Reth process not running (cleaning up PID file)");
-                            let _ = fs::remove_file(&reth_pid_file);
                         }
+                        // Always remove PID file regardless
+                        let _ = fs::remove_file(&reth_pid_file);
                     }
                 }
                 Err(_) => println!("  No Reth PID file found"),
@@ -68,25 +59,18 @@ impl TestnetStopNodeCmd {
             match fs::read_to_string(&emerald_pid_file) {
                 Ok(pid_str) => {
                     if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                        let handle = ProcessHandle {
-                            pid,
-                            name: format!("emerald-{}", self.node_id),
-                        };
-
-                        if handle.is_running() {
-                            print!("  Stopping Emerald process (PID: {})... ", pid);
-                            if handle.stop(Duration::from_secs(10)).is_ok() {
+                        print!("  Stopping Emerald process (PID: {})... ", pid);
+                        match Command::new("kill").args(["-9", &pid.to_string()]).output() {
+                            Ok(output) if output.status.success() => {
                                 println!("✓");
                                 stopped_count += 1;
-                                // Remove PID file
-                                let _ = fs::remove_file(&emerald_pid_file);
-                            } else {
+                            }
+                            _ => {
                                 println!("✗ (failed to stop)");
                             }
-                        } else {
-                            println!("  Emerald process not running (cleaning up PID file)");
-                            let _ = fs::remove_file(&emerald_pid_file);
                         }
+                        // Always remove PID file regardless
+                        let _ = fs::remove_file(&emerald_pid_file);
                     }
                 }
                 Err(_) => println!("  No Emerald PID file found"),

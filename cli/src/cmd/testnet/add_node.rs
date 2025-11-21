@@ -79,7 +79,7 @@ impl TestnetAddNodeCmd {
 
         // 9. Wait for Reth node to be ready
         println!("\n⏳ Waiting for Reth node to initialize...");
-        let assets_dir = PathBuf::from("./assets");
+        let assets_dir = home_dir.join("assets");
         let reth_node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir.clone());
         reth_node.wait_for_ready(30)?;
         println!("✓ Reth node ready");
@@ -248,19 +248,24 @@ impl TestnetAddNodeCmd {
         let config_path = config_dir.join("emerald.toml");
         let ports = RethPorts::for_node(node_id);
 
+        // JWT secret is in the assets directory
+        let jwt_path = home_dir.join("assets").join("jwtsecret");
+
         // Create Emerald config for non-validator node
         let config_content = format!(
             r#"moniker = "node-{}"
 execution_authrpc_address = "http://localhost:{}"
 engine_authrpc_address = "http://localhost:{}"
-jwt_token_path = "./assets/jwtsecret"
-sync_timeout_ms = 10000
+jwt_token_path = "{}"
+sync_timeout_ms = 120000
 sync_initial_delay_ms = 100
 el_node_type = "archive"
+min_block_time = "0ms"
 "#,
             node_id,
             ports.http,    // execution RPC port
             ports.authrpc, // engine auth RPC port
+            jwt_path.display(),
         );
 
         fs::write(&config_path, config_content)
@@ -296,13 +301,13 @@ el_node_type = "archive"
     }
 
     fn spawn_reth_node(&self, home_dir: &Path, node_id: usize) -> Result<RethProcess> {
-        let assets_dir = PathBuf::from("./assets");
+        let assets_dir = home_dir.join("assets");
         let reth_node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir);
         reth_node.spawn(self.cargo)
     }
 
     fn connect_to_peers(&self, home_dir: &Path, node_id: usize) -> Result<()> {
-        let assets_dir = PathBuf::from("./assets");
+        let assets_dir = home_dir.join("assets");
         let new_node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir.clone());
 
         // Find all existing nodes and get their enodes

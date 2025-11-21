@@ -12,10 +12,21 @@ use super::types::{ProcessHandle, RethNode};
 
 /// Check if custom-reth is available and return version
 pub fn check_installation() -> Result<String> {
-    let output = Command::new("cargo")
-        .args(["run", "--manifest-path", "custom-reth/Cargo.toml", "--bin", "custom-reth", "--", "--version"])
-        .output()
-        .context("Failed to execute 'cargo run --bin custom-reth -- --version'. Is custom-reth available?")?;
+    // Check for built binary first, then try PATH
+    let debug_binary = std::path::Path::new("./custom-reth/target/debug/custom-reth");
+
+    let output = if debug_binary.exists() {
+        Command::new(debug_binary)
+            .arg("--version")
+            .output()
+            .context("Failed to execute custom-reth binary")?
+    } else {
+        // Try custom-reth in PATH
+        Command::new("custom-reth")
+            .arg("--version")
+            .output()
+            .context("Failed to execute 'custom-reth'. Not found in ./custom-reth/target/debug/ or PATH")?
+    };
 
     if !output.status.success() {
         return Err(eyre!("custom-reth command failed"));

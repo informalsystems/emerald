@@ -60,7 +60,12 @@ impl TestnetStartCmd {
         self.generate_testnet_config(node, home_dir, logging)?;
         println!("✓ Configuration generated");
 
-        // 2b. Generate Emerald configs
+        // 2b. Set up assets directory
+        println!("\n📦 Setting up assets directory...");
+        self.setup_assets_directory(home_dir)?;
+        println!("✓ Assets directory set up");
+
+        // 2c. Generate Emerald configs
         println!("\n⚙️  Generating Emerald configs...");
         self.generate_emerald_configs(home_dir)?;
         println!("✓ Emerald configs generated");
@@ -182,6 +187,30 @@ impl TestnetStartCmd {
         .map_err(|e| eyre!("Failed to generate testnet configuration: {:?}", e))
     }
 
+    fn setup_assets_directory(&self, home_dir: &Path) -> Result<()> {
+        let assets_dir = home_dir.join("assets");
+        fs::create_dir_all(&assets_dir)?;
+
+        // Copy or create JWT secret
+        let jwt_source = PathBuf::from("./assets/jwtsecret");
+        let jwt_dest = assets_dir.join("jwtsecret");
+
+        if jwt_source.exists() {
+            // Copy existing jwtsecret from project
+            fs::copy(&jwt_source, &jwt_dest)
+                .context("Failed to copy jwtsecret")?;
+        } else {
+            // Generate a new JWT secret (32 random hex bytes)
+            use std::io::Write;
+            let secret: [u8; 32] = rand::random();
+            let hex_secret = hex::encode(secret);
+            let mut file = fs::File::create(&jwt_dest)?;
+            file.write_all(hex_secret.as_bytes())?;
+        }
+
+        Ok(())
+    }
+
     fn generate_emerald_configs(&self, home_dir: &Path) -> Result<()> {
         use super::types::RethPorts;
 
@@ -192,13 +221,16 @@ impl TestnetStartCmd {
             let config_path = config_dir.join("emerald.toml");
             let ports = RethPorts::for_node(i);
 
+            // JWT secret is in the assets directory
+            let jwt_path = home_dir.join("assets").join("jwtsecret");
+
             // Create Emerald config
             let config_content = format!(
                 r#"moniker = "node-{}"
 execution_authrpc_address = "http://localhost:{}"
 engine_authrpc_address = "http://localhost:{}"
-jwt_token_path = "./assets/jwtsecret"
-sync_timeout_ms = 100000
+jwt_token_path = "{}"
+sync_timeout_ms = 120000
 sync_initial_delay_ms = 100
 el_node_type = "archive"
 min_block_time = "500ms"
@@ -206,6 +238,7 @@ min_block_time = "500ms"
                 i,
                 ports.http,    // execution RPC port
                 ports.authrpc, // engine auth RPC port
+                jwt_path.display(),
             );
 
             fs::write(&config_path, config_content)
@@ -224,11 +257,27 @@ min_block_time = "500ms"
                 .join("config")
                 .join("priv_validator_key.json");
 
-            let output = Command::new("cargo")
-                .args(["run", "--bin", "emerald", "--", "show-pubkey"])
-                .arg(&key_file)
-                .output()
-                .context("Failed to extract public key")?;
+            let output = if self.cargo {
+                Command::new("cargo")
+                    .args(["run", "--bin", "emerald", "--", "show-pubkey"])
+                    .arg(&key_file)
+                    .output()
+                    .context("Failed to extract public key")?
+            } else {
+                // Check for built binary first, then fallback to PATH
+                let debug_binary = std::path::Path::new("./target/debug/emerald");
+                let cmd = if debug_binary.exists() {
+                    debug_binary.to_str().unwrap()
+                } else {
+                    "emerald"
+                };
+
+                Command::new(cmd)
+                    .args(["show-pubkey"])
+                    .arg(&key_file)
+                    .output()
+                    .context("Failed to extract public key")?
+            };
 
             if !output.status.success() {
                 return Err(eyre!("Failed to extract public key for node {}", i));
@@ -248,22 +297,64 @@ min_block_time = "500ms"
     fn generate_genesis(&self, home_dir: &Path) -> Result<()> {
         let pubkeys_file = home_dir.join("validator_public_keys.txt");
 
-        let output = Command::new("cargo")
-            .args([
-                "run",
-                "--bin",
-                "emerald-utils",
-                "--",
-                "genesis",
-                "--public-keys-file",
-            ])
-            .arg(&pubkeys_file)
-            .args([
-                "--poa-owner-address",
-                "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-            ])
-            .output()
-            .context("Failed to generate genesis file")?;
+        // Create assets directory inside home_dir
+        let assets_dir = home_dir.join("assets");
+        fs::create_dir_all(&assets_dir)?;
+
+        let genesis_output = assets_dir.join("genesis.json");
+        let emerald_genesis_output = assets_dir.join("emerald_genesis.json");
+
+        let output = if self.cargo {
+            Command::new("cargo")
+                .args([
+                    "run",
+                    "--bin",
+                    "emerald-utils",
+                    "--",
+                    "genesis",
+                    "--public-keys-file",
+                ])
+                .arg(&pubkeys_file)
+                .args([
+                    "--poa-owner-address",
+                    "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+                    "--evm-genesis-output",
+                ])
+                .arg(&genesis_output)
+                .args([
+                    "--emerald-genesis-output",
+                ])
+                .arg(&emerald_genesis_output)
+                .output()
+                .context("Failed to generate genesis file")?
+        } else {
+            // Check for built binary first, then fallback to PATH
+            let debug_binary = std::path::Path::new("./target/debug/emerald-utils");
+            let cmd = if debug_binary.exists() {
+                debug_binary.to_str().unwrap()
+            } else {
+                "emerald-utils"
+            };
+
+            Command::new(cmd)
+                .args([
+                    "genesis",
+                    "--public-keys-file",
+                ])
+                .arg(&pubkeys_file)
+                .args([
+                    "--poa-owner-address",
+                    "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+                    "--evm-genesis-output",
+                ])
+                .arg(&genesis_output)
+                .args([
+                    "--emerald-genesis-output",
+                ])
+                .arg(&emerald_genesis_output)
+                .output()
+                .context("Failed to generate genesis file")?
+        };
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -274,7 +365,7 @@ min_block_time = "500ms"
     }
 
     fn spawn_reth_nodes(&self, home_dir: &Path) -> Result<Vec<RethProcess>> {
-        let assets_dir = PathBuf::from("./assets");
+        let assets_dir = home_dir.join("assets");
         let mut processes = Vec::new();
 
         for i in 0..self.nodes {
@@ -292,7 +383,7 @@ min_block_time = "500ms"
     }
 
     fn wait_for_reth_nodes(&self, home_dir: &Path) -> Result<()> {
-        let assets_dir = PathBuf::from("./assets");
+        let assets_dir = home_dir.join("assets");
 
         for i in 0..self.nodes {
             let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
@@ -305,7 +396,7 @@ min_block_time = "500ms"
     }
 
     fn connect_reth_peers(&self, home_dir: &Path) -> Result<()> {
-        let assets_dir = PathBuf::from("./assets");
+        let assets_dir = home_dir.join("assets");
         let mut enodes = Vec::new();
 
         // Get all enodes

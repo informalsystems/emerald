@@ -49,7 +49,7 @@ impl TestnetStartNodeCmd {
 
         // Start Reth process
         println!("\n🔗 Starting Reth execution client...");
-        let assets_dir = PathBuf::from("./assets");
+        let assets_dir = home_dir.join("assets");
         let reth_node = RethNode::new(self.node_id, home_dir.to_path_buf(), assets_dir);
         let reth_process = reth_node.spawn(self.cargo)?;
         println!("✓ Reth node started (PID: {})", reth_process.pid);

@@ -59,6 +59,11 @@ impl TestnetStartNodeCmd {
         reth_node.wait_for_ready(30)?;
         println!("✓ Reth node ready");
 
+        // Connect to existing peers
+        println!("\n🔗 Connecting to existing peers...");
+        self.connect_to_peers(home_dir, self.node_id)?;
+        println!("✓ Connected to peers");
+
         // Start Emerald process
         println!("\n💎 Starting Emerald consensus node...");
         let emerald_process = self.spawn_emerald_node(home_dir, self.node_id)?;
@@ -68,6 +73,42 @@ impl TestnetStartNodeCmd {
         println!("\n📁 Logs:");
         println!("  Reth: {}/{}/logs/reth.log", home_dir.display(), self.node_id);
         println!("  Emerald: {}/{}/logs/emerald.log", home_dir.display(), self.node_id);
+
+        Ok(())
+    }
+
+    fn connect_to_peers(&self, home_dir: &Path, node_id: usize) -> Result<()> {
+        let assets_dir = home_dir.join("assets");
+        let node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir.clone());
+
+        // Find all existing nodes and get their enodes
+        let mut connected = 0;
+        for entry in fs::read_dir(home_dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_dir() {
+                if let Some(name) = entry.file_name().to_str() {
+                    if let Ok(id) = name.parse::<usize>() {
+                        if id != node_id {
+                            let peer_node = RethNode::new(id, home_dir.to_path_buf(), assets_dir.clone());
+                            // Try to get enode and connect
+                            if let Ok(enode) = peer_node.get_enode() {
+                                print!("  Connecting to node {}... ", id);
+                                if node.add_peer(&enode).is_ok() {
+                                    println!("✓");
+                                    connected += 1;
+                                } else {
+                                    println!("✗ (skipped)");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if connected == 0 {
+            println!("  ⚠️  No existing peers found to connect to");
+        }
 
         Ok(())
     }

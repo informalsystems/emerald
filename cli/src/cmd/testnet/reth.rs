@@ -129,7 +129,7 @@ impl RethNode {
             .context("Failed to spawn custom-reth process")?;
 
         // Wait a moment for PID file to be written
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(core::time::Duration::from_millis(100));
 
         // Read PID from file
         let pid_str = fs::read_to_string(&pid_file)

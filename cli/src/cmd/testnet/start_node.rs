@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Duration;
+use core::time::Duration;
 
 use clap::Parser;
 use color_eyre::eyre::{eyre, Context as _};
@@ -92,7 +92,7 @@ impl TestnetStartNodeCmd {
                             let peer_node = RethNode::new(id, home_dir.to_path_buf(), assets_dir.clone());
                             // Try to get enode and connect
                             if let Ok(enode) = peer_node.get_enode() {
-                                print!("  Connecting to node {}... ", id);
+                                print!("  Connecting to node {id}... ");
                                 if node.add_peer(&enode).is_ok() {
                                     println!("✓");
                                     connected += 1;

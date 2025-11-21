@@ -34,7 +34,7 @@ impl TestnetStopCmd {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                     if name.parse::<usize>().is_ok() {
                         let node_id = name.parse::<usize>().unwrap();
-                        println!("Stopping node {}...", node_id);
+                        println!("Stopping node {node_id}...");
 
                         // Stop Reth process
                         let reth_pid_file = path.join("reth.pid");
@@ -42,7 +42,7 @@ impl TestnetStopCmd {
                             if let Ok(pid_str) = fs::read_to_string(&reth_pid_file) {
                                 if let Ok(pid) = pid_str.trim().parse::<u32>() {
                                     total_processes += 1;
-                                    print!("  Stopping Reth (PID: {})... ", pid);
+                                    print!("  Stopping Reth (PID: {pid})... ");
                                     match Command::new("kill").args(["-9", &pid.to_string()]).output() {
                                         Ok(output) if output.status.success() => {
                                             println!("✓");
@@ -63,7 +63,7 @@ impl TestnetStopCmd {
                             if let Ok(pid_str) = fs::read_to_string(&emerald_pid_file) {
                                 if let Ok(pid) = pid_str.trim().parse::<u32>() {
                                     total_processes += 1;
-                                    print!("  Stopping Emerald (PID: {})... ", pid);
+                                    print!("  Stopping Emerald (PID: {pid})... ");
                                     match Command::new("kill").args(["-9", &pid.to_string()]).output() {
                                         Ok(output) if output.status.success() => {
                                             println!("✓");
@@ -86,7 +86,7 @@ impl TestnetStopCmd {
         if total_processes == 0 {
             println!("⚠️  No running processes found");
         } else {
-            println!("✅ Stopped {}/{} processes", stopped_count, total_processes);
+            println!("✅ Stopped {stopped_count}/{total_processes} processes");
         }
 
         Ok(())

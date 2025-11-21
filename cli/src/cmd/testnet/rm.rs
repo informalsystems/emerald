@@ -99,7 +99,7 @@ impl TestnetRmCmd {
         }
 
         if stopped_count > 0 {
-            println!("   Stopped {} process(es)", stopped_count);
+            println!("   Stopped {stopped_count} process(es)");
         }
 
         Ok(())

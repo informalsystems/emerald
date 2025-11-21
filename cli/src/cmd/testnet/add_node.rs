@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Duration;
+use core::time::Duration;
 
 use clap::Parser;
 use color_eyre::eyre::{eyre, Context as _};
@@ -41,7 +41,7 @@ impl TestnetAddNodeCmd {
 
         // 2. Determine the next node ID
         let node_id = self.find_next_node_id(home_dir)?;
-        println!("\n📋 Next available node ID: {}", node_id);
+        println!("\n📋 Next available node ID: {node_id}");
 
         // 3. Create node directories
         println!("\n📁 Creating node directories...");
@@ -80,7 +80,7 @@ impl TestnetAddNodeCmd {
         // 9. Wait for Reth node to be ready
         println!("\n⏳ Waiting for Reth node to initialize...");
         let assets_dir = home_dir.join("assets");
-        let reth_node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir.clone());
+        let reth_node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir);
         reth_node.wait_for_ready(30)?;
         println!("✓ Reth node ready");
 
@@ -94,7 +94,7 @@ impl TestnetAddNodeCmd {
         let emerald_process = self.spawn_emerald_node(home_dir, node_id)?;
         println!("✓ Emerald node started (PID: {})", emerald_process.pid);
 
-        println!("\n✅ Non-validator node {} added successfully!", node_id);
+        println!("\n✅ Non-validator node {node_id} added successfully!");
         println!("\n📁 Logs:");
         println!("  Reth: {}/{}/logs/reth.log", home_dir.display(), node_id);
         println!("  Emerald: {}/{}/logs/emerald.log", home_dir.display(), node_id);
@@ -169,7 +169,7 @@ impl TestnetAddNodeCmd {
 
         // Generate config for non-validator node
         let config = Config {
-            moniker: format!("node-{}", node_id),
+            moniker: format!("node-{node_id}"),
             consensus: ConsensusConfig {
                 timeouts: TimeoutConfig::default(),
                 p2p: P2pConfig {
@@ -224,7 +224,7 @@ impl TestnetAddNodeCmd {
             },
             metrics: MetricsConfig {
                 enabled: true,
-                listen_addr: format!("127.0.0.1:{}", metrics_port).parse().unwrap(),
+                listen_addr: format!("127.0.0.1:{metrics_port}").parse().unwrap(),
             },
             logging: LoggingConfig::default(),
             runtime: RuntimeConfig::SingleThreaded,
@@ -269,7 +269,7 @@ min_block_time = "0ms"
         );
 
         fs::write(&config_path, config_content)
-            .context(format!("Failed to write Emerald config for node {}", node_id))?;
+            .context(format!("Failed to write Emerald config for node {node_id}"))?;
 
         Ok(())
     }
@@ -321,7 +321,7 @@ min_block_time = "0ms"
                             let existing_node = RethNode::new(id, home_dir.to_path_buf(), assets_dir.clone());
                             // Try to get enode and connect
                             if let Ok(enode) = existing_node.get_enode() {
-                                print!("  Connecting to node {}... ", id);
+                                print!("  Connecting to node {id}... ");
                                 if new_node.add_peer(&enode).is_ok() {
                                     println!("✓");
                                     connected += 1;

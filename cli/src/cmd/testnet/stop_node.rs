@@ -33,7 +33,7 @@ impl TestnetStopNodeCmd {
             match fs::read_to_string(&reth_pid_file) {
                 Ok(pid_str) => {
                     if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                        print!("  Stopping Reth process (PID: {})... ", pid);
+                        print!("  Stopping Reth process (PID: {pid})... ");
                         match Command::new("kill").args(["-9", &pid.to_string()]).output() {
                             Ok(output) if output.status.success() => {
                                 println!("✓");
@@ -59,7 +59,7 @@ impl TestnetStopNodeCmd {
             match fs::read_to_string(&emerald_pid_file) {
                 Ok(pid_str) => {
                     if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                        print!("  Stopping Emerald process (PID: {})... ", pid);
+                        print!("  Stopping Emerald process (PID: {pid})... ");
                         match Command::new("kill").args(["-9", &pid.to_string()]).output() {
                             Ok(output) if output.status.success() => {
                                 println!("✓");

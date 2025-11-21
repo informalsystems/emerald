@@ -37,9 +37,23 @@ This modular design keeps the system easy to understand, maintain, and extend wh
 
 ## Getting Started
 
+> TODO: Do we want this here or we just point to the docs directly?
+
 ### Prerequisites
 
+- [Rust toolchain](https://rust-lang.org/tools/install/) (use rustup for easiest setup)
+- [Foundry](https://getfoundry.sh/introduction/installation/) (for compiling, testing, and deploying EVM smart contracts)
+- Docker (optional, for local deployments)
+
+> TODO: are there other prerequisites? 
+
 ### Installation
+
+```bash
+git clone https://github.com/informalsystems/emerald.git
+cd emerald
+make build
+```
 
 ### Launching a Local Network
 

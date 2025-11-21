@@ -133,7 +133,7 @@ impl RethPorts {
     /// Calculate ports for a given node index
     /// Each node gets 10 consecutive ports starting from base
     pub fn for_node(node_id: usize) -> Self {
-        let base = 8545 + (node_id * 10);
+        let base = 8645 + (node_id * 30);
         Self {
             http: base as u16,            // 8545, 8555, 8565, ...
             ws: (base + 1) as u16,        // 8546, 8556, 8566, ...

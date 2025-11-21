@@ -37,7 +37,10 @@ impl TestnetStartCmd {
     {
         // Validate node count
         if self.nodes == 0 || self.nodes > 20 {
-            return Err(eyre!("Number of nodes must be between 1 and 20 (got {})", self.nodes));
+            return Err(eyre!(
+                "Number of nodes must be between 1 and 20 (got {})",
+                self.nodes
+            ));
         }
 
         println!("🚀 Initializing testnet with {} nodes...\n", self.nodes);
@@ -136,9 +139,11 @@ impl TestnetStartCmd {
         N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
         PrivateKey<N::Context>: serde::de::DeserializeOwned,
     {
-        use super::generate::{generate_testnet, TestnetConfig};
         use core::str::FromStr;
+
         use malachitebft_config::*;
+
+        use super::generate::{generate_testnet, TestnetConfig};
 
         // Create testnet config directory
         let testnet_dir = PathBuf::from(".testnet");
@@ -198,8 +203,7 @@ impl TestnetStartCmd {
 
         if jwt_source.exists() {
             // Copy existing jwtsecret from project
-            fs::copy(&jwt_source, &jwt_dest)
-                .context("Failed to copy jwtsecret")?;
+            fs::copy(&jwt_source, &jwt_dest).context("Failed to copy jwtsecret")?;
         } else {
             // Generate a new JWT secret (32 random hex bytes)
             use std::io::Write;
@@ -306,10 +310,7 @@ min_block_time = "500ms"
         };
 
         let output = Command::new(cmd)
-            .args([
-                "genesis",
-                "--public-keys-file",
-            ])
+            .args(["genesis", "--public-keys-file"])
             .arg(&pubkeys_file)
             .args([
                 "--poa-owner-address",
@@ -317,9 +318,7 @@ min_block_time = "500ms"
                 "--evm-genesis-output",
             ])
             .arg(&genesis_output)
-            .args([
-                "--emerald-genesis-output",
-            ])
+            .args(["--emerald-genesis-output"])
             .arg(&emerald_genesis_output)
             .output()
             .context("Failed to generate genesis file")?;
@@ -453,9 +452,10 @@ min_block_time = "500ms"
         std::thread::sleep(core::time::Duration::from_millis(100));
 
         // Read PID from file
-        let pid_str = fs::read_to_string(&pid_file)
-            .context("Failed to read PID file")?;
-        let pid = pid_str.trim().parse::<u32>()
+        let pid_str = fs::read_to_string(&pid_file).context("Failed to read PID file")?;
+        let pid = pid_str
+            .trim()
+            .parse::<u32>()
             .context("Failed to parse PID")?;
 
         Ok(EmeraldProcess {

@@ -101,12 +101,20 @@ impl RpcClient {
 
             // Add as trusted peer
             let _ = rpc
-                .rpc_request::<serde_json::Value>("admin_addTrustedPeer", json!([enode.clone()]), Duration::from_secs(2))
+                .rpc_request::<serde_json::Value>(
+                    "admin_addTrustedPeer",
+                    json!([enode.clone()]),
+                    Duration::from_secs(2),
+                )
                 .await; // Ignore errors
 
             // Add as regular peer
             let _ = rpc
-                .rpc_request::<serde_json::Value>("admin_addPeer", json!([enode]), Duration::from_secs(2))
+                .rpc_request::<serde_json::Value>(
+                    "admin_addPeer",
+                    json!([enode]),
+                    Duration::from_secs(2),
+                )
                 .await; // Ignore errors
 
             Ok(())

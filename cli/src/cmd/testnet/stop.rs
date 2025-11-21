@@ -16,7 +16,10 @@ impl TestnetStopCmd {
         println!("🛑 Stopping all testnet nodes...\n");
 
         if !home_dir.exists() {
-            println!("⚠️  Testnet directory does not exist at {}", home_dir.display());
+            println!(
+                "⚠️  Testnet directory does not exist at {}",
+                home_dir.display()
+            );
             return Ok(());
         }
 
@@ -43,7 +46,10 @@ impl TestnetStopCmd {
                                 if let Ok(pid) = pid_str.trim().parse::<u32>() {
                                     total_processes += 1;
                                     print!("  Stopping Reth (PID: {pid})... ");
-                                    match Command::new("kill").args(["-9", &pid.to_string()]).output() {
+                                    match Command::new("kill")
+                                        .args(["-9", &pid.to_string()])
+                                        .output()
+                                    {
                                         Ok(output) if output.status.success() => {
                                             println!("✓");
                                             stopped_count += 1;
@@ -64,7 +70,10 @@ impl TestnetStopCmd {
                                 if let Ok(pid) = pid_str.trim().parse::<u32>() {
                                     total_processes += 1;
                                     print!("  Stopping Emerald (PID: {pid})... ");
-                                    match Command::new("kill").args(["-9", &pid.to_string()]).output() {
+                                    match Command::new("kill")
+                                        .args(["-9", &pid.to_string()])
+                                        .output()
+                                    {
                                         Ok(output) if output.status.success() => {
                                             println!("✓");
                                             stopped_count += 1;

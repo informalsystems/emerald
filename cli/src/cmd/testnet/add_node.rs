@@ -1,17 +1,17 @@
 //! Add a non-validator node to an existing testnet
 
+use core::time::Duration;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use core::time::Duration;
 
 use clap::Parser;
 use color_eyre::eyre::{eyre, Context as _};
 use color_eyre::Result;
 
-use crate::config::*;
 use super::reth::{self, RethProcess};
 use super::types::RethNode;
+use crate::config::*;
 
 #[derive(Parser, Debug, Clone, PartialEq)]
 pub struct TestnetAddNodeCmd {}
@@ -93,7 +93,11 @@ impl TestnetAddNodeCmd {
         println!("\n✅ Non-validator node {node_id} added successfully!");
         println!("\n📁 Logs:");
         println!("  Reth: {}/{}/logs/reth.log", home_dir.display(), node_id);
-        println!("  Emerald: {}/{}/logs/emerald.log", home_dir.display(), node_id);
+        println!(
+            "  Emerald: {}/{}/logs/emerald.log",
+            home_dir.display(),
+            node_id
+        );
 
         Ok(())
     }
@@ -124,7 +128,10 @@ impl TestnetAddNodeCmd {
     fn copy_genesis(&self, home_dir: &Path, node_id: usize) -> Result<()> {
         // Copy genesis.json from node 0
         let source_genesis = home_dir.join("0").join("config").join("genesis.json");
-        let dest_genesis = home_dir.join(node_id.to_string()).join("config").join("genesis.json");
+        let dest_genesis = home_dir
+            .join(node_id.to_string())
+            .join("config")
+            .join("genesis.json");
 
         if !source_genesis.exists() {
             return Err(eyre!(
@@ -133,8 +140,7 @@ impl TestnetAddNodeCmd {
             ));
         }
 
-        fs::copy(&source_genesis, &dest_genesis)
-            .context("Failed to copy genesis file")?;
+        fs::copy(&source_genesis, &dest_genesis).context("Failed to copy genesis file")?;
 
         Ok(())
     }
@@ -227,12 +233,14 @@ impl TestnetAddNodeCmd {
             test: TestConfig::default(),
         };
 
-        let config_path = home_dir.join(node_id.to_string()).join("config").join("config.toml");
-        let config_content = toml::to_string_pretty(&config)
-            .context("Failed to serialize config")?;
+        let config_path = home_dir
+            .join(node_id.to_string())
+            .join("config")
+            .join("config.toml");
+        let config_content =
+            toml::to_string_pretty(&config).context("Failed to serialize config")?;
 
-        fs::write(&config_path, config_content)
-            .context("Failed to write config.toml")?;
+        fs::write(&config_path, config_content).context("Failed to write config.toml")?;
 
         Ok(())
     }
@@ -314,7 +322,8 @@ min_block_time = "0ms"
                 if let Some(name) = entry.file_name().to_str() {
                     if let Ok(id) = name.parse::<usize>() {
                         if id != node_id {
-                            let existing_node = RethNode::new(id, home_dir.to_path_buf(), assets_dir.clone());
+                            let existing_node =
+                                RethNode::new(id, home_dir.to_path_buf(), assets_dir.clone());
                             // Try to get enode and connect
                             if let Ok(enode) = existing_node.get_enode() {
                                 print!("  Connecting to node {id}... ");
@@ -386,9 +395,10 @@ min_block_time = "0ms"
         std::thread::sleep(Duration::from_millis(100));
 
         // Read PID from file
-        let pid_str = fs::read_to_string(&pid_file)
-            .context("Failed to read PID file")?;
-        let pid = pid_str.trim().parse::<u32>()
+        let pid_str = fs::read_to_string(&pid_file).context("Failed to read PID file")?;
+        let pid = pid_str
+            .trim()
+            .parse::<u32>()
             .context("Failed to parse PID")?;
 
         Ok(EmeraldProcess {

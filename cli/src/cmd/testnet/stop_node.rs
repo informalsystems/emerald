@@ -20,7 +20,11 @@ impl TestnetStopNodeCmd {
         let node_home = home_dir.join(self.node_id.to_string());
 
         if !node_home.exists() {
-            return Err(eyre!("Node {} does not exist at {}", self.node_id, node_home.display()));
+            return Err(eyre!(
+                "Node {} does not exist at {}",
+                self.node_id,
+                node_home.display()
+            ));
         }
 
         println!("🛑 Stopping node {}...", self.node_id);
@@ -82,7 +86,10 @@ impl TestnetStopNodeCmd {
         if stopped_count == 0 {
             println!("\n⚠️  No running processes found for node {}", self.node_id);
         } else {
-            println!("\n✅ Stopped {} process(es) for node {}", stopped_count, self.node_id);
+            println!(
+                "\n✅ Stopped {} process(es) for node {}",
+                stopped_count, self.node_id
+            );
         }
 
         Ok(())

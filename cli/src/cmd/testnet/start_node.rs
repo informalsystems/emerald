@@ -1,9 +1,9 @@
 //! Start a specific node in the testnet
 
+use core::time::Duration;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use core::time::Duration;
 
 use clap::Parser;
 use color_eyre::eyre::{eyre, Context as _};
@@ -24,7 +24,11 @@ impl TestnetStartNodeCmd {
         let node_home = home_dir.join(self.node_id.to_string());
 
         if !node_home.exists() {
-            return Err(eyre!("Node {} does not exist at {}", self.node_id, node_home.display()));
+            return Err(eyre!(
+                "Node {} does not exist at {}",
+                self.node_id,
+                node_home.display()
+            ));
         }
 
         println!("🚀 Starting node {}...", self.node_id);
@@ -67,8 +71,16 @@ impl TestnetStartNodeCmd {
 
         println!("\n✅ Node {} started successfully!", self.node_id);
         println!("\n📁 Logs:");
-        println!("  Reth: {}/{}/logs/reth.log", home_dir.display(), self.node_id);
-        println!("  Emerald: {}/{}/logs/emerald.log", home_dir.display(), self.node_id);
+        println!(
+            "  Reth: {}/{}/logs/reth.log",
+            home_dir.display(),
+            self.node_id
+        );
+        println!(
+            "  Emerald: {}/{}/logs/emerald.log",
+            home_dir.display(),
+            self.node_id
+        );
 
         Ok(())
     }
@@ -85,7 +97,8 @@ impl TestnetStartNodeCmd {
                 if let Some(name) = entry.file_name().to_str() {
                     if let Ok(id) = name.parse::<usize>() {
                         if id != node_id {
-                            let peer_node = RethNode::new(id, home_dir.to_path_buf(), assets_dir.clone());
+                            let peer_node =
+                                RethNode::new(id, home_dir.to_path_buf(), assets_dir.clone());
                             // Try to get enode and connect
                             if let Ok(enode) = peer_node.get_enode() {
                                 print!("  Connecting to node {id}... ");
@@ -155,9 +168,10 @@ impl TestnetStartNodeCmd {
         std::thread::sleep(Duration::from_millis(100));
 
         // Read PID from file
-        let pid_str = fs::read_to_string(&pid_file)
-            .context("Failed to read PID file")?;
-        let pid = pid_str.trim().parse::<u32>()
+        let pid_str = fs::read_to_string(&pid_file).context("Failed to read PID file")?;
+        let pid = pid_str
+            .trim()
+            .parse::<u32>()
             .context("Failed to parse PID")?;
 
         Ok(EmeraldProcess {

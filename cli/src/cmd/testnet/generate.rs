@@ -285,7 +285,10 @@ pub struct TestnetConfig {
 /// 2. Falls back to parsing as hex string
 /// 3. Creates a concrete Ethereum PrivateKey from the bytes
 /// 4. Converts through serde to the generic type
-fn parse_private_key<N>(_node: &N, key_str: &str) -> core::result::Result<PrivateKey<N::Context>, String>
+fn parse_private_key<N>(
+    _node: &N,
+    key_str: &str,
+) -> core::result::Result<PrivateKey<N::Context>, String>
 where
     N: Node,
     PrivateKey<N::Context>: serde::de::DeserializeOwned,
@@ -313,13 +316,12 @@ where
     };
 
     // Create the concrete Ethereum PrivateKey from bytes
-    let eth_key = EthPrivateKey::from_slice(&bytes)
-        .map_err(|e| format!("Invalid private key bytes: {e}"))?;
+    let eth_key =
+        EthPrivateKey::from_slice(&bytes).map_err(|e| format!("Invalid private key bytes: {e}"))?;
 
     // Convert through serde (both types have the same serde representation)
     let json = serde_json::to_string(&eth_key)
         .map_err(|e| format!("Failed to serialize private key: {e}"))?;
 
-    serde_json::from_str(&json)
-        .map_err(|e| format!("Failed to deserialize private key: {e}"))
+    serde_json::from_str(&json).map_err(|e| format!("Failed to deserialize private key: {e}"))
 }

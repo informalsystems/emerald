@@ -10,25 +10,25 @@ use malachitebft_core_types::{Context, SigningScheme};
 
 mod add_node;
 mod generate;
+pub mod reth;
 mod rm;
+mod rpc;
 mod start;
 mod start_node;
 mod status;
 mod stop;
 mod stop_node;
-pub mod reth;
-mod rpc;
 pub mod types;
 
 pub use add_node::TestnetAddNodeCmd;
 pub use generate::{RuntimeFlavour, TestnetConfig, TestnetGenerateCmd};
+pub use reth::check_installation;
 pub use rm::TestnetRmCmd;
 pub use start::TestnetStartCmd;
 pub use start_node::TestnetStartNodeCmd;
 pub use status::TestnetStatusCmd;
 pub use stop::TestnetStopCmd;
 pub use stop_node::TestnetStopNodeCmd;
-pub use reth::check_installation;
 pub use types::{ProcessHandle, RethNode, RethPorts};
 
 type PrivateKey<C> = <<C as Context>::SigningScheme as SigningScheme>::PrivateKey;

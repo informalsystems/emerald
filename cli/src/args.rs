@@ -27,7 +27,7 @@ const PRIV_VALIDATOR_KEY_FILE: &str = "priv_validator_key.json";
 #[derive(Parser, Clone, Debug, Default)]
 #[command(version, about, long_about = None)]
 pub struct Args {
-    /// Home directory for Malachite (default: `./nodes`)
+    /// Home directory for Malachite (default: `$HOME/.emerald-devnet`)
     #[arg(long, global = true, value_name = "HOME_DIR")]
     pub home: Option<PathBuf>,
 
@@ -78,11 +78,14 @@ impl Args {
     }
 
     /// get_home_dir returns the application home folder.
-    /// Defaults to `./nodes` in the current directory.
+    /// Defaults to `$HOME/.emerald-devnet`.
     pub fn get_home_dir(&self) -> Result<PathBuf, Error> {
         match self.home {
             Some(ref path) => Ok(path.clone()),
-            None => Ok(PathBuf::from("nodes")),
+            None => Ok(BaseDirs::new()
+                .ok_or(Error::DirPath)?
+                .home_dir()
+                .join(".emerald-devnet")),
         }
     }
 

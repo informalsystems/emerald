@@ -2,6 +2,7 @@
 
 use core::time::Duration;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use color_eyre::Result;
 
@@ -73,7 +74,7 @@ impl ProcessHandle {
         }
         #[cfg(not(unix))]
         {
-            // TODO: Windows support
+            // TODO: non-unix support
             Ok(())
         }
     }
@@ -84,6 +85,35 @@ impl ProcessHandle {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(path, self.pid.to_string())?;
+        Ok(())
+    }
+}
+
+/// Metadata about the testnet
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TestnetMetadata {
+    pub num_nodes: usize,
+    pub created_at: SystemTime,
+    pub genesis_hash: String,
+}
+
+impl TestnetMetadata {
+    /// Load from nodes directory
+    pub fn load(home_dir: &Path) -> Result<Self> {
+        let metadata_file = home_dir.join("testnet_metadata.json");
+        let contents = std::fs::read_to_string(metadata_file)?;
+        let metadata = serde_json::from_str(&contents)?;
+        Ok(metadata)
+    }
+
+    /// Save to nodes directory
+    pub fn save(&self, home_dir: &Path) -> Result<()> {
+        let metadata_file = home_dir.join("testnet_metadata.json");
+        if let Some(parent) = metadata_file.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let contents = serde_json::to_string_pretty(&self)?;
+        std::fs::write(metadata_file, contents)?;
         Ok(())
     }
 }

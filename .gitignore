@@ -6,7 +6,6 @@ monitoring/data-prometheus/
 assets
 .testnet
 .claude
-reth
 
 # Custom-reth build artifacts
 custom-reth/target/

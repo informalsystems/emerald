@@ -42,7 +42,7 @@ impl TestnetStartNodeCmd {
             Err(e) => {
                 println!("✗");
                 return Err(e.wrap_err(
-                    "Custom reth is not available. Make sure custom-reth/ directory exists and contains a valid reth binary."
+                    "Custom reth is not available. Make sure custom-reth/ directory exists and contains a valid reth binary or custom-reth binary is in your $PATH."
                 ));
             }
         }

@@ -111,9 +111,11 @@ impl TestnetStartCmd {
             self.nodes - 1
         );
 
-        println!("\n💡 Tip: Use 'emerald testnet status' to check status");
-        println!("    Use 'emerald testnet stop-node <id>' to stop a specific node");
-        println!("    Use 'emerald testnet stop' to stop all nodes");
+        println!("\n💡 Commands:");
+        println!("    emerald testnet status           - Check status of all nodes");
+        println!("    emerald testnet stop-node <id>   - Stop a specific node");
+        println!("    emerald testnet stop             - Stop all nodes");
+        println!("    emerald testnet rm               - Remove all testnet data");
 
         Ok(())
     }

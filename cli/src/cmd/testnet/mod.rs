@@ -29,7 +29,7 @@ pub use status::TestnetStatusCmd;
 pub use stop::TestnetStopCmd;
 pub use stop_node::TestnetStopNodeCmd;
 pub use reth::check_installation;
-pub use types::{ProcessHandle, RethNode, RethPorts, TestnetMetadata};
+pub use types::{ProcessHandle, RethNode, RethPorts};
 
 type PrivateKey<C> = <<C as Context>::SigningScheme as SigningScheme>::PrivateKey;
 

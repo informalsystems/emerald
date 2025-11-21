@@ -273,17 +273,17 @@ min_block_time = "0ms"
     fn generate_private_key(&self, home_dir: &Path, node_id: usize) -> Result<()> {
         let node_home = home_dir.join(node_id.to_string());
 
+        // Check for built binary first, then fallback to PATH
+        let debug_binary = std::path::Path::new("./target/debug/emerald");
+        let cmd = if debug_binary.exists() {
+            debug_binary.to_str().unwrap()
+        } else {
+            "emerald"
+        };
+
         // Run emerald init to generate the private validator key
-        let output = Command::new("cargo")
-            .args([
-                "run",
-                "--bin",
-                "emerald",
-                "-q",
-                "--",
-                "init",
-                "--home",
-            ])
+        let output = Command::new(cmd)
+            .args(["init", "--home"])
             .arg(&node_home)
             .output()
             .context("Failed to run emerald init")?;

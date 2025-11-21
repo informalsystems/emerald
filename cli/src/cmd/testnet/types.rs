@@ -1,8 +1,7 @@
 //! Shared types for testnet commands
 
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 use core::time::Duration;
+use std::path::{Path, PathBuf};
 
 use color_eyre::Result;
 
@@ -39,7 +38,7 @@ impl ProcessHandle {
         }
         #[cfg(not(unix))]
         {
-            // TODO: Windows support
+            // TODO: non-unix support
             false
         }
     }
@@ -89,35 +88,6 @@ impl ProcessHandle {
     }
 }
 
-/// Metadata about the testnet
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct TestnetMetadata {
-    pub num_nodes: usize,
-    pub created_at: SystemTime,
-    pub genesis_hash: String,
-}
-
-impl TestnetMetadata {
-    /// Load from nodes directory
-    pub fn load(home_dir: &Path) -> Result<Self> {
-        let metadata_file = home_dir.join("testnet_metadata.json");
-        let contents = std::fs::read_to_string(metadata_file)?;
-        let metadata = serde_json::from_str(&contents)?;
-        Ok(metadata)
-    }
-
-    /// Save to nodes directory
-    pub fn save(&self, home_dir: &Path) -> Result<()> {
-        let metadata_file = home_dir.join("testnet_metadata.json");
-        if let Some(parent) = metadata_file.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let contents = serde_json::to_string_pretty(&self)?;
-        std::fs::write(metadata_file, contents)?;
-        Ok(())
-    }
-}
-
 /// Reth port configuration for a node
 #[derive(Debug, Clone, Copy)]
 pub struct RethPorts {
@@ -135,12 +105,12 @@ impl RethPorts {
     pub fn for_node(node_id: usize) -> Self {
         let base = 8545 + (node_id * 10);
         Self {
-            http: base as u16,           // 8545, 8555, 8565, ...
-            ws: (base + 1) as u16,       // 8546, 8556, 8566, ...
-            authrpc: (base + 2) as u16,  // 8547, 8557, 8567, ...
-            metrics: (base + 3) as u16,  // 8548, 8558, 8568, ...
+            http: base as u16,            // 8545, 8555, 8565, ...
+            ws: (base + 1) as u16,        // 8546, 8556, 8566, ...
+            authrpc: (base + 2) as u16,   // 8547, 8557, 8567, ...
+            metrics: (base + 3) as u16,   // 8548, 8558, 8568, ...
             discovery: (base + 4) as u16, // 8549, 8559, 8569, ...
-            p2p: (base + 4) as u16,      // 8549, 8559, 8569, ... (same as discovery)
+            p2p: (base + 4) as u16,       // 8549, 8559, 8569, ... (same as discovery)
         }
     }
 }

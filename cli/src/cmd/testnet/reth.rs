@@ -25,16 +25,16 @@ pub fn check_installation() -> Result<String> {
         Command::new("custom-reth")
             .arg("--version")
             .output()
-            .context("Failed to execute 'custom-reth'. Not found in ./custom-reth/target/debug/ or PATH")?
+            .context(
+                "Failed to execute 'custom-reth'. Not found in ./custom-reth/target/debug/ or PATH",
+            )?
     };
 
     if !output.status.success() {
         return Err(eyre!("custom-reth command failed"));
     }
 
-    let version = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .to_string();
+    let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
     Ok(version)
 }
 
@@ -62,6 +62,19 @@ impl RethNode {
             format!("--discovery.port={}", self.ports.discovery),
             format!("--port={}", self.ports.p2p),
             "--nat=extip:127.0.0.1".to_string(),
+            "--tx-propagation-mode=all".to_string(),
+            "--txpool.pending-max-count=50000".to_string(),
+            "--txpool.pending-max-size=500".to_string(),
+            "--txpool.queued-max-count=50000".to_string(),
+            "--txpool.queued-max-size=500".to_string(),
+            "--txpool.max-account-slots=50000".to_string(),
+            "--txpool.max-batch-size=10000".to_string(),
+            "--max-tx-reqs=10000".to_string(),
+            "--max-tx-reqs-peer=255".to_string(),
+            "--max-pending-imports=10000".to_string(),
+            "--builder.gaslimit=66000000000".to_string(),
+            "--txpool.gas-limit=3000000000".to_string(),
+            "--builder.interval=10ms".to_string(),
         ]
     }
 
@@ -87,7 +100,10 @@ impl RethNode {
         println!("  P2P: {}", self.ports.p2p);
         println!("  Logs: {}", log_file_path.display());
 
-        let pid_file = self.home_dir.join(self.node_id.to_string()).join("reth.pid");
+        let pid_file = self
+            .home_dir
+            .join(self.node_id.to_string())
+            .join("reth.pid");
 
         // Check for built binary first, then fallback to PATH
         let debug_binary = std::path::Path::new("./custom-reth/target/debug/custom-reth");
@@ -115,9 +131,10 @@ impl RethNode {
         std::thread::sleep(core::time::Duration::from_millis(100));
 
         // Read PID from file
-        let pid_str = fs::read_to_string(&pid_file)
-            .context("Failed to read PID file")?;
-        let pid = pid_str.trim().parse::<u32>()
+        let pid_str = fs::read_to_string(&pid_file).context("Failed to read PID file")?;
+        let pid = pid_str
+            .trim()
+            .parse::<u32>()
             .context("Failed to parse PID")?;
 
         Ok(RethProcess {
@@ -128,9 +145,9 @@ impl RethNode {
 
     /// Wait for reth to be ready (RPC responding)
     pub fn wait_for_ready(&self, timeout_secs: u64) -> Result<()> {
+        use core::time::Duration;
         use std::thread::sleep;
         use std::time::Instant;
-        use core::time::Duration;
 
         let start = Instant::now();
         let timeout = Duration::from_secs(timeout_secs);
@@ -156,9 +173,9 @@ impl RethNode {
 
     /// Wait for reth to reach a specific block height
     pub fn wait_for_height(&self, height: u64, timeout_secs: u64) -> Result<()> {
+        use core::time::Duration;
         use std::thread::sleep;
         use std::time::Instant;
-        use core::time::Duration;
 
         let start = Instant::now();
         let timeout = Duration::from_secs(timeout_secs);

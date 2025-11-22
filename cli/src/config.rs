@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, u64};
 
 use color_eyre::eyre;
 use malachitebft_app::node::NodeConfig;
@@ -9,6 +9,7 @@ pub use malachitebft_config::{
 };
 use malachitebft_eth_types::RetryConfig;
 use serde::{Deserialize, Serialize};
+use tokio::time::Duration;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -46,10 +47,26 @@ pub struct EmeraldConfig {
     pub el_node_type: ElNodeType,
 
     // Number of blocks to retain. Default is retain all.
+    #[serde(default = "max_retain_block_default")]
     pub max_retain_blocks: u64,
 
     // Try pruning every prune_at_interval_blocks
     pub prune_at_block_interval: u64,
+    // Application set min_block_time forcing the app to sleep
+    // before moving onto the next height.
+    // Malachite does not have a notion of min_block_time, thus
+    // this has to be handled by the application.
+    // Default: 500ms
+    #[serde(with = "humantime_serde", default = "default_min_block_time")]
+    pub min_block_time: Duration,
+}
+
+fn default_min_block_time() -> Duration {
+    Duration::from_millis(500)
+}
+
+fn max_retain_block_default() -> u64 {
+    u64::MAX
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

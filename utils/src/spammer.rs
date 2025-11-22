@@ -46,6 +46,8 @@ pub struct Spammer {
     max_rate: u64,
     /// Whether to send EIP-4844 blob transactions.
     blobs: bool,
+    /// Chain ID for the transactions.
+    chain_id: u64,
     /// Optional payload describing contract call spam parameters.
     contract_payload: Option<ContractPayload>,
 }
@@ -58,6 +60,7 @@ impl Spammer {
         max_time: u64,
         max_rate: u64,
         blobs: bool,
+        chain_id: u64,
     ) -> Result<Self> {
         let signers = make_signers();
         Ok(Self {
@@ -68,6 +71,7 @@ impl Spammer {
             max_time,
             max_rate,
             blobs,
+            chain_id,
             contract_payload: None,
         })
     }
@@ -82,6 +86,7 @@ impl Spammer {
         contract: &Address,
         function: &str,
         args: &[String],
+        chain_id: u64,
     ) -> Result<Self> {
         let signers = make_signers();
         let contract_payload = ContractPayload {
@@ -98,6 +103,7 @@ impl Spammer {
             max_rate,
             blobs: false, // Contract calls don't use blobs
             contract_payload: Some(contract_payload),
+            chain_id,
         })
     }
 
@@ -191,14 +197,15 @@ impl Spammer {
                         payload.address,
                         &payload.function_sig,
                         payload.args.as_slice(),
+                        self.chain_id,
                     )
                     .await?
                 } else if self.blobs {
                     // Blob transaction
-                    make_signed_eip4844_tx(&self.signer, nonce).await?
+                    make_signed_eip4844_tx(&self.signer, nonce, self.chain_id).await?
                 } else {
                     // Regular transfer
-                    make_signed_eip1559_tx(&self.signer, nonce).await?
+                    make_signed_eip1559_tx(&self.signer, nonce, self.chain_id).await?
                 };
                 let tx_bytes = signed_tx.encoded_2718();
                 let tx_bytes_len = tx_bytes.len() as u64;

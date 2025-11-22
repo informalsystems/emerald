@@ -3,7 +3,7 @@ set -euo pipefail
 set -x
 
 # --- Configuration ---
-RPC_URL="http://localhost:8545"
+RPC_URL="http://localhost:8645"
 SCRIPT_PATH="solidity/script/Counter.s.sol:CounterScript"
 # ----------------------
 

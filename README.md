@@ -191,12 +191,138 @@ If successful, Malachite logs for each node can be found at `nodes/<N>/logs/node
 
 Check out the metrics in the Grafana dashboards at http://localhost:3000.
 
+### Manual testnet setup with custom private keys
+
+For more control over the testnet configuration, such as using specific private keys, you can manually configure and run the testnet by following these steps.
+
+#### 1. Generate testnet configuration
+
+First, generate the testnet configuration directory with your private keys (hex or base64). Example using the first three Anvil default keys shown in both encodings:
+
+```bash
+# Hex
+./scripts/generate_testnet_config.sh \
+  --node-keys 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
+  --node-keys 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d \
+  --node-keys 0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a \
+  --testnet-config-dir .testnet
+```
+
+Or,
+
+```bash
+# Base64 equivalents (same keys)
+./scripts/generate_testnet_config.sh \
+  --node-keys "rAl0vsOaF+NrpKa00jj/lEustHjL7V78rnhNe/Ty/4A=" \
+  --node-keys "WcaZXpmPl6WgBElm8JRTidyehtrojHqEEvRgO2t4aQ0=" \
+  --node-keys "XeQRGvoaS5SQj4MQPrHxcGNnwuaMqHD8P7moBM2rNlo=" \
+  --testnet-config-dir .testnet
+```
+
+The script will:
+- Infer the number of nodes from the number of keys provided
+- Create `.testnet/testnet_config.toml` with your keys
+- Generate individual node configs in `.testnet/config/`
+
+#### 2. Generate node configurations
+
+Run the testnet command to generate the node directories and validator keys:
+
+```bash
+cargo run --bin malachitebft-eth-app -- testnet \
+  --home nodes \
+  --testnet-config .testnet/testnet_config.toml
+```
+
+This will use your provided private keys to create configurations in `./nodes/{0,1,2}/`.
+
+#### 3. Extract validator public keys
+
+Generate a file containing all validator public keys for the genesis file:
+
+```bash
+ls nodes/*/config/priv_validator_key.json | \
+  xargs -I{} cargo run --bin malachitebft-eth-app show-pubkey {} \
+  > nodes/validator_public_keys.txt
+```
+
+#### 4. Generate genesis file
+
+Create the genesis file with the validator public keys:
+
+```bash
+cargo run --bin malachitebft-eth-utils genesis \
+  --public-keys-file ./nodes/validator_public_keys.txt
+```
+
+This creates `./assets/genesis.json` which will be used by the Reth execution clients.
+
+#### 5. Start execution clients and monitoring
+
+Start the Docker containers for Reth nodes and monitoring services:
+
+```bash
+docker compose up -d reth0 reth1 reth2 prometheus grafana otterscan
+```
+
+#### 6. Connect Reth peers
+
+Connect the Reth execution clients to each other:
+
+```bash
+./scripts/add_peers.sh --nodes 3
+```
+
+This script:
+- Waits for all Reth nodes to be ready
+- Retrieves each node's enode identifier
+- Adds each node as a trusted peer to all other nodes
+
+#### 7. Start consensus nodes
+
+Finally, start all consensus nodes:
+
+```bash
+bash scripts/spawn.bash --nodes 3 --home nodes --no-delay
+```
+
+The `spawn.bash` script will:
+- Build the application binary
+- Start all consensus nodes in the background
+- Write logs to `nodes/{0,1,2}/logs/node.log`
+- Monitor progress and verify blocks are being produced
+- Keep running until you press Ctrl+C
+
+> [!NOTE]
+> The private keys can be in either format:
+> - **Hex format**: Standard Ethereum private key as hex (with or without `0x` prefix)
+> - **Base64 format**: Raw bytes encoded in base64 (useful if you export the bytes directly)
+>
+> You can extract keys from existing nodes by reading the JSON files in `nodes/*/config/priv_validator_key.json` and copying the `value` field, which is already a base64 string.
+
+> [!TIP]
+> Use `--no-delay` flag with `spawn.bash` to start all nodes simultaneously. Without this flag, the last node will wait until the first node reaches height 100 before starting (useful for testing sync).
+
+Check out the metrics in the Grafana dashboards at http://localhost:3000.
+
 ### Inject transaction load
 
 In a separate terminal, run the following command to send transactions during 60 seconds at a rate
 of 1000 tx/s to one of Reth RPC endpoints.
 ```
-cargo run --bin malachitebft-eth-utils spam --time=60 --rate=1000
+cargo run --bin emerald-utils spam --time=60 --rate=1000
+```
+
+The spammer supports full URLs including HTTPS and DNS hostnames:
+```
+# Local IP with port (defaults to http://)
+cargo run --bin malachitebft-eth-utils spam --time=60 --rate=1000 --rpc-url=127.0.0.1:8545
+
+# HTTPS with DNS
+cargo run --bin malachitebft-eth-utils spam --time=60 --rate=1000 --rpc-url=https://eth.example.com
+
+# HTTP with DNS and port
+cargo run --bin malachitebft-eth-utils spam --time=60 --rate=1000 --rpc-url=http://node.example.com:8545
 ```
 
 > [!TIP]

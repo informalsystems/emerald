@@ -15,8 +15,6 @@ use malachitebft_app_channel::app::node::{
 };
 use malachitebft_app_channel::app::types::core::VotingPower;
 use malachitebft_eth_cli::config::{Config, EmeraldConfig};
-// Use the same types used for integration tests.
-// A real application would use its own types and context instead.
 use malachitebft_eth_cli::metrics;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::engine_rpc::EngineRPC;
@@ -28,6 +26,8 @@ use rand::{CryptoRng, RngCore};
 use tokio::task::JoinHandle;
 use url::Url;
 
+// Use the same types used for integration tests.
+// A real application would use its own types and context instead.
 use crate::metrics::Metrics;
 use crate::state::{State, StateMetrics};
 use crate::store::Store;
@@ -186,19 +186,6 @@ impl Node for App {
         };
 
         let emerald_config = self.load_emerald_config()?;
-        let max_retain_blocks = emerald_config.max_retain_blocks;
-
-        let mut state = State::new(
-            genesis,
-            ctx,
-            signing_provider,
-            address,
-            start_height,
-            store,
-            state_metrics,
-            max_retain_blocks,
-            emerald_config.prune_at_block_interval,
-        );
 
         let engine: Engine = {
             let engine_url = Url::parse(&emerald_config.engine_authrpc_address)?;
@@ -210,6 +197,21 @@ impl Node for App {
                 EthereumRPC::new(eth_url)?,
             )
         };
+
+        let min_block_time = emerald_config.min_block_time;
+        let max_retain_blocks = emerald_config.max_retain_blocks;
+        let mut state = State::new(
+            genesis,
+            ctx,
+            signing_provider,
+            address,
+            start_height,
+            store,
+            state_metrics,
+            max_retain_blocks,
+            emerald_config.prune_at_block_interval,
+            min_block_time,
+        );
 
         let app_handle = tokio::spawn(async move {
             if let Err(e) = crate::app::run(&mut state, &mut channels, engine, emerald_config).await

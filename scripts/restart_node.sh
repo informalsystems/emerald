@@ -8,7 +8,7 @@ fi
 
 NODE=$1
 NODES_HOME="nodes"
-APP_BINARY="malachitebft-eth-app"
+APP_BINARY="emerald"
 
 export RUST_BACKTRACE=full
 

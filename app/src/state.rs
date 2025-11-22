@@ -24,7 +24,7 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sha3::Digest;
 use ssz::Decode;
-use tokio::time::Instant;
+use tokio::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
 use crate::metrics::Metrics;
@@ -103,6 +103,9 @@ pub struct State {
 
     pub max_retain_blocks: u64,
     pub prune_at_block_interval: u64,
+    pub min_block_time: Duration,
+
+    pub last_block_time: Instant,
 }
 
 /// Represents errors that can occur during the verification of a proposal's signature.
@@ -166,6 +169,7 @@ fn build_execution_block_from_bytes(raw_block_data: Bytes) -> ExecutionBlock {
 
 impl State {
     /// Creates a new State instance with the given validator address and starting height
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         _genesis: Genesis, // all genesis data is in EVM via genesis.json
         ctx: EmeraldContext,
@@ -176,6 +180,7 @@ impl State {
         state_metrics: StateMetrics,
         max_retain_blocks: u64,
         prune_at_interval: u64,
+        min_block_time: Duration,
     ) -> Self {
         // Calculate start_time by subtracting elapsed_seconds from now.
         // It represents the start time of measuring metrics, not the actual node start time.
@@ -206,6 +211,8 @@ impl State {
             metrics: state_metrics.metrics,
             max_retain_blocks: max_retain_blocks,
             prune_at_block_interval: prune_at_interval,
+            min_block_time,
+            last_block_time: Instant::now(),
         }
     }
 
@@ -563,6 +570,19 @@ impl State {
         // Move to next height
         self.current_height = self.current_height.increment();
         self.current_round = Round::new(0);
+
+        // Sleep to reduce the block speed, if set via config.
+        debug!(timeout_commit = ?self.min_block_time);
+        let elapsed_height_time = self.last_block_time.elapsed();
+
+        info!(
+            "👉 stats at {:?}: block_time {:?}",
+            certificate.height, elapsed_height_time
+        );
+
+        if elapsed_height_time < self.min_block_time {
+            tokio::time::sleep(self.min_block_time - elapsed_height_time).await;
+        }
 
         Ok(())
     }

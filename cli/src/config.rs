@@ -1,4 +1,4 @@
-use std::{path::Path, u64};
+use std::path::Path;
 
 use color_eyre::eyre;
 use malachitebft_app::node::NodeConfig;

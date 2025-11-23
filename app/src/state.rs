@@ -557,7 +557,7 @@ impl State {
         }
 
         // Prune the store, keep the last 5 heights
-        let prune_certificates = self.max_retain_blocks == u64::MAX
+        let prune_certificates = self.max_retain_blocks != u64::MAX
             && certificate.height.as_u64() % self.prune_at_block_interval == 0;
         let retain_height = Height::new(
             certificate

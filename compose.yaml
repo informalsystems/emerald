@@ -71,14 +71,15 @@ services:
       - "--authrpc.addr=0.0.0.0"
       - "--authrpc.port=18551"
       - "--authrpc.jwtsecret=/root/assets/jwtsecret"
-      - "--prune.receipts.distance=10064"
-      - "--prune.account-history.distance=10064"
-      - "--prune.storage-history.distance=10064"
-      - "--prune.transaction-lookup.distance=10064"
-      - "--prune.sender-recovery.distance=10064"
-      - "--prune.block-interval=5"
-      - "--prune.bodies.distance=10064"
-      - "--metrics=127.0.0.1:9001"
+      # IF node pruning is to be enabled - uncomment this
+      # - "--prune.receipts.distance=10064"
+      # - "--prune.account-history.distance=10064"
+      # - "--prune.storage-history.distance=10064"
+      # - "--prune.transaction-lookup.distance=10064"
+      # - "--prune.sender-recovery.distance=10064"
+      # - "--prune.block-interval=5"
+      # - "--prune.bodies.distance=10064"
+      # - "--metrics=127.0.0.1:9001"
       - "--discovery.port=41303"
       - "--port=41303"
       - "--nat=extip:127.0.0.1"
@@ -121,7 +122,6 @@ services:
       - "--discovery.port=51303"
       - "--port=51303"
       - "--nat=extip:127.0.0.1"
-      - "--config=assets/reth_pruned.toml"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -160,7 +160,6 @@ services:
       - "--discovery.port=61303"
       - "--port=61303"
       - "--nat=extip:127.0.0.1"
-      - "--config=assets/reth_pruned.toml"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve

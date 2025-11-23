@@ -143,7 +143,7 @@ done
 
 cp scripts/reth_pruned.toml assets/reth_pruned.toml
 
-PRUNING_NODES=(1)
+PRUNING_NODES=() #list of nodes who we want pruned. Note that you need to set the correpsonding flags in compose.yaml
 
 for ((i = 0; i < nodes; i++)); do
     mkdir -p "$TESTNET_DIR/config/$i"

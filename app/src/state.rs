@@ -209,7 +209,7 @@ impl State {
             chain_bytes: state_metrics.chain_bytes,
             start_time,
             metrics: state_metrics.metrics,
-            max_retain_blocks: max_retain_blocks,
+            max_retain_blocks,
             prune_at_block_interval: prune_at_interval,
             min_block_time,
             last_block_time: Instant::now(),

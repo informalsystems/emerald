@@ -46,11 +46,17 @@ pub struct EmeraldConfig {
     #[serde(default)]
     pub el_node_type: ElNodeType,
 
-    // Number of blocks to retain. Default is retain all.
+    /// Number of blocks to retain. Default is retain all.
     #[serde(default = "max_retain_block_default")]
     pub max_retain_blocks: u64,
 
-    // Try pruning every prune_at_interval_blocks
+   /// Try pruning every prune_at_interval_blocks
+   pub prune_at_block_interval: u64,
+   /// Application set min_block_time forcing the app to sleep
+   /// before moving onto the next height.
+   /// Malachite does not have a notion of min_block_time, thus
+   /// this has to be handled by the application.
+   /// Default: 0ms
     #[serde(default = "prune_at_interval_default")]
     pub prune_at_block_interval: u64,
     // Application set min_block_time forcing the app to sleep

@@ -141,7 +141,7 @@ for ((i = 0; i < nodes; i++)); do
     fi
 done
 
-PRUNING_NODES=(1) #list of nodes who we want pruned. Note that you need to set the correpsonding flags in compose.yaml
+PRUNING_NODES=() #list of nodes who we want pruned. Note that you need to set the correpsonding flags in compose.yaml
 
 for ((i = 0; i < nodes; i++)); do
     mkdir -p "$TESTNET_DIR/config/$i"

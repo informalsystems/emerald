@@ -1,4 +1,0 @@
-[prune]
-# Minimum pruning interval measured in blocks
-block_interval = 5
-commit_threshold = 10

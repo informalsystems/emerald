@@ -832,7 +832,8 @@ impl Store {
 
     /// Prunes the store by removing all undecided proposals and decided values up to the retain height.
     /// Called by the application to clean up old data and free up space. This is done when a new value is committed.
-    /// Note that Emerald stores
+    /// If state.max_retain_height is set to something else than u64::MAX, this function also prunes certificates.
+    /// Pruned certificates cannot be retrieved later on.
     pub async fn prune(
         &self,
         retain_height: Height,

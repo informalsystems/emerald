@@ -152,12 +152,12 @@ engine_authrpc_address = "http://localhost:${AUTH_PORTS[i]}"
 jwt_token_path = "./assets/jwtsecret"
 sync_timeout_ms = 10000
 sync_initial_delay_ms = 100
-el_node_type = "archive"
 EOF
  # Set max_retain_blocks for pruning nodes
       if [[ " ${PRUNING_NODES[@]} " =~ " ${i} " ]]; then
           echo "max_retain_blocks = 10064" >> "$TESTNET_DIR/config/$i/config.toml"
-          sed -i '' 's/el_node_type = "archive"/el_node_type = "custom"/' "$TESTNET_DIR/config/$i/config.toml"
+          echo "el_node_type = \"custom\"" >> "$TESTNET_DIR/config/$i/config.toml"
+      else
+          echo "el_node_type = \"archive\"" >> "$TESTNET_DIR/config/$i/config.toml"
       fi
-
 done

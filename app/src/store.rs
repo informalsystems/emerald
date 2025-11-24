@@ -24,6 +24,12 @@ use crate::metrics::DbMetrics;
 use crate::store::keys::PendingValueKey;
 use crate::streaming::ProposalParts;
 
+/// Malachite keeps values (block data) during processing a height and stores it.
+/// For blocks decided on, that data is stored by the execution engine as well.
+/// We therefore want to prune these heights to decrease the storage usage.
+/// The retain height set via config refers to storing certificate data which is
+/// stored only in the consensus engine.
+const VALUE_RETAIN_HEIGHT: Height = Height::new(10);
 #[derive(Clone, Debug)]
 pub struct DecidedValue {
     pub value: Value,
@@ -394,32 +400,44 @@ impl Db {
 
     // All values except certificates can be retrieved from Reth (if the node has not been pruned)
     // But if we prune certificates, other nodes will not be able to catchup.
-    fn prune(&self, retain_height: Height, prune_certificates: bool) -> Result<(), StoreError> {
+    fn prune(
+        &self,
+        retain_height: Height,
+        curr_height: Height,
+        prune_certificates: bool,
+    ) -> Result<(), StoreError> {
         let start = Instant::now();
 
         let tx = self.db.begin_write().unwrap();
 
         {
-            // Remove all undecided proposals with height < retain_height
-            let mut undecided = tx.open_table(UNDECIDED_PROPOSALS_TABLE)?;
-            undecided.retain(|k, _| k.0 >= retain_height)?;
+            if curr_height > VALUE_RETAIN_HEIGHT {
+                let block_data_retain_height = Height::new(
+                    curr_height
+                        .as_u64()
+                        .saturating_sub(VALUE_RETAIN_HEIGHT.as_u64()),
+                );
 
-            // Remove all undecided block data with height < retain_height
-            let mut undecided_block_data = tx.open_table(UNDECIDED_BLOCK_DATA_TABLE)?;
-            undecided_block_data.retain(|k, _| k.0 >= retain_height)?;
+                // Remove all undecided proposals with height < retain_height
+                let mut undecided = tx.open_table(UNDECIDED_PROPOSALS_TABLE)?;
+                undecided.retain(|k, _| k.0 >= block_data_retain_height)?;
 
-            // Remove all pending proposal parts with height < retain_height
-            let mut pending = tx.open_table(PENDING_PROPOSAL_PARTS_TABLE)?;
-            pending.retain(|k, _| k.0 >= retain_height)?;
+                // Remove all undecided block data with height < retain_height
+                let mut undecided_block_data = tx.open_table(UNDECIDED_BLOCK_DATA_TABLE)?;
+                undecided_block_data.retain(|k, _| k.0 >= block_data_retain_height)?;
 
-            // Remove all decided values with height < retain_height
-            let mut decided = tx.open_table(DECIDED_VALUES_TABLE)?;
-            decided.retain(|k, _| k >= retain_height)?;
+                // Remove all pending proposal parts with height < retain_height
+                let mut pending = tx.open_table(PENDING_PROPOSAL_PARTS_TABLE)?;
+                pending.retain(|k, _| k.0 >= block_data_retain_height)?;
 
-            // Remove all decided block data with height < retain_height
-            let mut decided_block_data = tx.open_table(DECIDED_BLOCK_DATA_TABLE)?;
-            decided_block_data.retain(|k, _| k >= retain_height)?;
+                // Remove all decided values with height < retain_height
+                let mut decided = tx.open_table(DECIDED_VALUES_TABLE)?;
+                decided.retain(|k, _| k >= block_data_retain_height)?;
 
+                // Remove all decided block data with height < retain_height
+                let mut decided_block_data = tx.open_table(DECIDED_BLOCK_DATA_TABLE)?;
+                decided_block_data.retain(|k, _| k >= block_data_retain_height)?;
+            }
             if prune_certificates {
                 // We prune certificates only if pruning is set.
                 let mut certificate_data = tx.open_table(CERTIFICATES_TABLE)?;
@@ -814,13 +832,18 @@ impl Store {
 
     /// Prunes the store by removing all undecided proposals and decided values up to the retain height.
     /// Called by the application to clean up old data and free up space. This is done when a new value is committed.
+    /// Note that Emerald stores
     pub async fn prune(
         &self,
         retain_height: Height,
+        curr_height: Height,
         prune_certificates: bool,
     ) -> Result<(), StoreError> {
         let db = Arc::clone(&self.db);
-        tokio::task::spawn_blocking(move || db.prune(retain_height, prune_certificates)).await?
+        tokio::task::spawn_blocking(move || {
+            db.prune(retain_height, curr_height, prune_certificates)
+        })
+        .await?
     }
 
     pub async fn get_block_data(

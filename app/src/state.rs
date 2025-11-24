@@ -556,16 +556,24 @@ impl State {
                 .await?;
         }
 
-        // Prune the store, keep the last 5 heights
         let prune_certificates = self.max_retain_blocks != u64::MAX
             && certificate.height.as_u64() % self.prune_at_block_interval == 0;
+
+        // This will compute the retain heigth for the certificates which is based on the
+        // retain height set in the config.
+        // The intermediary block data stored for Consensus is pruned at every height after
+        // VALUE_RETAIN_HEIGHT (defined in store.rs)
         let retain_height = Height::new(
             certificate
                 .height
                 .as_u64()
                 .saturating_sub(self.max_retain_blocks),
         );
-        self.store.prune(retain_height, prune_certificates).await?;
+
+        // If storege becomes a bottleneck, consider optimizing this by pruning every INTERVAL heights
+        self.store
+            .prune(retain_height, certificate.height, prune_certificates)
+            .await?;
 
         // Move to next height
         self.current_height = self.current_height.increment();

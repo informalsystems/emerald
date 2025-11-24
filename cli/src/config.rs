@@ -51,6 +51,7 @@ pub struct EmeraldConfig {
     pub max_retain_blocks: u64,
 
     // Try pruning every prune_at_interval_blocks
+    #[serde(default = "prune_at_interval_default")]
     pub prune_at_block_interval: u64,
     // Application set min_block_time forcing the app to sleep
     // before moving onto the next height.
@@ -67,6 +68,9 @@ fn default_min_block_time() -> Duration {
 
 fn max_retain_block_default() -> u64 {
     u64::MAX
+}
+fn prune_at_interval_default() -> u64 {
+    10
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

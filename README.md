@@ -33,19 +33,15 @@ Emerald's architecture is intentionally clean and composable, consisting of four
 
 This modular design keeps the system easy to understand, maintain, and extend while providing full EVM compatibility, predictable PoA consensus, and simple deployment and operation.
 
-> TODO: link to doc with more info on the architecture, describing the four components
+For more details, check out the [Architecture section of the docs](https://emerald-docs.informalsystems.io/architecture.html).
 
 ## Getting Started
-
-> TODO: Do we want this here or we just point to the docs directly?
 
 ### Prerequisites
 
 - [Rust toolchain](https://rust-lang.org/tools/install/) (use rustup for easiest setup)
 - [Foundry](https://getfoundry.sh/introduction/installation/) (for compiling, testing, and deploying EVM smart contracts)
 - Docker (optional, for local deployments)
-
-> TODO: are there other prerequisites? 
 
 ### Installation
 
@@ -57,7 +53,11 @@ make build
 
 ### Launching a Local Network
 
+For instructions on how to launch a local Emerald network, please refer to the [Running a Local Tesnet section of the docs](https://emerald-docs.informalsystems.io/local-testnet.html).
+
 ### Launching a Testnet
+
+For instructions on how to launch am Emerald testnet, please refer to the [Creating a Production Network section of the docs](https://emerald-docs.informalsystems.io/production-network.html).
 
 ## Performance Evaluation
 

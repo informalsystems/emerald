@@ -199,6 +199,13 @@ impl Node for App {
         };
 
         let min_block_time = emerald_config.min_block_time;
+        let max_retain_blocks = emerald_config.max_retain_blocks;
+        let prune_at_block_interval = emerald_config.prune_at_block_interval;
+
+        assert!(
+            prune_at_block_interval != 0,
+            "prune block interval cannot be 0"
+        );
 
         let mut state = State::new(
             genesis,
@@ -208,6 +215,8 @@ impl Node for App {
             start_height,
             store,
             state_metrics,
+            max_retain_blocks,
+            prune_at_block_interval,
             min_block_time,
         );
 

@@ -88,13 +88,25 @@ fi
 
 TESTNET_DIR="$testnet_config_dir"
 
-readonly ENGINE_PORTS=(8645 18645 28645 38645)
-readonly AUTH_PORTS=(8551 18551 28551 38551)
+# Function to calculate engine port for a given node ID
+get_engine_port() {
+    local node_id=$1
+    if (( node_id == 0 )); then
+        echo "8645"
+    else
+        echo "${node_id}8645"
+    fi
+}
 
-if (( nodes > ${#ENGINE_PORTS[@]} )); then
-    echo "This script currently supports up to ${#ENGINE_PORTS[@]} nodes" >&2
-    exit 2
-fi
+# Function to calculate auth port for a given node ID
+get_auth_port() {
+    local node_id=$1
+    if (( node_id == 0 )); then
+        echo "8551"
+    else
+        echo "${node_id}8551"
+    fi
+}
 
 mkdir -p "$TESTNET_DIR"
 mkdir -p "$TESTNET_DIR/config"
@@ -145,10 +157,12 @@ PRUNING_NODES=() #list of nodes who we want pruned. Note that you need to set th
 
 for ((i = 0; i < nodes; i++)); do
     mkdir -p "$TESTNET_DIR/config/$i"
+    ENGINE_PORT=$(get_engine_port $i)
+    AUTH_PORT=$(get_auth_port $i)
     cat > "$TESTNET_DIR/config/$i/config.toml" <<EOF
 moniker = "test-$i"
-execution_authrpc_address = "http://localhost:${ENGINE_PORTS[i]}"
-engine_authrpc_address = "http://localhost:${AUTH_PORTS[i]}"
+execution_authrpc_address = "http://localhost:$ENGINE_PORT"
+engine_authrpc_address = "http://localhost:$AUTH_PORT"
 jwt_token_path = "./assets/jwtsecret"
 sync_timeout_ms = 10000
 sync_initial_delay_ms = 100

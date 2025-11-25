@@ -69,10 +69,11 @@ Contributions are welcome! Please open an issue or submit a PR. For large change
 
 ## Acknowledgements
 
-Emerald is built on top of the work in [malaketh-layered], developed by Circle. 
+Emerald is built on top of the work in [malaketh-layered], developed by Circle 
+(see [here](https://github.com/informalsystems/emerald/compare/7d54fa6bdfca7857493367fd195813e569fd42e6...main) a complete list of changes). 
 Their implementation provided a strong foundation for Emerald, and we are grateful for the contributions and engineering effort behind the project.
 
 [malachite]: https://github.com/circlefin/malachite
-[malaketh-layered]: https://github.com/circlefin/malaketh-layered
+[malaketh-layered]: https://github.com/circlefin/malaketh-layered/commit/7d54fa6bdfca7857493367fd195813e569fd42e6
 [engine-api]: https://github.com/ethereum/execution-apis/tree/main/src/engine
 [reth]: https://github.com/paradigmxyz/reth

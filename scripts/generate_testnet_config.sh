@@ -168,7 +168,7 @@ sync_timeout_ms = 10000
 sync_initial_delay_ms = 100
 EOF
  # Set max_retain_blocks for pruning nodes
-      if [[ " ${PRUNING_NODES[@]} " =~ " ${i} " ]]; then
+      if [[ ${#PRUNING_NODES[@]} -gt 0 && " ${PRUNING_NODES[@]} " =~ " ${i} " ]]; then
           echo "max_retain_blocks = 10064" >> "$TESTNET_DIR/config/$i/config.toml"
           echo "el_node_type = \"custom\"" >> "$TESTNET_DIR/config/$i/config.toml"
       else

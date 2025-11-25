@@ -1,4 +1,4 @@
-# Creating a New Network (devnet)
+# Creating a Devnet
 
 ## Prerequisites
 

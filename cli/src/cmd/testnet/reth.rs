@@ -143,64 +143,6 @@ impl RethNode {
         })
     }
 
-    /// Wait for reth to be ready (RPC responding)
-    pub fn wait_for_ready(&self, timeout_secs: u64) -> Result<()> {
-        use core::time::Duration;
-        use std::thread::sleep;
-        use std::time::Instant;
-
-        let start = Instant::now();
-        let timeout = Duration::from_secs(timeout_secs);
-        let rpc = RpcClient::new(self.ports.http);
-
-        loop {
-            if start.elapsed() > timeout {
-                return Err(eyre!(
-                    "Timeout waiting for Reth node {} to be ready",
-                    self.node_id
-                ));
-            }
-
-            // Try to query block number (should return 0 for genesis)
-            if rpc.get_block_number().is_ok() {
-                // RPC is responding, node is ready
-                return Ok(());
-            }
-
-            sleep(Duration::from_millis(500));
-        }
-    }
-
-    /// Wait for reth to reach a specific block height
-    pub fn wait_for_height(&self, height: u64, timeout_secs: u64) -> Result<()> {
-        use core::time::Duration;
-        use std::thread::sleep;
-        use std::time::Instant;
-
-        let start = Instant::now();
-        let timeout = Duration::from_secs(timeout_secs);
-        let rpc = RpcClient::new(self.ports.http);
-
-        loop {
-            if start.elapsed() > timeout {
-                return Err(eyre!(
-                    "Timeout waiting for Reth node {} to reach height {}",
-                    self.node_id,
-                    height
-                ));
-            }
-
-            // Check block number via RPC
-            if let Ok(block_num) = rpc.get_block_number() {
-                if block_num >= height {
-                    return Ok(());
-                }
-            }
-
-            sleep(Duration::from_millis(500));
-        }
-    }
-
     /// Get enode address for this reth node
     pub fn get_enode(&self) -> Result<String> {
         let rpc = RpcClient::new(self.ports.http);

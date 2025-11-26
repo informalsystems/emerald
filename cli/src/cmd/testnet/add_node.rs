@@ -11,7 +11,9 @@ use color_eyre::Result;
 
 use super::reth::{self, RethProcess};
 use super::types::RethNode;
+use crate::cmd::testnet::rpc::RpcClient;
 use crate::config::*;
+use crate::utils::retry::retry_with_timeout;
 
 #[derive(Parser, Debug, Clone, PartialEq)]
 pub struct TestnetAddNodeCmd {}
@@ -77,7 +79,16 @@ impl TestnetAddNodeCmd {
         println!("\n⏳ Waiting for Reth node to initialize...");
         let assets_dir = home_dir.join("assets");
         let reth_node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir);
-        reth_node.wait_for_ready(30)?;
+        let rpc = RpcClient::new(reth_node.ports.http);
+        retry_with_timeout(
+            "reth node ready",
+            Duration::from_secs(30),
+            Duration::from_millis(500),
+            || {
+                // Will succeed if the node is ready
+                rpc.get_block_number()
+            },
+        )?;
         println!("✓ Reth node ready");
 
         // 10. Connect to existing peers

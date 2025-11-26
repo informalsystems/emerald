@@ -1,5 +1,6 @@
 //! Testnet start command - Initialize and run a complete testnet with Reth + Emerald nodes
 
+use core::time::Duration;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -13,6 +14,8 @@ use malachitebft_core_types::{Context, SigningScheme};
 
 use super::reth::{self, RethProcess};
 use super::types::RethNode;
+use crate::cmd::testnet::rpc::RpcClient;
+use crate::utils::retry::retry_with_timeout;
 
 type PrivateKey<C> = <<C as Context>::SigningScheme as SigningScheme>::PrivateKey;
 
@@ -369,7 +372,16 @@ min_block_time = "500ms"
         for i in 0..self.nodes {
             let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
             print!("  Waiting for Reth node {i} to be ready... ");
-            reth_node.wait_for_ready(30)?;
+            let rpc = RpcClient::new(reth_node.ports.http);
+            retry_with_timeout(
+                "reth node ready",
+                Duration::from_secs(30),
+                Duration::from_millis(500),
+                || {
+                    // Will succeed if the node is ready
+                    rpc.get_block_number()
+                },
+            )?;
             println!("✓");
         }
 

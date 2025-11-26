@@ -152,7 +152,7 @@ impl TestnetStartNodeCmd {
         };
 
         let shell_cmd = format!(
-            "setsid {} > {} 2>&1 & echo $! > {}",
+            "nohup {} > {} 2>&1 & echo $! > {}",
             cmd,
             log_file_path.display(),
             pid_file.display()

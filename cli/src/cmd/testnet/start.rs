@@ -301,11 +301,13 @@ min_block_time = "500ms"
         let genesis_output = assets_dir.join("genesis.json");
         let emerald_genesis_output = assets_dir.join("emerald_genesis.json");
 
-        // Check for built binary first, then fallback to PATH
+        // Check for emerald-utils binary
         let debug_binary = std::path::Path::new("./target/debug/emerald-utils");
         let cmd = if debug_binary.exists() {
+            println!("  Using emerald-utils from: {}", debug_binary.display());
             debug_binary.to_str().unwrap()
         } else {
+            println!("  Using emerald-utils from PATH");
             "emerald-utils"
         };
 
@@ -321,11 +323,25 @@ min_block_time = "500ms"
             .args(["--emerald-genesis-output"])
             .arg(&emerald_genesis_output)
             .output()
-            .context("Failed to generate genesis file")?;
+            .with_context(|| {
+                format!(
+                    "Failed to execute emerald-utils. Tried:\n  \
+                     1. ./target/debug/emerald-utils ({})\n  \
+                     2. emerald-utils in PATH\n\n\
+                     Please ensure emerald-utils is built or available in PATH.\n\
+                     Run: cargo build --bin emerald-utils",
+                    if debug_binary.exists() { "found" } else { "not found" }
+                )
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(eyre!("Failed to generate genesis file: {}", stderr));
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            return Err(eyre!(
+                "emerald-utils genesis command failed:\n\nSTDERR:\n{}\n\nSTDOUT:\n{}",
+                stderr,
+                stdout
+            ));
         }
 
         Ok(())
@@ -436,7 +452,7 @@ min_block_time = "500ms"
         };
 
         let shell_cmd = format!(
-            "setsid {} > {} 2>&1 & echo $! > {}",
+            "nohup {} > {} 2>&1 & echo $! > {}",
             cmd,
             log_file_path.display(),
             pid_file.display()

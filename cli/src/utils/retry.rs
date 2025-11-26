@@ -26,7 +26,6 @@ where
                         timeout.as_secs()
                     ));
                 }
-                // optional: backoff / sleep a bit to avoid hot loop
                 sleep(interval);
             }
         }

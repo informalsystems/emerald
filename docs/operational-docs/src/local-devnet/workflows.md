@@ -1,6 +1,6 @@
 # Common Workflows
 
-Here are some typical workflows for using the local devnet during development.
+Here are some typical workflows for using the local testnet during development.
 
 ## Smart Contract Deployment
 

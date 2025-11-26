@@ -1,6 +1,6 @@
-# Interacting With the Devnet
+# Interacting With the Testnet
 
-Once your local Emerald devnet is running, you can interact with it like any Ethereum network.
+Once your local Emerald testnet is running, you can interact with it like any Ethereum network.
 
 ## Using `curl` (JSON-RPC)
 

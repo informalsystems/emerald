@@ -1,6 +1,6 @@
 # Introducing Emerald
 
-Emerald is an open-source, modular framework designed with simplicity at its core, enabling users to deploy reliable, easy to operate, high performance, EVM-compatible networks. 
+Emerald is an open-source, modular framework for deploying reliable, easy to operate, high performance, EVM-compatible networks. 
 
 ## The Case for Emerald
 
@@ -20,10 +20,12 @@ Emerald's architecture is intentionally clean and composable, consisting of thre
 - The [Malachite](https://github.com/circlefin/malachite) consensus engine
 - An Ethereum execution client (currently [Reth](https://github.com/paradigmxyz/reth)) integrated via [Engine API](https://github.com/ethereum/execution-apis/tree/main/src/engine)
 - A proof-of-authority (PoA) module
-  
-<img src="images/emerald-architecture.png" width="40%" />
 
-> TODO: For more details, please have a look at the Emerald architecture. 
+For more details, please refer to the [Architecture](./architecture/index.md) section.
+
+<div style="text-align: center;">  
+    <img src="images/emerald-architecture.png" width="40%" />
+</div>
 
 ## Key Features
 
@@ -32,10 +34,10 @@ Emerald's modular design keeps the system easy to understand, maintain, and exte
 - **EVM Compatibility.** Full EVM compatibility enables seamless integration with existing developer workflows, libraries, and infrastructure, making it easy to build, deploy, and maintain applications.
   It also means Emerald networks can tap directly into Ethereum’s thriving DeFi landscape and the wide range of applications already built for it, including bridges, explorers, indexers, and interoperability protocols.
 - **Instant Finality.** Emerald leverages [Malachite](https://github.com/circlefin/malachite) as its consensus engine. 
-  As an implementation of the [Tendermint](https://arxiv.org/abs/1807.04938) consensus protocol, Malachite provides **single-slot finality**, meaning that transactions are finalized immediately once a block is committed.
+  As a high-performance implementation of the [Tendermint](https://arxiv.org/abs/1807.04938) Byzantine Fault Tolerant (BFT) protocol, Malachite provides _instant finality_, meaning that transactions are finalized immediately once a block is committed.
 - **Predictable Performance.** Emerald's PoA-based model not only fits naturally with institutional networks of trust (where participants are well-known organizations that can use their reputations as stake), but it enables predictable performance. With a fixed, accountable validator set and instant finality consensus, block times remain stable, latency is low, and throughput is consistent.
 - **Simple Deployment and Operation.** Emerald is built on battle-tested technology: Malachite is a formally verified Tendermint consensus implementation and Reth is a high-performance Ethereum execution client. 
-  In addition, Emerald comes with a state-of-the-art [runbook on how to operate a production network](../production-network/README.md). 
+  In addition, Emerald comes with a state-of-the-art [runbook on how to operate a production network](../production-network/index.md). 
 
 ## Use Cases
 

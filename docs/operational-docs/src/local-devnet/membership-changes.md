@@ -19,13 +19,13 @@ Emerald's PoA tooling provides support for the following use cases.
 
 ## Prerequisites
 
-- Running devnet (see [Create a New Network](create-network.md))
+- Running testnet (see [Create a New Network](create-network.md))
 - RPC endpoint (default `http://127.0.0.1:8545`)
 - Contract owner key (see below for default test key)
 
-## Devnet Accounts
+## Testnet Accounts
 
-The local devnet uses a well-known test mnemonic for pre-funded accounts:
+The local testnet uses a well-known test mnemonic for pre-funded accounts:
 
 **Mnemonic**: `test test test test test test test test test test test junk`
 

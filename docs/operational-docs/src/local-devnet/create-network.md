@@ -1,4 +1,4 @@
-# Creating a Devnet
+# Creating a Testnet
 
 ## Prerequisites
 
@@ -27,9 +27,9 @@ make
 
 This single command performs all setup automatically:
 
-1. **Cleans previous devnet data** - Removes any old network state
+1. **Cleans previous testnet data** - Removes any old network state
 2. **Builds the project** - Compiles Solidity contracts and Rust binaries
-3. **Generates devnet configuration** - Creates network parameters for 3 nodes
+3. **Generates testnet configuration** - Creates network parameters for 3 nodes
 4. **Creates validator keys** - Generates private keys for each validator
 5. **Creates node directories** - Sets up `nodes/0/`, `nodes/1/`, `nodes/2/`
 6. **Extracts validator public keys** - Collects pubkeys into `nodes/validator_public_keys.txt`
@@ -125,6 +125,6 @@ make clean
 
 - All node data (`nodes/`)
 - Genesis file (`assets/genesis.json`)
-- Devnet config (`.testnet/`)
+- Testnet config (`.testnet/`)
 - Docker volumes (Reth databases)
 - Prometheus/Grafana data

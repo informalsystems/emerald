@@ -1,4 +1,4 @@
-# Production Network
+# Launch Production Network
 
 This guide is designed for network coordinator (companies, foundations, or organizations) that want to launch a new production-grade Emerald network.
 
@@ -12,7 +12,7 @@ Network coordinators are typically responsible for:
 Starting a new network involves coordinating with external validator operators:
 
 1. **Recruit Validators**: Identify organizations or individuals who will run validator nodes on the network
-2. **Distribute Instructions**: Share the key generation steps with each validator (see [Creating Network Genesis]() section below)
+2. **Distribute Instructions**: Share the key generation steps with each validator (see [Creating Network Genesis](genesis.md#creating-network-genesis))
 3. **Collect Public Keys**: Each validator generates their private keys securely on their own infrastructure and provides the coordinate with their **public key only**
 4. **Generate Genesis Files**: Use the collected public keys to create the network genesis files
 5. **Distribute Genesis Files**: Share the genesis files with all validators so they can start their nodes

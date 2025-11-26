@@ -139,8 +139,6 @@ impl TestnetStartCmd {
         N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
         PrivateKey<N::Context>: serde::de::DeserializeOwned,
     {
-        use core::str::FromStr;
-
         use malachitebft_config::*;
 
         use super::generate::{generate_testnet, TestnetConfig};
@@ -178,12 +176,12 @@ impl TestnetStartCmd {
             &testnet_config,
             RuntimeConfig::SingleThreaded,
             false, // enable_discovery
-            BootstrapProtocol::from_str("full").unwrap(),
-            Selector::from_str("random").unwrap(),
+            BootstrapProtocol::Full,
+            Selector::Random,
             20,   // num_outbound_peers
             20,   // num_inbound_peers
             5000, // ephemeral_connection_timeout_ms
-            TransportProtocol::from_str("tcp").unwrap(),
+            TransportProtocol::Tcp,
             logging,
         )
         .map_err(|e| eyre!("Failed to generate testnet configuration: {:?}", e))

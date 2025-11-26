@@ -1,6 +1,10 @@
 # Summary
 
-[Introduction](./introduction.md)
+
+
+# Get Started
+
+- [Introducing Emerald](./introduction.md)
 
 ---
 

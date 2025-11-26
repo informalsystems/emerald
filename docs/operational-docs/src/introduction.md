@@ -1,139 +1,55 @@
-# Emerald Documentation
+# Introducing Emerald
 
-## What is Emerald?
+Emerald is an open-source, modular framework designed with simplicity at its core, enabling users to deploy reliable, easy to operate, high performance, EVM-compatible networks. 
 
-Emerald is a **Tendermint-based consensus engine** for Ethereum execution clients, built as a shim layer on top of [Malachite](https://github.com/informalsystems/malachite). It brings **instant finality** to Ethereum-compatible blockchains by connecting Malachite BFT consensus to execution clients through the Engine API.
+## The Case for Emerald
 
----
+Society runs on networks of trust: shared expectations and reputations that let us coordinate and innovate at scale.
+
+Blockchains strengthen these networks with transparent rules and auditable operations. 
+Bitcoin enabled global value transfer. Ethereum made trust programmable. 
+But their large-scale governance makes it hard for institutions to define specific trust rules.
+
+Emerald empowers institutions to build production-ready networks with tailored governance and compliance logic 
+while retaining the reliability and interoperability of decentralized systems.
+
+## Main Components
+
+Emerald's architecture is intentionally clean and composable, consisting of three key components: 
+
+- The [Malachite](https://github.com/circlefin/malachite) consensus engine
+- An Ethereum execution client (currently [Reth](https://github.com/paradigmxyz/reth)) integrated via [Engine API](https://github.com/ethereum/execution-apis/tree/main/src/engine)
+- A proof-of-authority (PoA) module
+
+> TODO: add diagram 
+
+> TODO: For more details, please have a look at the Emerald architecture. 
 
 ## Key Features
 
-### Instant Finality
-Emerald provides **single-slot finality** through Malachite's Tendermint-based BFT consensus. Transactions are finalized immediately once a block is committed.
+Emerald's modular design keeps the system easy to understand, maintain, and extend while providing full EVM compatibility, instant finality, predictable performance, and simple deployment and operation.
 
-### Execution Client Agnostic
-Emerald integrates with any execution client that supports the **Engine API standard**. While we've implemented and tested with Reth, it should work seamlessly with Geth, Nethermind, or any other Engine API-compliant client.
-
-### Proof of Authority (PoA)
-Dynamic validator set management through an on-chain smart contract. Add, remove, or update validators without restarting the network.
-
-### Production Ready Components
-Built on battle-tested technology:
-- **Malachite**: Formally verified Tendermint consensus implementation
-- **Reth**: High-performance Ethereum execution client
-- **Engine API**: Standard Ethereum consensus/execution interface
-
----
+- **EVM Compatibility.** Full EVM compatibility enables seamless integration with existing developer workflows, libraries, and infrastructure, making it easy to build, deploy, and maintain applications.
+  It also means Emerald networks can tap directly into Ethereum’s thriving DeFi landscape and the wide range of applications already built for it, including bridges, explorers, indexers, and interoperability protocols.
+- **Instant Finality.** Emerald leverages [Malachite](https://github.com/circlefin/malachite) as its consensus engine. 
+  As an implementation of the [Tendermint](https://arxiv.org/abs/1807.04938) consensus protocol, Malachite provides **single-slot finality**, meaning that transactions are finalized immediately once a block is committed.
+- **Predictable Performance.** Emerald's PoA-based model not only fits naturally with institutional networks of trust (where participants are well-known organizations that can use their reputations as stake), but it enables predictable performance. With a fixed, accountable validator set and instant finality consensus, block times remain stable, latency is low, and throughput is consistent.
+- **Simple Deployment and Operation.** Emerald is built on battle-tested technology: Malachite is a formally verified Tendermint consensus implementation and Reth is a high-performance Ethereum execution client. 
+  In addition, Emerald comes with a state-of-the-art [runbook on how to operate a production network](../production-network/README.md). 
 
 ## Use Cases
 
-Emerald is designed for scenarios where instant finality and control over the validator set are critical:
+Building on Emerald simplifies development through full EVM compatibility that provides access to established Ethereum tooling, libraries, and workflows. 
+Teams can quickly create powerful applications by leveraging existing components like DeFi protocols, bridges, and token standards that work natively on Emerald without modification. 
 
-### Layer 1 Blockchains
-Build custom EVM-compatible Layer 1 chains with:
-- Instant transaction finality
-- Known and controlled validator sets
-- Full EVM compatibility for smart contracts
+With this foundation, Emerald serves institutional adoption through applications organizations increasingly prioritize:
 
-### Private Networks
-Deploy permissioned networks for enterprises or consortiums:
-- Controlled validator participation
-- Instant finality for financial applications
-- Full Ethereum tooling compatibility
+- Real-world asset tokenization systems requiring transparent governance.
+- Cross-border payment networks needing predictable performance.
+- Trading platforms reliant on verifiable execution.
 
-### Development and Testing
-Rapid iteration for smart contract development:
-- Instant block confirmation speeds up testing
-- Full control over network parameters
-- Compatible with all Ethereum development tools
-
----
-
-## How It Works
-
-Emerald acts as the **Consensus Layer (CL)** in Ethereum's two-layer architecture, while an execution client like Reth acts as the **Execution Layer (EL)**:
-
-```
-┌─────────────────────────────────────────┐
-│         Emerald (Consensus Layer)       │
-│    ┌──────────────────────────────┐    │
-│    │    Malachite BFT Consensus   │    │
-│    └──────────────────────────────┘    │
-└─────────────────┬───────────────────────┘
-                  │ Engine API
-┌─────────────────▼───────────────────────┐
-│    Reth/Geth (Execution Layer)          │
-│    ┌──────────────────────────────┐    │
-│    │  EVM, State, Transactions    │    │
-│    └──────────────────────────────┘    │
-└─────────────────────────────────────────┘
-```
-
-**Key Components:**
-- **Emerald**: Manages consensus, validator coordination, and block finalization
-- **Execution Client**: Handles transaction execution, state management, and EVM operations
-- **Engine API**: Standard RPC interface connecting the two layers
-
-For detailed technical architecture, see the [Architecture](./architecture.md) page.
-
----
-
-## Getting Started
-
-Choose your path based on your needs:
-
-### For Developers & Testing
-**[Run a Local Testnet](./local-testnet.md)**
-
-Perfect for:
-- Smart contract development
-- Testing validator operations
-- Learning how Emerald works
-- Integration testing
-
-Start a fully functional 3-validator network on your local machine in under a minute.
-
-### For Production Deployments
-**[Create a Production Network](./production-network.md)**
-
-Complete guide for:
-- Setting up a network with external validators
-- Generating and distributing keys
-- Configuring nodes for production
-- Network coordination and launch
-
----
-
-## Technical Deep Dive
-
-Want to understand how Emerald works under the hood?
-
-- **[Architecture](./architecture.md)**: Detailed technical architecture, Engine API integration, and consensus flow
-- **[Configuration Examples](./config-examples.md)**: Reference configurations and systemd service files
-
----
-
-## Project Status
-
-Emerald is a **proof of concept** developed by Informal Systems to demonstrate how Malachite can function as a consensus engine for EVM-compatible blockchains through Engine API.
-
-### Current State
-- ✅ Working integration with Reth
-- ✅ Instant finality consensus
-- ✅ PoA validator management
-- ✅ Complete documentation
-- ⚠️  Under active development
-
---
-
-## Links
-
-- **[Emerald GitHub Repository](https://github.com/informalsystems/emerald)**
-- **[Malachite BFT](https://github.com/informalsystems/malachite)** - The underlying consensus engine
-- **[Reth](https://github.com/paradigmxyz/reth)** - Ethereum execution client
-
---
+These applications are already being built on Emerald today, including RWA platforms, decentralized exchanges, and payment networks.
 
 ## Contributing & Support
 
-Emerald is developed by [Informal Systems](https://informal.systems). For questions, issues, or contributions, please visit the GitHub repository.
+Emerald is developed by [Informal Systems](https://informal.systems). For questions, issues, or contributions, please visit the [Emerald GitHub Repository](https://github.com/informalsystems/emerald).

@@ -3,7 +3,7 @@
 /rethdata
 monitoring/data-grafana/
 monitoring/data-prometheus/
-assets
+/assets
 .testnet
 .claude
 

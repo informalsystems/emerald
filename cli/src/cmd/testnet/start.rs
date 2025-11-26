@@ -25,7 +25,7 @@ pub struct TestnetStartCmd {
     /// Private keys for validators (can be specified multiple times)
     /// Supports both hex format (0x...) and JSON format from init command
     #[clap(long = "node-keys")]
-    pub node_keys: Vec<String>,
+    pub node_keys: Option<Vec<String>>,
 }
 
 impl TestnetStartCmd {
@@ -168,11 +168,7 @@ impl TestnetStartCmd {
             deterministic: true,
             configuration_paths: config_paths,
             monikers,
-            private_keys: if self.node_keys.is_empty() {
-                None
-            } else {
-                Some(self.node_keys.clone())
-            },
+            private_keys: self.node_keys.clone(),
         };
 
         // Use existing generate_testnet logic
@@ -330,7 +326,11 @@ min_block_time = "500ms"
                      2. emerald-utils in PATH\n\n\
                      Please ensure emerald-utils is built or available in PATH.\n\
                      Run: cargo build --bin emerald-utils",
-                    if debug_binary.exists() { "found" } else { "not found" }
+                    if debug_binary.exists() {
+                        "found"
+                    } else {
+                        "not found"
+                    }
                 )
             })?;
 

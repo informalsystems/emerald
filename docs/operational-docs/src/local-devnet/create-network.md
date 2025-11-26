@@ -17,7 +17,7 @@ docker --version # Should show Docker 20.10+
 make --version   # Should show GNU Make
 ```
 
-## Quick Start: 3-Validator Network
+## Start the Network
 
 The default configuration creates a 3-validator network. From the repository root, run:
 
@@ -40,7 +40,13 @@ This single command performs all setup automatically:
 
 **Expected output:** You should see logs from all 3 validators producing blocks. The network should start producing blocks within a few seconds.
 
-## Verify Network is Running
+To create a network with 4 validators:
+
+```bash
+make four
+```
+
+### Verify Network is Running
 
 Once the command completes, verify the network is operational:
 
@@ -58,15 +64,7 @@ curl -X POST http://127.0.0.1:8545 \
 - **Prometheus**: http://localhost:9090 (raw metrics data)
 - **Otterscan Block Explorer**: http://localhost:5100 (view blocks and transactions)
 
-## 4-Validator Network
-
-To create a network with 4 validators:
-
-```bash
-make four
-```
-
-## Step by Step
+### Step by Step
 
 1. **Configuration Generation** (`./scripts/generate_testnet_config.sh`)
    - Creates `.testnet/testnet_config.toml` with network parameters
@@ -108,3 +106,25 @@ make four
    - Each Reth node initializes from `assets/genesis.json`
    - Peer connections established
    - Emerald consensus nodes spawn and connect to Reth via Engine API
+
+## Stop the Network
+
+```bash
+make stop
+```
+
+This stops all Docker containers but preserves data.
+
+## Clean the Network
+
+```bash
+make clean
+```
+
+**Warning**: This deletes:
+
+- All node data (`nodes/`)
+- Genesis file (`assets/genesis.json`)
+- Devnet config (`.testnet/`)
+- Docker volumes (Reth databases)
+- Prometheus/Grafana data

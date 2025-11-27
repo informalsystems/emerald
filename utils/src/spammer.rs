@@ -155,6 +155,11 @@ impl Spammer {
         Ok(u64::from_str_radix(hex_str, 16)?)
     }
 
+    // Get current txpool status.
+    async fn get_txpool_status(&self) -> Result<TxpoolStatus> {
+        self.client.rpc_request("txpool_status", vec![]).await
+    }
+
     /// Generate and send transactions to the Ethereum node at a controlled rate.
     async fn spammer(
         &self,
@@ -172,7 +177,21 @@ impl Spammer {
         let start_time = Instant::now();
         let mut txs_sent_total = 0u64;
         let mut interval = time::interval(Duration::from_secs(1));
+
+        // Channel for receiving nonce updates
+        let (nonce_update_sender, mut nonce_update_receiver) = mpsc::channel::<(u64, u64)>(1);
+
         loop {
+            // Check for nonce updates
+            while let Ok((expected_nonce, actual_nonce)) = nonce_update_receiver.try_recv() {
+                if actual_nonce != expected_nonce {
+                    eprintln!(
+                        "⚠️  Nonce mismatch detected! Expected {expected_nonce}, but node has {actual_nonce}. Re-syncing...",
+                    );
+                    nonce = actual_nonce;
+                }
+            }
+
             // Wait for next one-second tick.
             let _ = interval.tick().await;
             let interval_start = Instant::now();
@@ -243,6 +262,26 @@ impl Spammer {
                     let mapped_result = result.map(|_| tx_bytes_len);
                     result_sender.send(mapped_result).await?;
                 }
+
+                // Spawn background task to verify nonce
+                // This allows the spammer to continue immediately without waiting for the RPC call
+                let nonce_sender = nonce_update_sender.clone();
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    if let Ok(actual_nonce) = client
+                        .rpc_request::<String>(
+                            "eth_getTransactionCount",
+                            vec![json!(address), json!("pending")],
+                        )
+                        .await
+                    {
+                        if let Some(hex_str) = actual_nonce.strip_prefix("0x") {
+                            if let Ok(nonce_value) = u64::from_str_radix(hex_str, 16) {
+                                let _ = nonce_sender.try_send((nonce, nonce_value));
+                            }
+                        }
+                    }
+                });
             }
 
             // Give time to the in-flight results to be received.
@@ -290,7 +329,7 @@ impl Spammer {
                         sleep(Duration::from_secs(1) - elapsed).await;
                     }
 
-                    let pool_status: TxpoolStatus = self.client.rpc_request("txpool_status", vec![]).await?;
+                    let pool_status = self.get_txpool_status().await?;
                     debug!("{stats_last_second}; {pool_status:?}");
 
                     // Update total, then reset last second stats
@@ -378,6 +417,7 @@ impl fmt::Display for Stats {
     }
 }
 
+#[derive(Clone)]
 struct RpcClient {
     client: HttpClient,
 }

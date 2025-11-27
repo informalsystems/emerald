@@ -34,6 +34,10 @@ pub struct TestnetStartCmd {
     /// Path to `emerald` binary. If not specified will default to `./target/debug/emerald`
     #[clap(long, default_value = "./target/debug/emerald")]
     pub emerald_bin: String,
+
+    /// Path to `custom-reth` binary. If not specified will default to `./custom-reth/target/debug/custom-reth`
+    #[clap(long, default_value = "./custom-reth/target/debug/custom-reth")]
+    pub custom_reth_bin: String,
 }
 
 impl TestnetStartCmd {
@@ -55,7 +59,7 @@ impl TestnetStartCmd {
 
         // 1. Check if custom-reth is available
         print!("Checking custom-reth installation... ");
-        match reth::check_installation() {
+        match reth::check_installation(&self.custom_reth_bin) {
             Ok(version) => {
                 println!("✓ {}", version.lines().next().unwrap_or(&version));
             }
@@ -367,7 +371,7 @@ min_block_time = "500ms"
         for i in 0..self.nodes {
             let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
             print!("  Starting Reth node {i}... ");
-            let process = reth_node.spawn()?;
+            let process = reth_node.spawn(&self.custom_reth_bin)?;
             println!("✓ (PID: {})", process.pid);
             processes.push(process);
 

@@ -11,24 +11,21 @@ use super::rpc::RpcClient;
 use super::types::{ProcessHandle, RethNode};
 
 /// Check if custom-reth is available and return version
-pub fn check_installation() -> Result<String> {
+pub fn check_installation(custom_reth_bin_str: &str) -> Result<String> {
     // Check for built binary first, then try PATH
-    let debug_binary = std::path::Path::new("./custom-reth/target/debug/custom-reth");
-
-    let output = if debug_binary.exists() {
-        Command::new(debug_binary)
-            .arg("--version")
-            .output()
-            .context("Failed to execute custom-reth binary")?
-    } else {
-        // Try custom-reth in PATH
-        Command::new("custom-reth")
-            .arg("--version")
-            .output()
-            .context(
-                "Failed to execute 'custom-reth'. Not found in ./custom-reth/target/debug/ or PATH",
-            )?
+    let custom_reth_bin = {
+        let p = PathBuf::from(custom_reth_bin_str);
+        if p.exists() {
+            p
+        } else {
+            PathBuf::from("custom-reth")
+        }
     };
+
+    let output = Command::new(custom_reth_bin)
+        .arg("--version")
+        .output()
+        .context("Failed to execute custom-reth binary")?;
 
     if !output.status.success() {
         return Err(eyre!("custom-reth command failed"));
@@ -79,7 +76,7 @@ impl RethNode {
     }
 
     /// Spawn reth process using custom-reth binary
-    pub fn spawn(&self) -> Result<RethProcess> {
+    pub fn spawn(&self, custom_reth_bin_str: &str) -> Result<RethProcess> {
         // Ensure directories exist
         if let Some(parent) = self.data_dir.parent() {
             fs::create_dir_all(parent)?;
@@ -106,13 +103,15 @@ impl RethNode {
             .join("reth.pid");
 
         // Check for built binary first, then fallback to PATH
-        let debug_binary = std::path::Path::new("./custom-reth/target/debug/custom-reth");
-        let cmd = if debug_binary.exists() {
-            format!("{} {}", debug_binary.display(), args.join(" "))
-        } else {
-            // Try PATH - will fail at spawn time if not found
-            format!("custom-reth {}", args.join(" "))
+        let custom_reth_bin = {
+            let p = PathBuf::from(custom_reth_bin_str);
+            if p.exists() {
+                p
+            } else {
+                PathBuf::from("custom-reth")
+            }
         };
+        let cmd = format!("{} {}", custom_reth_bin.display(), args.join(" "));
 
         let shell_cmd = format!(
             "nohup {} > {} 2>&1 & echo $! > {}",

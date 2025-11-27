@@ -21,6 +21,10 @@ pub struct TestnetAddNodeCmd {
     /// Path to `emerald` binary. If not specified will default to `./target/debug/emerald`
     #[clap(long, default_value = "./target/debug/emerald")]
     pub emerald_bin: String,
+
+    /// Path to `custom-reth` binary. If not specified will default to `./custom-reth/target/debug/custom-reth`
+    #[clap(long, default_value = "./custom-reth/target/debug/custom-reth")]
+    pub custom_reth_bin: String,
 }
 
 impl TestnetAddNodeCmd {
@@ -30,7 +34,7 @@ impl TestnetAddNodeCmd {
 
         // 1. Check if custom-reth is available
         print!("Checking custom-reth installation... ");
-        match reth::check_installation() {
+        match reth::check_installation(&self.custom_reth_bin) {
             Ok(version) => {
                 println!("✓ {}", version.lines().next().unwrap_or(&version));
             }
@@ -335,7 +339,7 @@ min_block_time = "0ms"
     fn spawn_reth_node(&self, home_dir: &Path, node_id: usize) -> Result<RethProcess> {
         let assets_dir = home_dir.join("assets");
         let reth_node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir);
-        reth_node.spawn()
+        reth_node.spawn(&self.custom_reth_bin)
     }
 
     fn connect_to_peers(&self, home_dir: &Path, node_id: usize) -> Result<()> {

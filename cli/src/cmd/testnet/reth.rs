@@ -40,7 +40,7 @@ impl RethNode {
     pub fn build_args(&self) -> Vec<String> {
         vec![
             "node".to_string(),
-            self.config.log_verbosity.clone(),
+            format!("-{}", self.config.log_verbosity),
             "-d".to_string(),
             format!("--datadir={}", self.data_dir.display()),
             format!("--chain={}", self.genesis_file.display()),

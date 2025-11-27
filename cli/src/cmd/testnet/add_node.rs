@@ -76,7 +76,7 @@ impl TestnetAddNodeCmd {
 
         // 7. Generate private validator key
         println!("\n🔑 Generating private validator key...");
-        self.generate_private_key(home_dir, node_id, &self.emerald_bin)?;
+        self.generate_private_key(home_dir, node_id)?;
         println!("✓ Private validator key generated");
 
         // 8. Spawn Reth process
@@ -107,7 +107,7 @@ impl TestnetAddNodeCmd {
 
         // 11. Spawn Emerald process
         println!("\n💎 Starting Emerald consensus node...");
-        let emerald_process = self.spawn_emerald_node(home_dir, node_id, &self.emerald_bin)?;
+        let emerald_process = self.spawn_emerald_node(home_dir, node_id)?;
         println!("✓ Emerald node started (PID: {})", emerald_process.pid);
 
         println!("\n✅ Non-validator node {node_id} added successfully!");
@@ -298,17 +298,12 @@ min_block_time = "0ms"
         Ok(())
     }
 
-    fn generate_private_key(
-        &self,
-        home_dir: &Path,
-        node_id: usize,
-        emerald_bin_str: &str,
-    ) -> Result<()> {
+    fn generate_private_key(&self, home_dir: &Path, node_id: usize) -> Result<()> {
         let node_home = home_dir.join(node_id.to_string());
 
         // Check for built binary first, then fallback to PATH
         let emerald_bin = {
-            let p = PathBuf::from(emerald_bin_str);
+            let p = PathBuf::from(self.emerald_bin.clone());
             if p.exists() {
                 p
             } else {
@@ -379,12 +374,7 @@ min_block_time = "0ms"
         Ok(())
     }
 
-    fn spawn_emerald_node(
-        &self,
-        home_dir: &Path,
-        node_id: usize,
-        emerald_bin_str: &str,
-    ) -> Result<EmeraldProcess> {
+    fn spawn_emerald_node(&self, home_dir: &Path, node_id: usize) -> Result<EmeraldProcess> {
         let node_home = home_dir.join(node_id.to_string());
         let config_file = node_home.join("config").join("emerald.toml");
 
@@ -399,7 +389,7 @@ min_block_time = "0ms"
         // Emerald should handle this gracefully and run as a non-validator
         // Check for built binary first, then fallback to PATH
         let emerald_bin = {
-            let p = PathBuf::from(emerald_bin_str);
+            let p = PathBuf::from(self.emerald_bin.clone());
             if p.exists() {
                 p
             } else {

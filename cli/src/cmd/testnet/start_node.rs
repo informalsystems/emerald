@@ -86,7 +86,7 @@ impl TestnetStartNodeCmd {
 
         // Start Emerald process
         println!("\n💎 Starting Emerald consensus node...");
-        let emerald_process = self.spawn_emerald_node(home_dir, self.node_id, &self.emerald_bin)?;
+        let emerald_process = self.spawn_emerald_node(home_dir, self.node_id)?;
         println!("✓ Emerald node started (PID: {})", emerald_process.pid);
 
         println!("\n✅ Node {} started successfully!", self.node_id);
@@ -142,12 +142,7 @@ impl TestnetStartNodeCmd {
         Ok(())
     }
 
-    fn spawn_emerald_node(
-        &self,
-        home_dir: &Path,
-        node_id: usize,
-        emerald_bin_str: &str,
-    ) -> Result<EmeraldProcess> {
+    fn spawn_emerald_node(&self, home_dir: &Path, node_id: usize) -> Result<EmeraldProcess> {
         let node_home = home_dir.join(node_id.to_string());
         let config_file = node_home.join("config").join("emerald.toml");
 
@@ -160,7 +155,7 @@ impl TestnetStartNodeCmd {
 
         // Check for built binary first, then fallback to PATH
         let emerald_bin = {
-            let p = PathBuf::from(emerald_bin_str);
+            let p = PathBuf::from(self.emerald_bin.clone());
             if p.exists() {
                 p
             } else {

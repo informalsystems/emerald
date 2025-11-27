@@ -35,6 +35,10 @@ pub struct TestnetStartCmd {
     #[clap(long, default_value = "./target/debug/emerald")]
     pub emerald_bin: String,
 
+    /// Path to `emerald-utils` binary. If not specified will default to `./target/debug/emerald-utils`
+    #[clap(long, default_value = "./target/debug/emerald-utils")]
+    pub emerald_utils_bin: String,
+
     /// Path to `custom-reth` binary. If not specified will default to `./custom-reth/target/debug/custom-reth`
     #[clap(long, default_value = "./custom-reth/target/debug/custom-reth")]
     pub custom_reth_bin: String,
@@ -88,7 +92,7 @@ impl TestnetStartCmd {
 
         // 3. Extract validator public keys
         println!("\n🔑 Extracting validator public keys...");
-        self.extract_public_keys(home_dir, &self.emerald_bin)?;
+        self.extract_public_keys(home_dir)?;
         println!("✓ Public keys extracted");
 
         // 4. Generate genesis file
@@ -113,7 +117,7 @@ impl TestnetStartCmd {
 
         // 8. Spawn Emerald processes
         println!("\n💎 Starting Emerald consensus nodes...");
-        let emerald_processes = self.spawn_emerald_nodes(home_dir, &self.emerald_bin)?;
+        let emerald_processes = self.spawn_emerald_nodes(home_dir)?;
         println!("✓ All Emerald nodes started");
 
         println!("\n✅ Testnet started successfully!");
@@ -259,7 +263,7 @@ min_block_time = "500ms"
         Ok(())
     }
 
-    fn extract_public_keys(&self, home_dir: &Path, emerald_bin_str: &str) -> Result<()> {
+    fn extract_public_keys(&self, home_dir: &Path) -> Result<()> {
         let mut public_keys = Vec::new();
 
         for i in 0..self.nodes {
@@ -270,7 +274,7 @@ min_block_time = "500ms"
 
             // Check for built binary first, then fallback to PATH
             let emerald_bin = {
-                let p = PathBuf::from(emerald_bin_str);
+                let p = PathBuf::from(self.emerald_bin.clone());
                 if p.exists() {
                     p
                 } else {
@@ -315,16 +319,20 @@ min_block_time = "500ms"
         let emerald_genesis_output = assets_dir.join("emerald_genesis.json");
 
         // Check for emerald-utils binary
-        let debug_binary = std::path::Path::new("./target/debug/emerald-utils");
-        let cmd = if debug_binary.exists() {
-            println!("  Using emerald-utils from: {}", debug_binary.display());
-            debug_binary.to_str().unwrap()
-        } else {
-            println!("  Using emerald-utils from PATH");
-            "emerald-utils"
+        let emerald_utils_bin = {
+            let p = PathBuf::from(self.emerald_utils_bin.clone());
+            if p.exists() {
+                p
+            } else {
+                PathBuf::from("emerald-utils")
+            }
         };
+        println!(
+            "  Using emerald-utils from: {}",
+            emerald_utils_bin.display()
+        );
 
-        let output = Command::new(cmd)
+        let output = Command::new(emerald_utils_bin.clone())
             .args(["genesis", "--public-keys-file"])
             .arg(&pubkeys_file)
             .args([
@@ -343,7 +351,7 @@ min_block_time = "500ms"
                      2. emerald-utils in PATH\n\n\
                      Please ensure emerald-utils is built or available in PATH.\n\
                      Run: cargo build --bin emerald-utils",
-                    if debug_binary.exists() {
+                    if emerald_utils_bin.exists() {
                         "found"
                     } else {
                         "not found"
@@ -432,16 +440,12 @@ min_block_time = "500ms"
         Ok(())
     }
 
-    fn spawn_emerald_nodes(
-        &self,
-        home_dir: &Path,
-        emerald_bin_str: &str,
-    ) -> Result<Vec<EmeraldProcess>> {
+    fn spawn_emerald_nodes(&self, home_dir: &Path) -> Result<Vec<EmeraldProcess>> {
         let mut processes = Vec::new();
 
         for i in 0..self.nodes {
             print!("  Starting Emerald node {i}... ");
-            let process = self.spawn_emerald_node(i, home_dir, emerald_bin_str)?;
+            let process = self.spawn_emerald_node(i, home_dir)?;
             println!("✓ (PID: {})", process.pid);
             processes.push(process);
 
@@ -452,12 +456,7 @@ min_block_time = "500ms"
         Ok(processes)
     }
 
-    fn spawn_emerald_node(
-        &self,
-        node_id: usize,
-        home_dir: &Path,
-        emerald_bin_str: &str,
-    ) -> Result<EmeraldProcess> {
+    fn spawn_emerald_node(&self, node_id: usize, home_dir: &Path) -> Result<EmeraldProcess> {
         let node_home = home_dir.join(node_id.to_string());
         let config_file = node_home.join("config").join("emerald.toml");
 
@@ -470,7 +469,7 @@ min_block_time = "500ms"
 
         // Check for built binary first, then fallback to PATH
         let emerald_bin = {
-            let p = PathBuf::from(emerald_bin_str);
+            let p = PathBuf::from(self.emerald_bin.clone());
             if p.exists() {
                 p
             } else {

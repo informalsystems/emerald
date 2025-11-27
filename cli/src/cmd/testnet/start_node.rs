@@ -27,6 +27,10 @@ pub struct TestnetStartNodeCmd {
     /// Path to `custom-reth` binary. If not specified will default to `./custom-reth/target/debug/custom-reth`
     #[clap(long, default_value = "./custom-reth/target/debug/custom-reth")]
     pub custom_reth_bin: String,
+
+    /// Path to reth node spawning configurations. If not specified will use default values
+    #[clap(long)]
+    pub reth_config_path: Option<PathBuf>,
 }
 
 impl TestnetStartNodeCmd {
@@ -61,7 +65,12 @@ impl TestnetStartNodeCmd {
         // Start Reth process
         println!("\n🔗 Starting Reth execution client...");
         let assets_dir = home_dir.join("assets");
-        let reth_node = RethNode::new(self.node_id, home_dir.to_path_buf(), assets_dir);
+        let reth_node = RethNode::new(
+            self.node_id,
+            home_dir.to_path_buf(),
+            assets_dir,
+            &self.reth_config_path,
+        );
         let reth_process = reth_node.spawn(&self.custom_reth_bin)?;
         println!("✓ Reth node started (PID: {})", reth_process.pid);
 
@@ -107,7 +116,12 @@ impl TestnetStartNodeCmd {
 
     fn connect_to_peers(&self, home_dir: &Path, node_id: usize) -> Result<()> {
         let assets_dir = home_dir.join("assets");
-        let node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir.clone());
+        let node = RethNode::new(
+            node_id,
+            home_dir.to_path_buf(),
+            assets_dir.clone(),
+            &self.reth_config_path,
+        );
 
         // Find all existing nodes and get their enodes
         let mut connected = 0;
@@ -117,8 +131,12 @@ impl TestnetStartNodeCmd {
                 if let Some(name) = entry.file_name().to_str() {
                     if let Ok(id) = name.parse::<usize>() {
                         if id != node_id {
-                            let peer_node =
-                                RethNode::new(id, home_dir.to_path_buf(), assets_dir.clone());
+                            let peer_node = RethNode::new(
+                                id,
+                                home_dir.to_path_buf(),
+                                assets_dir.clone(),
+                                &self.reth_config_path,
+                            );
                             // Try to get enode and connect
                             if let Ok(enode) = peer_node.get_enode() {
                                 print!("  Connecting to node {id}... ");

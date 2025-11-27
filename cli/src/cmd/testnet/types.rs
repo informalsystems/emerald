@@ -6,6 +6,8 @@ use std::time::SystemTime;
 
 use color_eyre::Result;
 
+use crate::cmd::testnet::config::reth_config::RethNodeConfig;
+
 /// Handle for a running process
 #[derive(Debug, Clone)]
 pub struct ProcessHandle {
@@ -145,7 +147,7 @@ impl RethPorts {
     }
 }
 
-/// Reth node configuration
+/// Reth node
 #[derive(Debug, Clone)]
 pub struct RethNode {
     pub node_id: usize,
@@ -154,15 +156,35 @@ pub struct RethNode {
     pub genesis_file: PathBuf,
     pub jwt_secret: PathBuf,
     pub ports: RethPorts,
+    pub config: RethNodeConfig,
 }
 
 impl RethNode {
     /// Create a new Reth node configuration
-    pub fn new(node_id: usize, home_dir: PathBuf, assets_dir: PathBuf) -> Self {
+    pub fn new(
+        node_id: usize,
+        home_dir: PathBuf,
+        assets_dir: PathBuf,
+        config_path: &Option<PathBuf>,
+    ) -> Self {
         let data_dir = home_dir.join(node_id.to_string()).join("reth-data");
         let genesis_file = assets_dir.join("genesis.json");
         let jwt_secret = assets_dir.join("jwtsecret");
         let ports = RethPorts::for_node(node_id);
+
+        let config = match config_path {
+            None => {
+                // Case 1: no config file → pure defaults
+                RethNodeConfig::default()
+            }
+            Some(path) => {
+                let contents = std::fs::read_to_string(path)
+                    .unwrap_or_else(|_| panic!("failed to read config file {path:?}"));
+                let cfg: RethNodeConfig = toml::from_str(&contents)
+                    .unwrap_or_else(|_| panic!("failed to parse config file {path:?}"));
+                cfg
+            }
+        };
 
         Self {
             node_id,
@@ -171,6 +193,7 @@ impl RethNode {
             genesis_file,
             jwt_secret,
             ports,
+            config,
         }
     }
 }

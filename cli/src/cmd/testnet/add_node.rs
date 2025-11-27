@@ -26,6 +26,10 @@ pub struct TestnetAddNodeCmd {
     /// Path to `custom-reth` binary. If not specified will default to `./custom-reth/target/debug/custom-reth`
     #[clap(long, default_value = "./custom-reth/target/debug/custom-reth")]
     pub custom_reth_bin: String,
+
+    /// Path to reth node spawning configurations. If not specified will use default values
+    #[clap(long)]
+    pub reth_config_path: Option<PathBuf>,
 }
 
 impl TestnetAddNodeCmd {
@@ -88,7 +92,12 @@ impl TestnetAddNodeCmd {
         // 9. Wait for Reth node to be ready
         println!("\n⏳ Waiting for Reth node to initialize...");
         let assets_dir = home_dir.join("assets");
-        let reth_node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir);
+        let reth_node = RethNode::new(
+            node_id,
+            home_dir.to_path_buf(),
+            assets_dir,
+            &self.reth_config_path,
+        );
         let rpc = RpcClient::new(reth_node.ports.http);
         retry_with_timeout(
             "reth node ready",
@@ -337,13 +346,23 @@ min_block_time = "0ms"
 
     fn spawn_reth_node(&self, home_dir: &Path, node_id: usize) -> Result<RethProcess> {
         let assets_dir = home_dir.join("assets");
-        let reth_node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir);
+        let reth_node = RethNode::new(
+            node_id,
+            home_dir.to_path_buf(),
+            assets_dir,
+            &self.reth_config_path,
+        );
         reth_node.spawn(&self.custom_reth_bin)
     }
 
     fn connect_to_peers(&self, home_dir: &Path, node_id: usize) -> Result<()> {
         let assets_dir = home_dir.join("assets");
-        let new_node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir.clone());
+        let new_node = RethNode::new(
+            node_id,
+            home_dir.to_path_buf(),
+            assets_dir.clone(),
+            &self.reth_config_path,
+        );
 
         // Read and filter IDs
         let ids = fs::read_dir(home_dir)?
@@ -362,7 +381,12 @@ min_block_time = "0ms"
 
         // Find all existing nodes and get their enodes
         for id in ids {
-            let existing_node = RethNode::new(id, home_dir.to_path_buf(), assets_dir.clone());
+            let existing_node = RethNode::new(
+                id,
+                home_dir.to_path_buf(),
+                assets_dir.clone(),
+                &self.reth_config_path,
+            );
             // Try to get enode and connect
             if let Ok(enode) = existing_node.get_enode() {
                 print!("  Connecting to node {id}... ");

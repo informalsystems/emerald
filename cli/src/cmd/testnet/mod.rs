@@ -9,6 +9,7 @@ use malachitebft_config::LoggingConfig;
 use malachitebft_core_types::{Context, SigningScheme};
 
 mod add_node;
+pub mod config;
 mod generate;
 pub mod reth;
 mod rm;

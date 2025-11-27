@@ -40,38 +40,56 @@ impl RethNode {
     pub fn build_args(&self) -> Vec<String> {
         vec![
             "node".to_string(),
-            "-vvvv".to_string(),
+            self.config.log_verbosity.clone(),
             "-d".to_string(),
             format!("--datadir={}", self.data_dir.display()),
             format!("--chain={}", self.genesis_file.display()),
             "--http".to_string(),
             format!("--http.port={}", self.ports.http),
-            "--http.addr=0.0.0.0".to_string(),
-            "--http.corsdomain=*".to_string(),
-            "--http.api=admin,net,eth,web3,debug,txpool,trace,ots".to_string(),
+            format!("--http.addr={}", self.config.http_addr),
+            format!("--http.corsdomain={}", self.config.http_corsdomain),
+            format!("--http.api={}", self.config.http_api.join(",")),
             "--ws".to_string(),
             format!("--ws.port={}", self.ports.ws),
-            "--ws.addr=0.0.0.0".to_string(),
-            "--authrpc.addr=0.0.0.0".to_string(),
+            format!("--ws.addr={}", self.config.ws_addr),
+            format!("--authrpc.addr={}", self.config.authrpc_addr),
             format!("--authrpc.port={}", self.ports.authrpc),
             format!("--authrpc.jwtsecret={}", self.jwt_secret.display()),
             format!("--metrics=127.0.0.1:{}", self.ports.metrics),
             format!("--discovery.port={}", self.ports.discovery),
             format!("--port={}", self.ports.p2p),
-            "--nat=extip:127.0.0.1".to_string(),
-            "--tx-propagation-mode=all".to_string(),
-            "--txpool.pending-max-count=50000".to_string(),
-            "--txpool.pending-max-size=500".to_string(),
-            "--txpool.queued-max-count=50000".to_string(),
-            "--txpool.queued-max-size=500".to_string(),
-            "--txpool.max-account-slots=50000".to_string(),
-            "--txpool.max-batch-size=10000".to_string(),
-            "--max-tx-reqs=10000".to_string(),
-            "--max-tx-reqs-peer=255".to_string(),
-            "--max-pending-imports=10000".to_string(),
-            "--builder.gaslimit=66000000000".to_string(),
-            "--txpool.gas-limit=3000000000".to_string(),
-            "--builder.interval=10ms".to_string(),
+            format!("--nat={}", self.config.nat),
+            format!("--tx-propagation-mode={}", self.config.tx_propagation_mode),
+            format!(
+                "--txpool.pending-max-count={}",
+                self.config.txpool_pending_max_count
+            ),
+            format!(
+                "--txpool.pending-max-size={}",
+                self.config.txpool_pending_max_size
+            ),
+            format!(
+                "--txpool.queued-max-count={}",
+                self.config.txpool_queued_max_count
+            ),
+            format!(
+                "--txpool.queued-max-size={}",
+                self.config.txpool_queued_max_size
+            ),
+            format!(
+                "--txpool.max-account-slots={}",
+                self.config.txpool_max_account_slots
+            ),
+            format!(
+                "--txpool.max-batch-size={}",
+                self.config.txpool_max_batch_size
+            ),
+            format!("--max-tx-reqs={}", self.config.max_tx_reqs),
+            format!("--max-tx-reqs-peer={}", self.config.max_tx_reqs_peer),
+            format!("--max-pending-imports={}", self.config.max_pending_imports),
+            format!("--builder.gaslimit={}", self.config.builder_gaslimit),
+            format!("--txpool.gas-limit={}", self.config.txpool_gas_limit),
+            format!("--builder.interval={}", self.config.builder_interval),
         ]
     }
 

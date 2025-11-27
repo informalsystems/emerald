@@ -42,6 +42,10 @@ pub struct TestnetStartCmd {
     /// Path to `custom-reth` binary. If not specified will default to `./custom-reth/target/debug/custom-reth`
     #[clap(long, default_value = "./custom-reth/target/debug/custom-reth")]
     pub custom_reth_bin: String,
+
+    /// Path to reth node spawning configurations. If not specified will use default values
+    #[clap(long)]
+    pub reth_config_path: Option<PathBuf>,
 }
 
 impl TestnetStartCmd {
@@ -377,7 +381,12 @@ min_block_time = "500ms"
         let mut processes = Vec::new();
 
         for i in 0..self.nodes {
-            let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
+            let reth_node = RethNode::new(
+                i,
+                home_dir.to_path_buf(),
+                assets_dir.clone(),
+                &self.reth_config_path,
+            );
             print!("  Starting Reth node {i}... ");
             let process = reth_node.spawn(&self.custom_reth_bin)?;
             println!("✓ (PID: {})", process.pid);
@@ -394,7 +403,12 @@ min_block_time = "500ms"
         let assets_dir = home_dir.join("assets");
 
         for i in 0..self.nodes {
-            let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
+            let reth_node = RethNode::new(
+                i,
+                home_dir.to_path_buf(),
+                assets_dir.clone(),
+                &self.reth_config_path,
+            );
             print!("  Waiting for Reth node {i} to be ready... ");
             let rpc = RpcClient::new(reth_node.ports.http);
             retry_with_timeout(
@@ -418,7 +432,12 @@ min_block_time = "500ms"
 
         // Get all enodes
         for i in 0..self.nodes {
-            let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
+            let reth_node = RethNode::new(
+                i,
+                home_dir.to_path_buf(),
+                assets_dir.clone(),
+                &self.reth_config_path,
+            );
             print!("  Getting enode for Reth node {i}... ");
             let enode = reth_node.get_enode()?;
             println!("✓");
@@ -427,7 +446,12 @@ min_block_time = "500ms"
 
         // Connect each node to all other nodes
         for i in 0..self.nodes {
-            let reth_node = RethNode::new(i, home_dir.to_path_buf(), assets_dir.clone());
+            let reth_node = RethNode::new(
+                i,
+                home_dir.to_path_buf(),
+                assets_dir.clone(),
+                &self.reth_config_path,
+            );
             for (j, enode) in enodes.iter().enumerate() {
                 if i != j {
                     print!("  Connecting node {i} -> {j}... ");

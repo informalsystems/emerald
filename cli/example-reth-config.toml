@@ -1,0 +1,52 @@
+# Logging
+log_verbosity = "vvvv"
+
+# HTTP
+http_addr = "0.0.0.0"
+http_corsdomain = "*"
+
+# http_api = ["admin","net","eth","web3","debug","txpool","trace","ots"]
+# TOML pretty formatting:
+http_api = [
+    "admin",
+    "net",
+    "eth",
+    "web3",
+    "debug",
+    "txpool",
+    "trace",
+    "ots",
+]
+
+# Websocket
+ws_addr = "0.0.0.0"
+
+# Auth RPC
+authrpc_addr = "0.0.0.0"
+
+# Metrics
+metrics_addr = "127.0.0.1"
+
+# NAT
+nat = "extip:127.0.0.1"
+
+# Propagation
+tx_propagation_mode = "all"
+
+# TxPool
+txpool_pending_max_count = 50000
+txpool_pending_max_size = 500
+txpool_queued_max_count = 50000
+txpool_queued_max_size = 500
+txpool_max_account_slots = 50000
+txpool_max_batch_size = 10000
+txpool_gas_limit = 3000000000
+
+# Limits
+max_tx_reqs = 10000
+max_tx_reqs_peer = 255
+max_pending_imports = 10000
+
+# Builder
+builder_gaslimit = 66000000000
+builder_interval = "10ms"

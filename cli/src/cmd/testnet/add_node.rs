@@ -1,5 +1,6 @@
 //! Add a non-validator node to an existing testnet
 
+use core::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use core::time::Duration;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -246,7 +247,10 @@ impl TestnetAddNodeCmd {
             },
             metrics: MetricsConfig {
                 enabled: true,
-                listen_addr: format!("127.0.0.1:{metrics_port}").parse().unwrap(),
+                listen_addr: SocketAddr::V4(SocketAddrV4::new(
+                    Ipv4Addr::new(127, 0, 0, 1),
+                    metrics_port as u16,
+                )),
             },
             logging: LoggingConfig::default(),
             runtime: RuntimeConfig::SingleThreaded,

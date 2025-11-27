@@ -8,6 +8,7 @@ use std::process::Command;
 use clap::Parser;
 use color_eyre::eyre::{eyre, Context as _};
 use color_eyre::Result;
+use tracing::info;
 
 use super::reth::{self, RethProcess};
 use super::types::RethNode;
@@ -16,7 +17,11 @@ use crate::config::*;
 use crate::utils::retry::retry_with_timeout;
 
 #[derive(Parser, Debug, Clone, PartialEq)]
-pub struct TestnetAddNodeCmd {}
+pub struct TestnetAddNodeCmd {
+    /// Path to `emerald` binary. If not specified will default to `./target/debug/emerald`
+    #[clap(long, default_value = "./target/debug/emerald")]
+    pub emerald_bin: String,
+}
 
 impl TestnetAddNodeCmd {
     /// Execute the add-node command
@@ -67,7 +72,7 @@ impl TestnetAddNodeCmd {
 
         // 7. Generate private validator key
         println!("\n🔑 Generating private validator key...");
-        self.generate_private_key(home_dir, node_id)?;
+        self.generate_private_key(home_dir, node_id, &self.emerald_bin)?;
         println!("✓ Private validator key generated");
 
         // 8. Spawn Reth process
@@ -98,7 +103,7 @@ impl TestnetAddNodeCmd {
 
         // 11. Spawn Emerald process
         println!("\n💎 Starting Emerald consensus node...");
-        let emerald_process = self.spawn_emerald_node(home_dir, node_id)?;
+        let emerald_process = self.spawn_emerald_node(home_dir, node_id, &self.emerald_bin)?;
         println!("✓ Emerald node started (PID: {})", emerald_process.pid);
 
         println!("\n✅ Non-validator node {node_id} added successfully!");
@@ -289,19 +294,31 @@ min_block_time = "0ms"
         Ok(())
     }
 
-    fn generate_private_key(&self, home_dir: &Path, node_id: usize) -> Result<()> {
+    fn generate_private_key(
+        &self,
+        home_dir: &Path,
+        node_id: usize,
+        emerald_bin_str: &str,
+    ) -> Result<()> {
         let node_home = home_dir.join(node_id.to_string());
 
         // Check for built binary first, then fallback to PATH
-        let debug_binary = std::path::Path::new("./target/debug/emerald");
-        let cmd = if debug_binary.exists() {
-            debug_binary.to_str().unwrap()
-        } else {
-            "emerald"
+        let emerald_bin = {
+            let p = PathBuf::from(emerald_bin_str);
+            if p.exists() {
+                p
+            } else {
+                PathBuf::from("emerald")
+            }
         };
 
+        info!(
+            "Using `{}` for Emerald binary to generate private key",
+            emerald_bin.display()
+        );
+
         // Run emerald init to generate the private validator key
-        let output = Command::new(cmd)
+        let output = Command::new(emerald_bin)
             .args(["init", "--home"])
             .arg(&node_home)
             .output()
@@ -358,7 +375,12 @@ min_block_time = "0ms"
         Ok(())
     }
 
-    fn spawn_emerald_node(&self, home_dir: &Path, node_id: usize) -> Result<EmeraldProcess> {
+    fn spawn_emerald_node(
+        &self,
+        home_dir: &Path,
+        node_id: usize,
+        emerald_bin_str: &str,
+    ) -> Result<EmeraldProcess> {
         let node_home = home_dir.join(node_id.to_string());
         let config_file = node_home.join("config").join("emerald.toml");
 
@@ -372,22 +394,24 @@ min_block_time = "0ms"
         // For non-validator nodes, we don't pass a priv_validator_key.json
         // Emerald should handle this gracefully and run as a non-validator
         // Check for built binary first, then fallback to PATH
-        let debug_binary = std::path::Path::new("./target/debug/emerald");
-        let cmd = if debug_binary.exists() {
-            format!(
-                "{} start --home {} --config {} --log-level info",
-                debug_binary.display(),
-                node_home.display(),
-                config_file.display()
-            )
-        } else {
-            // Try PATH - will fail at spawn time if not found
-            format!(
-                "emerald start --home {} --config {} --log-level info",
-                node_home.display(),
-                config_file.display()
-            )
+        let emerald_bin = {
+            let p = PathBuf::from(emerald_bin_str);
+            if p.exists() {
+                p
+            } else {
+                PathBuf::from("emerald")
+            }
         };
+        info!(
+            "Using `{}` for Emerald binary when adding node",
+            emerald_bin.display()
+        );
+        let cmd = format!(
+            "{} start --home {} --config {} --log-level info",
+            emerald_bin.display(),
+            node_home.display(),
+            config_file.display()
+        );
 
         let shell_cmd = format!(
             "nohup {} > {} 2>&1 & echo $! > {}",

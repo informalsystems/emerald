@@ -8,6 +8,7 @@ use std::process::Command;
 use clap::Parser;
 use color_eyre::eyre::{eyre, Context as _};
 use color_eyre::Result;
+use tracing::info;
 
 use super::reth;
 use super::types::RethNode;
@@ -18,6 +19,10 @@ use crate::utils::retry::retry_with_timeout;
 pub struct TestnetStartNodeCmd {
     /// Node ID to start
     pub node_id: usize,
+
+    /// Path to `emerald` binary. If not specified will default to `./target/debug/emerald`
+    #[clap(long, default_value = "./target/debug/emerald")]
+    pub emerald_bin: String,
 }
 
 impl TestnetStartNodeCmd {
@@ -77,7 +82,7 @@ impl TestnetStartNodeCmd {
 
         // Start Emerald process
         println!("\n💎 Starting Emerald consensus node...");
-        let emerald_process = self.spawn_emerald_node(home_dir, self.node_id)?;
+        let emerald_process = self.spawn_emerald_node(home_dir, self.node_id, &self.emerald_bin)?;
         println!("✓ Emerald node started (PID: {})", emerald_process.pid);
 
         println!("\n✅ Node {} started successfully!", self.node_id);
@@ -133,7 +138,12 @@ impl TestnetStartNodeCmd {
         Ok(())
     }
 
-    fn spawn_emerald_node(&self, home_dir: &Path, node_id: usize) -> Result<EmeraldProcess> {
+    fn spawn_emerald_node(
+        &self,
+        home_dir: &Path,
+        node_id: usize,
+        emerald_bin_str: &str,
+    ) -> Result<EmeraldProcess> {
         let node_home = home_dir.join(node_id.to_string());
         let config_file = node_home.join("config").join("emerald.toml");
 
@@ -145,22 +155,24 @@ impl TestnetStartNodeCmd {
         let pid_file = node_home.join("emerald.pid");
 
         // Check for built binary first, then fallback to PATH
-        let debug_binary = std::path::Path::new("./target/debug/emerald");
-        let cmd = if debug_binary.exists() {
-            format!(
-                "{} start --home {} --config {} --log-level info",
-                debug_binary.display(),
-                node_home.display(),
-                config_file.display()
-            )
-        } else {
-            // Try PATH - will fail at spawn time if not found
-            format!(
-                "emerald start --home {} --config {} --log-level info",
-                node_home.display(),
-                config_file.display()
-            )
+        let emerald_bin = {
+            let p = PathBuf::from(emerald_bin_str);
+            if p.exists() {
+                p
+            } else {
+                PathBuf::from("emerald")
+            }
         };
+        info!(
+            "Using `{}` for Emerald binary to spawn node",
+            emerald_bin.display()
+        );
+        let cmd = format!(
+            "{} start --home {} --config {} --log-level info",
+            emerald_bin.display(),
+            node_home.display(),
+            config_file.display()
+        );
 
         let shell_cmd = format!(
             "nohup {} > {} 2>&1 & echo $! > {}",

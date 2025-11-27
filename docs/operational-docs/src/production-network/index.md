@@ -18,9 +18,12 @@ Starting a new network involves coordinating with external validator operators:
 5. **Distribute Genesis Files**: Share the genesis files with all validators so they can start their nodes
 6. **Coordinate Launch**: Ensure all validators start their nodes and connect to each other
 
-**Important**: Validators should **never** share their private keys with anyone. They only provide their public keys for inclusion in the genesis file.
+## Security Notes
 
-**Quick Reference: Roles and Responsibilities**
+- Validators should **never** share their private keys with anyone. They only provide their public keys for inclusion in the genesis file.
+- Validators should ensure no ports are exposed to the internet and all traffic is secured with VPCs or VPN tunnels.
+
+## Roles and Responsibilities
 
 | **Task** | **Who Does It** | **What They Share** |
 |----------|-----------------|---------------------|

@@ -123,6 +123,3 @@ curl http://<IP>:30000/metrics
 
 For production deployments, use systemd to manage the Emerald process. See [emerald.systemd.service.example](../config-examples/emerald.systemd.service.example) for a complete service configuration.
 
-## Security Notes
-
-- Make sure no ports are exposed to the internet and all traffic is secured with VPCs or VPN tunnels.

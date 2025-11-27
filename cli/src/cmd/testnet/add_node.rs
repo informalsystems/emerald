@@ -367,7 +367,6 @@ min_block_time = "0ms"
         fs::create_dir_all(&log_dir)?;
 
         let log_file_path = log_dir.join("emerald.log");
-        let pid_file = node_home.join("emerald.pid");
 
         // For non-validator nodes, we don't pass a priv_validator_key.json
         // Emerald should handle this gracefully and run as a non-validator
@@ -389,28 +388,20 @@ min_block_time = "0ms"
             )
         };
 
-        let shell_cmd = format!(
-            "nohup {} > {} 2>&1 & echo $! > {}",
-            cmd,
-            log_file_path.display(),
-            pid_file.display()
-        );
+        let mut child = Command::new(cmd)
+            .stdout(std::fs::File::create(log_file_path.clone())?)
+            .stderr(std::fs::File::create(log_file_path.clone())?)
+            .spawn()?;
 
-        Command::new("sh")
-            .arg("-c")
-            .arg(&shell_cmd)
-            .spawn()
-            .context("Failed to spawn emerald process")?;
+        let pid = child.id();
 
         // Wait a moment for PID file to be written
         std::thread::sleep(Duration::from_millis(100));
 
-        // Read PID from file
-        let pid_str = fs::read_to_string(&pid_file).context("Failed to read PID file")?;
-        let pid = pid_str
-            .trim()
-            .parse::<u32>()
-            .context("Failed to parse PID")?;
+        // Detach process
+        child.stdout.take();
+        child.stderr.take();
+        core::mem::forget(child);
 
         Ok(EmeraldProcess {
             pid,

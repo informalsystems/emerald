@@ -100,11 +100,6 @@ impl RethNode {
         println!("  P2P: {}", self.ports.p2p);
         println!("  Logs: {}", log_file_path.display());
 
-        let pid_file = self
-            .home_dir
-            .join(self.node_id.to_string())
-            .join("reth.pid");
-
         // Check for built binary first, then fallback to PATH
         let debug_binary = std::path::Path::new("./custom-reth/target/debug/custom-reth");
         let cmd = if debug_binary.exists() {
@@ -114,28 +109,20 @@ impl RethNode {
             format!("custom-reth {}", args.join(" "))
         };
 
-        let shell_cmd = format!(
-            "nohup {} > {} 2>&1 & echo $! > {}",
-            cmd,
-            log_file_path.display(),
-            pid_file.display()
-        );
+        let mut child = Command::new(cmd)
+            .stdout(std::fs::File::create(log_file_path.clone())?)
+            .stderr(std::fs::File::create(log_file_path.clone())?)
+            .spawn()?;
 
-        Command::new("sh")
-            .arg("-c")
-            .arg(&shell_cmd)
-            .spawn()
-            .context("Failed to spawn custom-reth process")?;
+        let pid = child.id();
 
         // Wait a moment for PID file to be written
         std::thread::sleep(core::time::Duration::from_millis(100));
 
-        // Read PID from file
-        let pid_str = fs::read_to_string(&pid_file).context("Failed to read PID file")?;
-        let pid = pid_str
-            .trim()
-            .parse::<u32>()
-            .context("Failed to parse PID")?;
+        // Detach process
+        child.stdout.take();
+        child.stderr.take();
+        core::mem::forget(child);
 
         Ok(RethProcess {
             pid,

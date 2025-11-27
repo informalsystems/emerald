@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use clap::Parser;
-use color_eyre::eyre::{eyre, Context as _};
+use color_eyre::eyre::eyre;
 use color_eyre::Result;
 
 use super::reth;
@@ -142,7 +142,6 @@ impl TestnetStartNodeCmd {
         fs::create_dir_all(&log_dir)?;
 
         let log_file_path = log_dir.join("emerald.log");
-        let pid_file = node_home.join("emerald.pid");
 
         // Check for built binary first, then fallback to PATH
         let debug_binary = std::path::Path::new("./target/debug/emerald");
@@ -162,28 +161,20 @@ impl TestnetStartNodeCmd {
             )
         };
 
-        let shell_cmd = format!(
-            "nohup {} > {} 2>&1 & echo $! > {}",
-            cmd,
-            log_file_path.display(),
-            pid_file.display()
-        );
+        let mut child = Command::new(cmd)
+            .stdout(std::fs::File::create(log_file_path.clone())?)
+            .stderr(std::fs::File::create(log_file_path.clone())?)
+            .spawn()?;
 
-        Command::new("sh")
-            .arg("-c")
-            .arg(&shell_cmd)
-            .spawn()
-            .context("Failed to spawn emerald process")?;
+        let pid = child.id();
 
         // Wait a moment for PID file to be written
         std::thread::sleep(Duration::from_millis(100));
 
-        // Read PID from file
-        let pid_str = fs::read_to_string(&pid_file).context("Failed to read PID file")?;
-        let pid = pid_str
-            .trim()
-            .parse::<u32>()
-            .context("Failed to parse PID")?;
+        // Detach process
+        child.stdout.take();
+        child.stderr.take();
+        core::mem::forget(child);
 
         Ok(EmeraldProcess {
             pid,

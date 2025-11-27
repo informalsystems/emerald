@@ -51,7 +51,7 @@ clean-prometheus: stop
 	rm -rf ./monitoring/data-prometheus
 
 spam:
-	cargo run --bin emerald-utils spam --time=60 --rate=5000 --rpc-url=127.0.0.1:8645
+	cargo run --bin emerald-utils spam --time=60 --rate=5000 --rpc-url=http://127.0.0.1:8645 --chain-id 12345
 
 spam-contract:
 	@if [ -z "$(CONTRACT)" ]; then \

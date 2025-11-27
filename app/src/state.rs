@@ -101,6 +101,8 @@ pub struct State {
     pub start_time: Instant,
     pub metrics: Metrics,
 
+    pub max_retain_blocks: u64,
+    pub prune_at_block_interval: u64,
     pub min_block_time: Duration,
 
     pub last_block_time: Instant,
@@ -176,6 +178,8 @@ impl State {
         height: Height,
         store: Store,
         state_metrics: StateMetrics,
+        max_retain_blocks: u64,
+        prune_at_interval: u64,
         min_block_time: Duration,
     ) -> Self {
         // Calculate start_time by subtracting elapsed_seconds from now.
@@ -205,6 +209,8 @@ impl State {
             chain_bytes: state_metrics.chain_bytes,
             start_time,
             metrics: state_metrics.metrics,
+            max_retain_blocks,
+            prune_at_block_interval: prune_at_interval,
             min_block_time,
             last_block_time: Instant::now(),
         }
@@ -550,9 +556,24 @@ impl State {
                 .await?;
         }
 
-        // Prune the store, keep the last 5 heights
-        let retain_height = Height::new(certificate.height.as_u64().saturating_sub(5));
-        self.store.prune(retain_height).await?;
+        let prune_certificates = self.max_retain_blocks != u64::MAX
+            && certificate.height.as_u64() % self.prune_at_block_interval == 0;
+
+        // This will compute the retain heigth for the certificates which is based on the
+        // retain height set in the config.
+        // The intermediary block data stored for Consensus is pruned at every height after
+        // VALUE_RETAIN_HEIGHT (defined in store.rs)
+        let retain_height = Height::new(
+            certificate
+                .height
+                .as_u64()
+                .saturating_sub(self.max_retain_blocks),
+        );
+
+        // If storege becomes a bottleneck, consider optimizing this by pruning every INTERVAL heights
+        self.store
+            .prune(retain_height, certificate.height, prune_certificates)
+            .await?;
 
         // Move to next height
         self.current_height = self.current_height.increment();

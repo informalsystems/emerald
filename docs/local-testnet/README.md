@@ -12,7 +12,7 @@ This guide explains how to create and manage a local Emerald testnet using the M
 
 ## Overview
 
-Malaketh-layered uses Malachite BFT consensus connected to Reth execution clients via Engine API. The testnet setup creates multiple validator nodes that reach consensus on blocks with instant finality.
+Emerald uses Malachite BFT consensus connected to Reth execution clients via Engine API. The testnet setup creates multiple validator nodes that reach consensus on blocks with instant finality.
 
 ### Architecture
 

@@ -46,6 +46,18 @@ pub struct EmeraldConfig {
     #[serde(default)]
     pub el_node_type: ElNodeType,
 
+    /// Number of certificates to retain.
+    /// Default is retain all (u64::MAX).
+    #[serde(default = "max_retain_block_default")]
+    pub max_retain_blocks: u64,
+
+    /// Number of blocks to wait before attempting pruning
+    /// Note that this applies only to pruning certificates.
+    /// Certificates are pruned based on max_retain_blocks.
+    /// This value cannot be 0.
+    /// Defatul: 10.
+    #[serde(default = "prune_at_interval_default")]
+    pub prune_at_block_interval: u64,
     // Application set min_block_time forcing the app to sleep
     // before moving onto the next height.
     // Malachite does not have a notion of min_block_time, thus
@@ -57,6 +69,13 @@ pub struct EmeraldConfig {
 
 fn default_min_block_time() -> Duration {
     Duration::from_millis(500)
+}
+
+fn max_retain_block_default() -> u64 {
+    u64::MAX
+}
+fn prune_at_interval_default() -> u64 {
+    10
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

@@ -341,28 +341,32 @@ min_block_time = "0ms"
         let assets_dir = home_dir.join("assets");
         let new_node = RethNode::new(node_id, home_dir.to_path_buf(), assets_dir.clone());
 
-        // Find all existing nodes and get their enodes
+        // Read and filter IDs
+        let ids = fs::read_dir(home_dir)?
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                entry
+                    .file_type()
+                    .map(|file_type| file_type.is_dir())
+                    .unwrap_or(false)
+            })
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .filter_map(|name| name.parse::<usize>().ok())
+            .filter(|&id| id != node_id);
+
         let mut connected = 0;
-        for entry in fs::read_dir(home_dir)? {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                if let Some(name) = entry.file_name().to_str() {
-                    if let Ok(id) = name.parse::<usize>() {
-                        if id != node_id {
-                            let existing_node =
-                                RethNode::new(id, home_dir.to_path_buf(), assets_dir.clone());
-                            // Try to get enode and connect
-                            if let Ok(enode) = existing_node.get_enode() {
-                                print!("  Connecting to node {id}... ");
-                                if new_node.add_peer(&enode).is_ok() {
-                                    println!("✓");
-                                    connected += 1;
-                                } else {
-                                    println!("✗ (skipped)");
-                                }
-                            }
-                        }
-                    }
+
+        // Find all existing nodes and get their enodes
+        for id in ids {
+            let existing_node = RethNode::new(id, home_dir.to_path_buf(), assets_dir.clone());
+            // Try to get enode and connect
+            if let Ok(enode) = existing_node.get_enode() {
+                print!("  Connecting to node {id}... ");
+                if new_node.add_peer(&enode).is_ok() {
+                    println!("✓");
+                    connected += 1;
+                } else {
+                    println!("✗ (skipped)");
                 }
             }
         }

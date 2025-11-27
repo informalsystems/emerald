@@ -441,6 +441,7 @@ min_block_time = "500ms"
         fs::create_dir_all(&log_dir)?;
 
         let log_file_path = log_dir.join("emerald.log");
+        let pid_file = node_home.join("emerald.pid");
 
         // Check for built binary first, then fallback to PATH
         let debug_binary = std::path::Path::new("./target/debug/emerald");
@@ -460,20 +461,28 @@ min_block_time = "500ms"
             )
         };
 
-        let mut child = Command::new(cmd)
-            .stdout(std::fs::File::create(log_file_path.clone())?)
-            .stderr(std::fs::File::create(log_file_path.clone())?)
-            .spawn()?;
+        let shell_cmd = format!(
+            "nohup {} > {} 2>&1 & echo $! > {}",
+            cmd,
+            log_file_path.display(),
+            pid_file.display()
+        );
 
-        let pid = child.id();
+        Command::new("sh")
+            .arg("-c")
+            .arg(&shell_cmd)
+            .spawn()
+            .context("Failed to spawn emerald process")?;
 
         // Wait a moment for PID file to be written
         std::thread::sleep(core::time::Duration::from_millis(100));
 
-        // Detach process
-        child.stdout.take();
-        child.stderr.take();
-        core::mem::forget(child);
+        // Read PID from file
+        let pid_str = fs::read_to_string(&pid_file).context("Failed to read PID file")?;
+        let pid = pid_str
+            .trim()
+            .parse::<u32>()
+            .context("Failed to parse PID")?;
 
         Ok(EmeraldProcess {
             pid,

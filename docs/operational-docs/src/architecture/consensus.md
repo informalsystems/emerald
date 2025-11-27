@@ -18,7 +18,7 @@ which is the most battle-tested consensus protocol in blockchain today.
 Emerald uses Malachite's [channel-based interface](https://github.com/circlefin/malachite/blob/main/ARCHITECTURE.md#channel-based-interface) for integration.
 This provides built-in synchronization, crash recovery, networking for consensus voting, and block propagation protocols.
 
-Emerald, as a Malachite application, only need to interact with the consensus engine through a channel that emits events:
+Emerald, as a Malachite application, only needs to interact with the consensus engine through a channel that emits events:
 
 - **`AppMsg::ConsensusReady { reply }`**: Signals that Malachite is initialized and ready to begin consensus.
 

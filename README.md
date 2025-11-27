@@ -56,7 +56,7 @@ For instructions on how to deploy a local Emerald testnet, please refer to the [
 
 ### Launching a Production Network
 
-For instructions on how to launch am Emerald production-grade network, please refer to the [Launch Production Network](https://emerald-docs.informalsystems.io/production-network/index.html) section of the docs.
+For instructions on how to launch an Emerald production-grade network, please refer to the [Launch Production Network](https://emerald-docs.informalsystems.io/production-network/index.html) section of the docs.
 
 ## Performance Evaluation
 

@@ -67,6 +67,9 @@ pub struct RethNodeConfig {
 
     #[serde(default = "default_builder_interval")]
     pub builder_interval: String,
+
+    #[serde(default = "default_rpc_gascap")]
+    pub rpc_gascap: u64,
 }
 
 impl Default for RethNodeConfig {
@@ -93,6 +96,7 @@ impl Default for RethNodeConfig {
             max_pending_imports: default_max_pending_imports(),
             builder_gaslimit: default_builder_gaslimit(),
             builder_interval: default_builder_interval(),
+            rpc_gascap: default_rpc_gascap(),
         }
     }
 }
@@ -116,9 +120,11 @@ impl Display for PropagationMode {
 fn default_log_verbosity() -> String {
     "vvvv".into()
 }
+
 fn default_http_addr() -> String {
     "0.0.0.0".into()
 }
+
 fn default_http_corsdomain() -> String {
     "*".into()
 }
@@ -138,12 +144,15 @@ fn default_http_api() -> Vec<String> {
 fn default_ws_addr() -> String {
     "0.0.0.0".into()
 }
+
 fn default_authrpc_addr() -> String {
     "0.0.0.0".into()
 }
+
 fn default_metrics_addr() -> String {
     "127.0.0.1".into()
 }
+
 fn default_nat() -> String {
     "extip:127.0.0.1".into()
 }
@@ -151,21 +160,27 @@ fn default_nat() -> String {
 fn default_txpool_pending_max_count() -> u32 {
     50_000
 }
+
 fn default_txpool_pending_max_size() -> u32 {
     500
 }
+
 fn default_txpool_queued_max_count() -> u32 {
     50_000
 }
+
 fn default_txpool_queued_max_size() -> u32 {
     500
 }
+
 fn default_txpool_max_account_slots() -> u32 {
     50_000
 }
+
 fn default_txpool_max_batch_size() -> u32 {
     10_000
 }
+
 fn default_txpool_gas_limit() -> u64 {
     3_000_000_000
 }
@@ -173,9 +188,11 @@ fn default_txpool_gas_limit() -> u64 {
 fn default_max_tx_reqs() -> u32 {
     10_000
 }
+
 fn default_max_tx_reqs_peer() -> u32 {
     255
 }
+
 fn default_max_pending_imports() -> u32 {
     10_000
 }
@@ -183,6 +200,11 @@ fn default_max_pending_imports() -> u32 {
 fn default_builder_gaslimit() -> u64 {
     66_000_000_000
 }
+
 fn default_builder_interval() -> String {
     "10ms".into()
+}
+
+fn default_rpc_gascap() -> u64 {
+    50_000_000
 }

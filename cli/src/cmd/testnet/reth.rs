@@ -90,6 +90,7 @@ impl RethNode {
             format!("--builder.gaslimit={}", self.config.builder_gaslimit),
             format!("--txpool.gas-limit={}", self.config.txpool_gas_limit),
             format!("--builder.interval={}", self.config.builder_interval),
+            format!("--rpc.gascap={}", self.config.rpc_gascap),
         ]
     }
 

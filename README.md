@@ -24,16 +24,15 @@ Emerald empowers institutions to build production-ready networks with tailored g
 
 ## Architecture
 
-Emerald's architecture is intentionally clean and composable, consisting of four key components: 
+Emerald's architecture is intentionally clean and composable, consisting of three key components: 
 
 - The [Malachite][malachite] consensus engine
-- An Ethereum execution client (currently [Reth][reth])
-- A lightweight shim layer that connects consensus and execution via [Engine API][engine-api]
+- An Ethereum execution client (currently [Reth][reth]) integrated via [Engine API][engine-api]
 - A proof-of-authority (PoA) module
 
 This modular design keeps the system easy to understand, maintain, and extend while providing full EVM compatibility, predictable PoA consensus, and simple deployment and operation.
 
-For more details, check out the [Architecture section of the docs](https://emerald-docs.informalsystems.io/architecture.html).
+For more details, please refer to the [Architecture](https://emerald-docs.informalsystems.io/architecture/index.html) section of the docs.
 
 ## Getting Started
 
@@ -51,17 +50,17 @@ cd emerald
 make build
 ```
 
-### Launching a Local Network
+### Deploying a Local Testnet
 
-For instructions on how to launch a local Emerald network, please refer to the [Running a Local Tesnet section of the docs](https://emerald-docs.informalsystems.io/local-testnet.html).
+For instructions on how to deploy a local Emerald testnet, please refer to the [Deploy Local Tesnet](https://emerald-docs.informalsystems.io/local-devnet/index.html) section of the docs.
 
-### Launching a Testnet
+### Launching a Production Network
 
-For instructions on how to launch am Emerald testnet, please refer to the [Creating a Production Network section of the docs](https://emerald-docs.informalsystems.io/production-network.html).
+For instructions on how to launch an Emerald production-grade network, please refer to the [Launch Production Network](https://emerald-docs.informalsystems.io/production-network/index.html) section of the docs.
 
 ## Performance Evaluation
 
-> TODO: how to run benchmarks
+> TODO: some performance number and link to how to run benchmarks
 
 ## Contributing
 

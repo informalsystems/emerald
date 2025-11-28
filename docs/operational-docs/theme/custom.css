@@ -1,0 +1,174 @@
+/* Emerald Theme - Custom Colors */
+
+/* Wider content area - centered */
+:root {
+    --content-max-width: 1000px;
+}
+
+.content {
+    max-width: 1000px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+:root {
+    /* Emerald green as primary color */
+    --emerald-primary: #10b981;
+    --emerald-dark: #059669;
+    --emerald-light: #34d399;
+    --emerald-lighter: #6ee7b7;
+
+    /* Complementary colors */
+    --slate-dark: #1e293b;
+    --slate-medium: #334155;
+    --slate-light: #64748b;
+}
+
+/* Light theme customizations */
+.light {
+    --links: var(--emerald-dark);
+    --sidebar-bg: #f8fafc;
+    --sidebar-fg: #334155;
+    --sidebar-non-existant: #94a3b8;
+    --sidebar-active: var(--emerald-primary);
+    --sidebar-spacer: #e2e8f0;
+    --scrollbar: var(--emerald-light);
+    --icons: #64748b;
+    --icons-hover: var(--emerald-dark);
+    --searchbar-border-color: #cbd5e1;
+    --searchbar-bg: #ffffff;
+    --searchbar-fg: #1e293b;
+    --searchbar-shadow-color: rgba(16, 185, 129, 0.1);
+    --searchresults-header-fg: #1e293b;
+    --searchresults-border-color: var(--emerald-light);
+    --searchresults-li-bg: #ffffff;
+    --search-mark-bg: var(--emerald-lighter);
+    --table-border-color: #e2e8f0;
+    --table-header-bg: #f1f5f9;
+    --table-alternate-bg: #f8fafc;
+    --quote-bg: #f0fdf4;
+    --quote-border: var(--emerald-primary);
+}
+
+/* Dark theme customizations */
+.navy, .coal, .ayu {
+    --links: var(--emerald-light);
+    --sidebar-active: var(--emerald-primary);
+    --scrollbar: var(--emerald-dark);
+    --icons-hover: var(--emerald-light);
+    --searchbar-shadow-color: rgba(16, 185, 129, 0.2);
+    --searchresults-border-color: var(--emerald-dark);
+    --search-mark-bg: rgba(16, 185, 129, 0.3);
+    --quote-border: var(--emerald-primary);
+}
+
+/* Headings with emerald accent */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--fg);
+    border-bottom-color: var(--emerald-primary);
+}
+
+h1 {
+    border-bottom: 3px solid var(--emerald-primary);
+    padding-bottom: 0.5em;
+}
+
+/* Active sidebar item */
+.sidebar .active {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--emerald-dark);
+    font-weight: 600;
+}
+
+.light .sidebar .active {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--emerald-dark);
+}
+
+.navy .sidebar .active,
+.coal .sidebar .active,
+.ayu .sidebar .active {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--emerald-light);
+}
+
+/* Link hover effects */
+a:hover {
+    color: var(--emerald-primary);
+    text-decoration: underline;
+}
+
+/* Buttons and interactive elements */
+.theme-popup .theme {
+    margin: 2px;
+}
+
+.theme-popup .theme:hover,
+.theme-popup .theme:focus {
+    background-color: var(--emerald-primary);
+}
+
+/* Code blocks with subtle emerald accent */
+.hljs {
+    border-left: 3px solid var(--emerald-primary);
+}
+
+/* Navigation buttons */
+.nav-chapters a {
+    color: var(--emerald-dark);
+}
+
+.light .nav-chapters a {
+    color: var(--emerald-dark);
+}
+
+.navy .nav-chapters a,
+.coal .nav-chapters a,
+.ayu .nav-chapters a {
+    color: var(--emerald-light);
+}
+
+/* Menu bar */
+#menu-bar {
+    border-bottom-color: var(--emerald-primary);
+}
+
+/* Scrollbar customization for webkit browsers */
+::-webkit-scrollbar-thumb {
+    background-color: var(--emerald-primary);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: var(--emerald-dark);
+}
+
+/* Chapter titles in sidebar */
+.chapter li.chapter-item {
+    line-height: 1.8;
+}
+
+/* Blockquotes with emerald accent */
+blockquote {
+    border-left: 4px solid var(--emerald-primary);
+    padding-left: 1em;
+    margin-left: 0;
+}
+
+.light blockquote {
+    background: rgba(16, 185, 129, 0.05);
+}
+
+/* Tables with emerald accents */
+table thead {
+    background: var(--emerald-primary);
+    color: white;
+}
+
+table thead th {
+    font-weight: 600;
+}
+
+/* Focus outlines */
+*:focus {
+    outline-color: var(--emerald-primary);
+}

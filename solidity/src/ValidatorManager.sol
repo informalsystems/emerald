@@ -1,9 +1,13 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache 2.0
 pragma solidity ^0.8.28;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {
+    EnumerableSet
+} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {
+    ReentrancyGuard
+} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title ValidatorManager
@@ -13,7 +17,8 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 contract ValidatorManager is Ownable, ReentrancyGuard {
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    uint256 internal constant SECP256K1_P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F;
+    uint256 internal constant SECP256K1_P =
+        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F;
     uint256 internal constant SECP256K1_B = 7;
     uint256 internal constant SECP256K1_SQRT_EXPONENT = (SECP256K1_P + 1) / 4;
 
@@ -42,10 +47,20 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     constructor() Ownable(_msgSender()) {}
 
     // Events
-    event ValidatorRegistered(address indexed validatorAddress, Secp256k1Key validatorKey, uint64 power);
-    event ValidatorUnregistered(address indexed validatorAddress, Secp256k1Key validatorKey);
+    event ValidatorRegistered(
+        address indexed validatorAddress,
+        Secp256k1Key validatorKey,
+        uint64 power
+    );
+    event ValidatorUnregistered(
+        address indexed validatorAddress,
+        Secp256k1Key validatorKey
+    );
     event ValidatorPowerUpdated(
-        address indexed validatorAddress, Secp256k1Key validatorKey, uint64 oldPower, uint64 newPower
+        address indexed validatorAddress,
+        Secp256k1Key validatorKey,
+        uint64 oldPower,
+        uint64 newPower
     );
 
     // Errors
@@ -98,11 +113,9 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     /**
      * @dev Returns the validator address ensuring it already exists.
      */
-    function _validatedExistingAddress(Secp256k1Key memory validatorKey)
-        internal
-        view
-        returns (address validatorAddress)
-    {
+    function _validatedExistingAddress(
+        Secp256k1Key memory validatorKey
+    ) internal view returns (address validatorAddress) {
         validatorAddress = _validatorAddressInternal(validatorKey);
         if (!_validatorAddresses.contains(validatorAddress)) {
             revert ValidatorDoesNotExist();
@@ -112,7 +125,9 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     /**
      * @dev Returns the validator address ensuring it does not exist yet.
      */
-    function _validatedNewAddress(Secp256k1Key memory validatorKey) internal view returns (address validatorAddress) {
+    function _validatedNewAddress(
+        Secp256k1Key memory validatorKey
+    ) internal view returns (address validatorAddress) {
         validatorAddress = _validatorAddressInternal(validatorKey);
         if (_validatorAddresses.contains(validatorAddress)) {
             revert ValidatorAlreadyExists();
@@ -122,7 +137,9 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     /**
      * @dev Ensures the derived validator address is already registered.
      */
-    function _requireValidatorAddressExists(address validatorAddress) internal view {
+    function _requireValidatorAddressExists(
+        address validatorAddress
+    ) internal view {
         if (!_validatorAddresses.contains(validatorAddress)) {
             revert ValidatorDoesNotExist();
         }
@@ -145,7 +162,9 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @dev Batch register validators.
      * @param registrations Array of validator registration payloads
      */
-    function registerSet(ValidatorRegistration[] calldata registrations) external nonReentrant onlyOwner {
+    function registerSet(
+        ValidatorRegistration[] calldata registrations
+    ) external nonReentrant onlyOwner {
         _registerSet(registrations);
     }
 
@@ -153,11 +172,20 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @dev Internal batch register validators.
      * @param registrations Array of validator registration payloads
      */
-    function _registerSet(ValidatorRegistration[] calldata registrations) internal {
+    function _registerSet(
+        ValidatorRegistration[] calldata registrations
+    ) internal {
         uint256 length = registrations.length;
-        for (uint256 i = 0; i < length;) {
-            Secp256k1Key memory validatorKey = _secp256k1KeyFromBytesInternal(registrations[i].publicKey);
-            _register(ValidatorInfo({validatorKey: validatorKey, power: registrations[i].power}));
+        for (uint256 i = 0; i < length; ) {
+            Secp256k1Key memory validatorKey = _secp256k1KeyFromBytesInternal(
+                registrations[i].publicKey
+            );
+            _register(
+                ValidatorInfo({
+                    validatorKey: validatorKey,
+                    power: registrations[i].power
+                })
+            );
             unchecked {
                 ++i;
             }
@@ -170,8 +198,13 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @param validatorPublicKey The validator public key bytes
      * @param power The voting power for the validator
      */
-    function register(bytes calldata validatorPublicKey, uint64 power) external nonReentrant onlyOwner {
-        Secp256k1Key memory validatorKey = _secp256k1KeyFromBytesInternal(validatorPublicKey);
+    function register(
+        bytes calldata validatorPublicKey,
+        uint64 power
+    ) external nonReentrant onlyOwner {
+        Secp256k1Key memory validatorKey = _secp256k1KeyFromBytesInternal(
+            validatorPublicKey
+        );
         _register(ValidatorInfo({validatorKey: validatorKey, power: power}));
     }
 
@@ -179,24 +212,28 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @dev Internal implementation to register a new validator with specified key and power
      * @param validator Validator data containing key and power
      */
-    function _register(ValidatorInfo memory validator)
-        internal
-        validKey(validator.validatorKey)
-        validPower(validator.power)
-    {
+    function _register(
+        ValidatorInfo memory validator
+    ) internal validKey(validator.validatorKey) validPower(validator.power) {
         address validatorAddress = _validatedNewAddress(validator.validatorKey);
         _increaseTotalPower(validator.power);
         _validators[validatorAddress] = validator;
         _validatorAddresses.add(validatorAddress);
 
-        emit ValidatorRegistered(validatorAddress, validator.validatorKey, validator.power);
+        emit ValidatorRegistered(
+            validatorAddress,
+            validator.validatorKey,
+            validator.power
+        );
     }
 
     /**
      * @dev Batch unregister validators.
      * @param validatorAddresses Array of validator addresses
      */
-    function unregisterSet(address[] calldata validatorAddresses) external nonReentrant onlyOwner {
+    function unregisterSet(
+        address[] calldata validatorAddresses
+    ) external nonReentrant onlyOwner {
         _unregisterAddresses(validatorAddresses);
     }
 
@@ -204,7 +241,9 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @dev Unregister a validator (only callable by the owner).
      * @param validatorAddress The address derived from the validator public key to remove.
      */
-    function unregister(address validatorAddress) external nonReentrant onlyOwner {
+    function unregister(
+        address validatorAddress
+    ) external nonReentrant onlyOwner {
         _unregisterByAddress(validatorAddress);
     }
 
@@ -225,9 +264,11 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     /**
      * @dev Internal batch unregister by validator addresses.
      */
-    function _unregisterAddresses(address[] calldata validatorAddresses) internal {
+    function _unregisterAddresses(
+        address[] calldata validatorAddresses
+    ) internal {
         uint256 length = validatorAddresses.length;
-        for (uint256 i = 0; i < length;) {
+        for (uint256 i = 0; i < length; ) {
             _unregisterByAddress(validatorAddresses[i]);
             unchecked {
                 ++i;
@@ -240,14 +281,13 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @param validatorAddress The registered validator address whose voting power is being updated.
      * @param newPower The new voting power to assign.
      */
-    function updatePower(address validatorAddress, uint64 newPower)
-        external
-        nonReentrant
-        onlyOwner
-        validPower(newPower)
-    {
+    function updatePower(
+        address validatorAddress,
+        uint64 newPower
+    ) external nonReentrant onlyOwner validPower(newPower) {
         _requireValidatorAddressExists(validatorAddress);
-        Secp256k1Key memory validatorKey = _validators[validatorAddress].validatorKey;
+        Secp256k1Key memory validatorKey = _validators[validatorAddress]
+            .validatorKey;
         uint64 oldPower = _validators[validatorAddress].power;
 
         if (newPower > oldPower) {
@@ -258,7 +298,12 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
 
         _validators[validatorAddress].power = newPower;
 
-        emit ValidatorPowerUpdated(validatorAddress, validatorKey, oldPower, newPower);
+        emit ValidatorPowerUpdated(
+            validatorAddress,
+            validatorKey,
+            oldPower,
+            newPower
+        );
     }
 
     /**
@@ -267,7 +312,9 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @return info The validator information including key and power.
      * @notice Reverts with {ValidatorDoesNotExist} if the address is not registered.
      */
-    function getValidator(address validatorAddress) external view returns (ValidatorInfo memory info) {
+    function getValidator(
+        address validatorAddress
+    ) external view returns (ValidatorInfo memory info) {
         _requireValidatorAddressExists(validatorAddress);
         return _validators[validatorAddress];
     }
@@ -276,11 +323,15 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @dev Get all validators with their addresses, keys, and powers
      * @return validators Array of all registered validators
      */
-    function getValidators() external view returns (ValidatorInfo[] memory validators) {
+    function getValidators()
+        external
+        view
+        returns (ValidatorInfo[] memory validators)
+    {
         uint256 length = _validatorAddresses.length();
         validators = new ValidatorInfo[](length);
 
-        for (uint256 i = 0; i < length;) {
+        for (uint256 i = 0; i < length; ) {
             address validatorAddress = _validatorAddresses.at(i);
             validators[i] = _validators[validatorAddress];
             unchecked {
@@ -293,11 +344,15 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @dev Get the list of registered validator addresses.
      * @return addresses Array containing each registered validator address.
      */
-    function getValidatorAddresses() external view returns (address[] memory addresses) {
+    function getValidatorAddresses()
+        external
+        view
+        returns (address[] memory addresses)
+    {
         uint256 length = _validatorAddresses.length();
         addresses = new address[](length);
 
-        for (uint256 i = 0; i < length;) {
+        for (uint256 i = 0; i < length; ) {
             addresses[i] = _validatorAddresses.at(i);
             unchecked {
                 ++i;
@@ -318,7 +373,9 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @param validatorAddress The address derived from the validator public key.
      * @return contains True if the address is currently registered.
      */
-    function isValidator(address validatorAddress) external view returns (bool contains) {
+    function isValidator(
+        address validatorAddress
+    ) external view returns (bool contains) {
         return _validatorAddresses.contains(validatorAddress);
     }
 
@@ -335,7 +392,9 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @param validatorKey The secp256k1 public key limbs `(x, y)`.
      * @return validatorAddress The address derived from the supplied key.
      */
-    function _validatorAddress(Secp256k1Key memory validatorKey) external pure returns (address) {
+    function _validatorAddress(
+        Secp256k1Key memory validatorKey
+    ) external pure returns (address) {
         return _validatorAddressInternal(validatorKey);
     }
 
@@ -355,7 +414,9 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         }
     }
 
-    function _validatorAddressInternal(Secp256k1Key memory validatorKey) internal pure returns (address) {
+    function _validatorAddressInternal(
+        Secp256k1Key memory validatorKey
+    ) internal pure returns (address) {
         bytes32 hash;
         assembly {
             let ptr := mload(0x40)
@@ -371,15 +432,15 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
      * @param validatorPublicKey The encoded validator public key bytes.
      * @return validatorKey The decoded validator key limbs `(x, y)`.
      */
-    function _secp256k1KeyFromBytes(bytes calldata validatorPublicKey) external pure returns (Secp256k1Key memory) {
+    function _secp256k1KeyFromBytes(
+        bytes calldata validatorPublicKey
+    ) external pure returns (Secp256k1Key memory) {
         return _secp256k1KeyFromBytesInternal(validatorPublicKey);
     }
 
-    function _secp256k1KeyFromBytesInternal(bytes calldata validatorPublicKey)
-        internal
-        pure
-        returns (Secp256k1Key memory)
-    {
+    function _secp256k1KeyFromBytesInternal(
+        bytes calldata validatorPublicKey
+    ) internal pure returns (Secp256k1Key memory) {
         if (validatorPublicKey.length == 33) {
             uint8 prefix = uint8(validatorPublicKey[0]);
             if (prefix != 0x02 && prefix != 0x03) {
@@ -409,7 +470,10 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         revert InvalidPublicKeyLength();
     }
 
-    function _bytesToUintCalldata(bytes calldata data, uint256 start) internal pure returns (uint256 result) {
+    function _bytesToUintCalldata(
+        bytes calldata data,
+        uint256 start
+    ) internal pure returns (uint256 result) {
         if (data.length < start + 32) {
             revert InvalidPublicKeyLength();
         }
@@ -418,7 +482,10 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         }
     }
 
-    function _deriveYFromX(uint256 x, bool odd) internal pure returns (uint256) {
+    function _deriveYFromX(
+        uint256 x,
+        bool odd
+    ) internal pure returns (uint256) {
         if (x >= SECP256K1_P) {
             revert InvalidPublicKeyCoordinates();
         }
@@ -439,7 +506,10 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
         return y;
     }
 
-    function _modExp(uint256 base, uint256 exponent) internal pure returns (uint256 result) {
+    function _modExp(
+        uint256 base,
+        uint256 exponent
+    ) internal pure returns (uint256 result) {
         uint256 modulus = SECP256K1_P;
         result = 1;
         uint256 x = base % modulus;
@@ -460,7 +530,11 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
 
         uint256 lhs = mulmod(y, y, SECP256K1_P);
         uint256 xx = mulmod(x, x, SECP256K1_P);
-        uint256 rhs = addmod(mulmod(xx, x, SECP256K1_P), SECP256K1_B, SECP256K1_P);
+        uint256 rhs = addmod(
+            mulmod(xx, x, SECP256K1_P),
+            SECP256K1_B,
+            SECP256K1_P
+        );
 
         if (lhs != rhs) {
             revert InvalidPublicKeyCoordinates();

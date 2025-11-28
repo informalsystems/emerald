@@ -183,7 +183,7 @@ impl Spammer {
     // Get current number of pending transactions in the pool.
     async fn get_pending_count(&self) -> Result<u64> {
         let status = self.get_txpool_status().await?;
-        Ok(status.pending as u64)
+        Ok(status.pending)
     }
 
     /// Monitor the transaction pool size and control spamming.

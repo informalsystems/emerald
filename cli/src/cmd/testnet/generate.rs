@@ -20,7 +20,7 @@ use crate::file::{save_config, save_genesis, save_priv_validator_key};
 
 type PrivateKey<C> = <<C as Context>::SigningScheme as SigningScheme>::PrivateKey;
 
-const TESTNET_FOLDER: &str = ".malachite_testnet";
+const TESTNET_FOLDER: &str = ".emerald-devnet";
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeFlavour {
@@ -126,6 +126,7 @@ impl TestnetGenerateCmd {
             },
             |p| Ok(p.clone()),
         )?;
+
         let testnet_config_content = fs::read_to_string(testnet_config_file.clone())
             .map_err(|e| Error::LoadFile(testnet_config_file.to_path_buf(), e))?;
         let testnet_config =

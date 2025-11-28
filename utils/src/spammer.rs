@@ -255,7 +255,7 @@ impl Spammer {
             // Check if we should pause spamming
             if pause_flag.load(Ordering::Relaxed) {
                 debug!("Spammer paused, waiting for pool to drain...");
-                report_sender.try_send(interval_start)?;
+                let _ = report_sender.send(interval_start).await;
                 continue;
             }
 
@@ -365,7 +365,7 @@ impl Spammer {
             sleep(Duration::from_millis(20)).await;
 
             // Signal tracker to report stats after this batch.
-            report_sender.try_send(interval_start)?;
+            let _ = report_sender.send(interval_start).await;
 
             // Check exit conditions after each tick.
             if (self.max_num_txs > 0 && txs_sent_total >= self.max_num_txs)

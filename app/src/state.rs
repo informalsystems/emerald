@@ -641,7 +641,7 @@ impl State {
             Some(prop) => {
                 if prop.proposer.eq(&address) {
                     let lp: LocallyProposedValue<EmeraldContext> =
-                        LocallyProposedValue::new(prop.height, prop.round, prop.value.clone());
+                        LocallyProposedValue::new(prop.height, prop.round, prop.value);
                     Ok(Some(lp))
                 } else {
                     Ok(None)

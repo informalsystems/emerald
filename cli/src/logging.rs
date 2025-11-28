@@ -47,7 +47,7 @@ pub fn enable_ansi() -> bool {
 }
 
 /// Common prefixes of the crates targeted by the default log level.
-const TARGET_CRATES: &[&str] = &["informalsystems_malachitebft", "malachitebft_eth"];
+const TARGET_CRATES: &[&str] = &["informalsystems_malachitebft", "malachitebft_eth", "emerald"];
 
 /// Build a tracing directive setting the log level for the
 /// crates to the given `log_level`.

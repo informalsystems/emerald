@@ -208,14 +208,14 @@ impl Spammer {
                 )
                 .await?;
             if let Some(hex_str) = actual_nonce.strip_prefix("0x") {
-                if let Ok(on_chain_nonce) = u64::from_str_radix(hex_str, 16) {
+                if let Ok(on_chain_next_nonce) = u64::from_str_radix(hex_str, 16) {
                     // If the span between the on-chain nonce and the one we are about to send
                     // is too big, then probably there is a gap that doesn't allow the
                     // on-chain nonce too advance.
-                    let nonce_span = nonce - on_chain_nonce;
+                    let nonce_span = nonce - on_chain_next_nonce;
                     if nonce_span > self.max_rate {
                         let batch_entries =
-                            self.build_batch_entries(100, on_chain_nonce + 1).await?;
+                            self.build_batch_entries(100, on_chain_next_nonce).await?;
                         let params: Vec<_> = batch_entries
                             .iter()
                             .map(|(params, _)| params.clone())

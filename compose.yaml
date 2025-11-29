@@ -36,6 +36,7 @@ services:
       - "--discovery.port=31303"
       - "--port=31303"
       - "--nat=extip:127.0.0.1"
+      # - "--engine.persistence-threshold=0"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -83,6 +84,7 @@ services:
       - "--discovery.port=41303"
       - "--port=41303"
       - "--nat=extip:127.0.0.1"
+      # - "--engine.persistence-threshold=0"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -122,6 +124,7 @@ services:
       - "--discovery.port=51303"
       - "--port=51303"
       - "--nat=extip:127.0.0.1"
+      # - "--engine.persistence-threshold=0"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -160,6 +163,7 @@ services:
       - "--discovery.port=61303"
       - "--port=61303"
       - "--nat=extip:127.0.0.1"
+      # - "--engine.persistence-threshold=0"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve

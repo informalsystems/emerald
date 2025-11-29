@@ -9,6 +9,8 @@ fi
 NODE_ID=$1
 PID_FILE="nodes/$NODE_ID/node.pid"
 
+docker compose stop reth$NODE_ID
+
 # Check if PID file exists
 if [ ! -f "$PID_FILE" ]; then
     echo "Error: PID file not found at $PID_FILE"

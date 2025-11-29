@@ -55,13 +55,13 @@ pub enum TestnetSubcommand {
     /// Show status of all nodes in the testnet
     Status(TestnetStatusCmd),
 
-    /// Add a non-validator node to an existing testnet
+    /// Add a new node to an existing testnet
     AddNode(TestnetAddNodeCmd),
 
-    /// Start a specific node by ID
+    /// Restart an existing stopped node by ID
     StartNode(TestnetStartNodeCmd),
 
-    /// Stop a specific node by ID
+    /// Stop an existing running node by ID
     StopNode(TestnetStopNodeCmd),
 
     /// Stop all nodes in the testnet

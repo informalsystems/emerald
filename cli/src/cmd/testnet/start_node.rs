@@ -20,11 +20,11 @@ pub struct TestnetStartNodeCmd {
     /// Node ID to start
     pub node_id: usize,
 
-    /// Path to `emerald` binary. If not specified will default to `./target/debug/emerald`
+    /// Path to `emerald` binary
     #[clap(long, default_value = "./target/debug/emerald")]
     pub emerald_bin: String,
 
-    /// Path to `custom-reth` binary. If not specified will default to `./custom-reth/target/debug/custom-reth`
+    /// Path to `custom-reth` binary
     #[clap(long, default_value = "./custom-reth/target/debug/custom-reth")]
     pub custom_reth_bin: String,
 

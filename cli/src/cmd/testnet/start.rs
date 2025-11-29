@@ -31,15 +31,15 @@ pub struct TestnetStartCmd {
     #[clap(long = "node-keys")]
     pub node_keys: Option<Vec<String>>,
 
-    /// Path to `emerald` binary. If not specified will default to `./target/debug/emerald`
+    /// Path to `emerald` binary
     #[clap(long, default_value = "./target/debug/emerald")]
     pub emerald_bin: String,
 
-    /// Path to `emerald-utils` binary. If not specified will default to `./target/debug/emerald-utils`
+    /// Path to `emerald-utils` binary
     #[clap(long, default_value = "./target/debug/emerald-utils")]
     pub emerald_utils_bin: String,
 
-    /// Path to `custom-reth` binary. If not specified will default to `./custom-reth/target/debug/custom-reth`
+    /// Path to `custom-reth` binary
     #[clap(long, default_value = "./custom-reth/target/debug/custom-reth")]
     pub custom_reth_bin: String,
 

@@ -202,28 +202,24 @@ impl Spammer {
             if nonce_span > self.max_rate {
                 debug!("Current nonce={nonce}, on-chain nonce={on_chain_nonce}. Sending 100 txs");
                 let batch_entries = self.build_batch_entries(100, on_chain_nonce).await?;
-                let params: Vec<_> = batch_entries
-                    .iter()
-                    .map(|(params, _)| params.clone())
-                    .collect();
+                if let Some(results) = self.send_raw_batch(&batch_entries).await? {
+                    if results.len() != batch_entries.len() {
+                        return Err(eyre::eyre!(
+                            "Batch response count {} does not match request count {}",
+                            results.len(),
+                            batch_entries.len()
+                        ));
+                    }
 
-                let results = self
-                    .client
-                    .rpc_batch_request("eth_sendRawTransaction", params)
-                    .await?;
-
-                if results.len() != batch_entries.len() {
-                    return Err(eyre::eyre!(
-                        "Batch response count {} does not match request count {}",
-                        results.len(),
-                        batch_entries.len()
-                    ));
-                }
-
-                // Report individual results.
-                for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
-                    let mapped_result = result.map(|_| tx_bytes_len);
-                    result_sender.send(mapped_result).await?;
+                    // Report individual results.
+                    for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
+                        let mapped_result = result.map(|_| tx_bytes_len);
+                        result_sender.send(mapped_result).await?;
+                    }
+                } else {
+                    debug!("Batch eth_sendRawTransaction timed out; skipping this tick");
+                    let _ = report_sender.send(interval_start).await;
+                    continue;
                 }
             }
 
@@ -263,28 +259,22 @@ impl Spammer {
 
             // Send all transactions in a single batch RPC call.
             if !batch_entries.is_empty() {
-                let params: Vec<_> = batch_entries
-                    .iter()
-                    .map(|(params, _)| params.clone())
-                    .collect();
+                if let Some(results) = self.send_raw_batch(&batch_entries).await? {
+                    if results.len() != batch_entries.len() {
+                        return Err(eyre::eyre!(
+                            "Batch response count {} does not match request count {}",
+                            results.len(),
+                            batch_entries.len()
+                        ));
+                    }
 
-                let results = self
-                    .client
-                    .rpc_batch_request("eth_sendRawTransaction", params)
-                    .await?;
-
-                if results.len() != batch_entries.len() {
-                    return Err(eyre::eyre!(
-                        "Batch response count {} does not match request count {}",
-                        results.len(),
-                        batch_entries.len()
-                    ));
-                }
-
-                // Report individual results.
-                for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
-                    let mapped_result = result.map(|_| tx_bytes_len);
-                    result_sender.send(mapped_result).await?;
+                    // Report individual results.
+                    for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
+                        let mapped_result = result.map(|_| tx_bytes_len);
+                        result_sender.send(mapped_result).await?;
+                    }
+                } else {
+                    debug!("Batch eth_sendRawTransaction timed out; skipping this tick");
                 }
             }
 
@@ -338,6 +328,33 @@ impl Spammer {
         }
 
         Ok(batch_entries)
+    }
+
+    async fn send_raw_batch(
+        &self,
+        batch_entries: &[(Vec<serde_json::Value>, u64)],
+    ) -> Result<Option<Vec<Result<String>>>> {
+        let params: Vec<_> = batch_entries
+            .iter()
+            .map(|(params, _)| params.clone())
+            .collect();
+
+        match self
+            .client
+            .rpc_batch_request("eth_sendRawTransaction", params)
+            .await
+        {
+            Ok(responses) => Ok(Some(responses)),
+            Err(err) => {
+                if let Some(jsonrpsee_core::client::Error::RequestTimeout) =
+                    err.downcast_ref::<jsonrpsee_core::client::Error>()
+                {
+                    Ok(None)
+                } else {
+                    Err(err)
+                }
+            }
+        }
     }
 
     // Track and report statistics on sent transactions.

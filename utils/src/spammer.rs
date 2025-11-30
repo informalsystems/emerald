@@ -179,13 +179,17 @@ impl Spammer {
         // Fetch latest nonce for the sender address.
         let address = self.signer.address();
         let latest_nonce = self.get_latest_nonce(address).await?;
-        debug!("Spamming {address} starting from nonce={latest_nonce}");
+        let txs_per_batch = self.max_rate / 5;
+        debug!(
+            "Spamming {address} starting from nonce={latest_nonce} at rate {}, sending {txs_per_batch} txs every 200ms", 
+            self.max_rate
+        );
 
         // Initialize nonce and counters.
         let mut nonce = latest_nonce;
         let start_time = Instant::now();
         let mut txs_sent_total = 0u64;
-        let mut interval = time::interval(Duration::from_secs(1));
+        let mut interval = time::interval(Duration::from_millis(200));
 
         loop {
             // Wait for next one-second tick.
@@ -200,8 +204,8 @@ impl Spammer {
             // on-chain nonce too advance.
             let nonce_span = nonce.saturating_sub(on_chain_nonce);
             if nonce_span > self.max_rate {
-                debug!("Current nonce={nonce}, on-chain nonce={on_chain_nonce}. Sending 100 txs");
-                let batch_entries = self.build_batch_entries(100, on_chain_nonce).await?;
+                debug!("Current nonce={nonce}, on-chain nonce={on_chain_nonce}. Sending 10 txs");
+                let batch_entries = self.build_batch_entries(10, on_chain_nonce).await?;
                 if let Some(results) = self.send_raw_batch(&batch_entries).await? {
                     if results.len() != batch_entries.len() {
                         return Err(eyre::eyre!(
@@ -226,10 +230,10 @@ impl Spammer {
             // Get current pool size and calculate dynamic send rate
             let current_pool_size = self.get_mempool_count().await.unwrap_or(0);
             let space_available = TARGET_POOL_SIZE.saturating_sub(current_pool_size);
-            let txs_to_send = if space_available < self.max_rate {
+            let txs_to_send = if space_available < txs_per_batch {
                 space_available
             } else {
-                self.max_rate
+                txs_per_batch
             };
 
             // Continue if there is no space available
@@ -481,7 +485,7 @@ struct RpcClient {
 impl RpcClient {
     pub fn new(url: Url) -> Result<Self> {
         let client = HttpClientBuilder::default()
-            .request_timeout(Duration::from_secs(5))
+            .request_timeout(Duration::from_secs(1))
             .build(url)?;
         Ok(Self { client })
     }

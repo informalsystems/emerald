@@ -1,5 +1,4 @@
 use core::fmt;
-use core::sync::atomic::AtomicBool;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -117,18 +116,14 @@ impl Spammer {
         let (report_sender, report_receiver) = mpsc::channel::<Instant>(1);
         let (finish_sender, finish_receiver) = mpsc::channel::<()>(1);
 
-        // Create shared pause flag for pool monitoring.
-        let pause_flag = Arc::new(AtomicBool::new(false));
-
         let self_arc = Arc::new(self);
 
         // Spammer future.
         let spammer_handle = {
             let self_arc = Arc::clone(&self_arc);
-            let pause_flag = Arc::clone(&pause_flag);
             async move {
                 self_arc
-                    .spammer(result_sender, report_sender, finish_sender, pause_flag)
+                    .spammer(result_sender, report_sender, finish_sender)
                     .await
             }
         };
@@ -180,7 +175,6 @@ impl Spammer {
         result_sender: Sender<Result<u64>>,
         report_sender: Sender<Instant>,
         finish_sender: Sender<()>,
-        _: Arc<AtomicBool>,
     ) -> Result<()> {
         // Fetch latest nonce for the sender address.
         let address = self.signer.address();

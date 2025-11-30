@@ -253,8 +253,6 @@ impl Spammer {
             // Prepare batch of transactions for this interval.
             let batch_entries = self.build_batch_entries(tx_count, nonce).await?;
             let batch_size = batch_entries.len() as u64;
-            txs_sent_total += batch_size;
-            nonce += batch_size;
 
             debug!(
                 "Pool: {current_pool_size}/{TARGET_POOL_SIZE}, sending {batch_size} txs from nonce {nonce} (rate: {})",
@@ -277,6 +275,9 @@ impl Spammer {
                         let mapped_result = result.map(|_| tx_bytes_len);
                         result_sender.send(mapped_result).await?;
                     }
+
+                    txs_sent_total += batch_size;
+                    nonce += batch_size;
                 } else {
                     debug!("Batch eth_sendRawTransaction timed out; skipping this tick");
                 }

@@ -200,46 +200,36 @@ impl Spammer {
 
             // Verify the nonce for gaps
             // TODO: probably this should run as a separate task
-            let actual_nonce = self
-                .client
-                .rpc_request::<String>(
-                    "eth_getTransactionCount",
-                    vec![json!(address), json!("pending")],
-                )
-                .await?;
-            if let Some(hex_str) = actual_nonce.strip_prefix("0x") {
-                if let Ok(on_chain_next_nonce) = u64::from_str_radix(hex_str, 16) {
-                    // If the span between the on-chain nonce and the one we are about to send
-                    // is too big, then probably there is a gap that doesn't allow the
-                    // on-chain nonce too advance.
-                    let nonce_span = nonce - on_chain_next_nonce;
-                    if nonce_span > self.max_rate {
-                        let batch_entries =
-                            self.build_batch_entries(100, on_chain_next_nonce).await?;
-                        let params: Vec<_> = batch_entries
-                            .iter()
-                            .map(|(params, _)| params.clone())
-                            .collect();
+            let on_chain_nonce = self.get_latest_nonce(address).await?;
+            // If the span between the on-chain nonce and the one we are about to send
+            // is too big, then probably there is a gap that doesn't allow the
+            // on-chain nonce too advance.
+            let nonce_span = nonce.saturating_sub(on_chain_nonce);
+            if nonce_span > self.max_rate {
+                debug!("Current nonce={nonce}, on-chain nonce={on_chain_nonce}. Sending 100 txs");
+                let batch_entries = self.build_batch_entries(100, on_chain_nonce).await?;
+                let params: Vec<_> = batch_entries
+                    .iter()
+                    .map(|(params, _)| params.clone())
+                    .collect();
 
-                        let results = self
-                            .client
-                            .rpc_batch_request("eth_sendRawTransaction", params)
-                            .await?;
+                let results = self
+                    .client
+                    .rpc_batch_request("eth_sendRawTransaction", params)
+                    .await?;
 
-                        if results.len() != batch_entries.len() {
-                            return Err(eyre::eyre!(
-                                "Batch response count {} does not match request count {}",
-                                results.len(),
-                                batch_entries.len()
-                            ));
-                        }
+                if results.len() != batch_entries.len() {
+                    return Err(eyre::eyre!(
+                        "Batch response count {} does not match request count {}",
+                        results.len(),
+                        batch_entries.len()
+                    ));
+                }
 
-                        // Report individual results.
-                        for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
-                            let mapped_result = result.map(|_| tx_bytes_len);
-                            result_sender.send(mapped_result).await?;
-                        }
-                    }
+                // Report individual results.
+                for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
+                    let mapped_result = result.map(|_| tx_bytes_len);
+                    result_sender.send(mapped_result).await?;
                 }
             }
 
@@ -266,15 +256,16 @@ impl Spammer {
                 txs_to_send
             };
 
-            debug!(
-                "Pool: {current_pool_size}/{TARGET_POOL_SIZE}, sending {tx_count} txs (rate: {})",
-                self.max_rate
-            );
-
             // Prepare batch of transactions for this interval.
             let batch_entries = self.build_batch_entries(tx_count, nonce).await?;
-            txs_sent_total += tx_count;
-            nonce += tx_count;
+            let batch_size = batch_entries.len() as u64;
+            txs_sent_total += batch_size;
+            nonce += batch_size;
+
+            debug!(
+                "Pool: {current_pool_size}/{TARGET_POOL_SIZE}, sending {batch_size} txs from nonce {nonce} (rate: {})",
+                self.max_rate
+            );
 
             // Send all transactions in a single batch RPC call.
             if !batch_entries.is_empty() {

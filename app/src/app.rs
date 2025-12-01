@@ -776,10 +776,10 @@ pub async fn run(
                                 .await?;
                         }
 
-                        debug!(%height, %round, "✅ Re-Proposal sent");
+                        debug!(%height, %round, "✅ Re-sent proposal");
                     }
                     None => {
-                        debug!(%height, %round, "✅ No proposla to re-sent");
+                        debug!(%height, %round, "✅ No proposal to re-send");
                     }
                 }
             }

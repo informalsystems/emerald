@@ -1,6 +1,6 @@
 # Monitoring
 
-The `make` command automatically starts monitoring services to help you observe network behavior.
+The `make testnet-start` command automatically starts monitoring services to help you observe network behavior.
 
 ## Grafana - Metrics Visualization
 

@@ -23,7 +23,7 @@ make --version   # Should show GNU Make
 ```bash
 git clone https://github.com/informalsystems/emerald.git
 cd emerald
-make build # make release for 
+make build
 ``` 
 
 **Note:** For building in release mode, use `make release`.

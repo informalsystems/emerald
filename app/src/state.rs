@@ -605,7 +605,8 @@ impl State {
         height: Height,
         round: Round,
     ) -> eyre::Result<Option<LocallyProposedValue<EmeraldContext>>> {
-        let proposals = self.store.get_undecided_proposals(height, round).await?;
+        let proposals: Vec<ProposedValue<EmeraldContext>> =
+            self.store.get_undecided_proposals(height, round).await?;
 
         assert!(
             proposals.len() <= 1,
@@ -618,6 +619,36 @@ impl State {
             .map(Some)
             .map(Ok)
             .unwrap_or(Ok(None))
+    }
+
+    /// Retrieves a previously built proposal value for the given height and round.
+    /// Called by the consensus engine to re-use a previously built value.
+    /// There should be at most one proposal for a given height and round when the proposer is not byzantine.
+    /// We assume this implementation is not byzantine and we are the proposer for the given height and round.
+    /// Therefore there must be a single proposal for the rounds where we are the proposer, with the proposer address matching our own.
+    pub async fn get_previous_proposal_by_value_and_proposer(
+        &self,
+        height: Height,
+        round: Round,
+        value_id: ValueId,
+        address: Address,
+    ) -> eyre::Result<Option<LocallyProposedValue<EmeraldContext>>> {
+        let proposal = self
+            .store
+            .get_undecided_proposal(height, round, value_id)
+            .await?;
+        match proposal {
+            Some(prop) => {
+                if prop.proposer.eq(&address) {
+                    let lp: LocallyProposedValue<EmeraldContext> =
+                        LocallyProposedValue::new(prop.height, prop.round, prop.value);
+                    Ok(Some(lp))
+                } else {
+                    Ok(None)
+                }
+            }
+            None => Ok(None),
+        }
     }
 
     // /// Make up a new value to propose

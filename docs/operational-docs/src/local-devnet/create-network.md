@@ -13,7 +13,7 @@ Before starting, ensure you have:
 
 **Verify installations:**
 ```bash
-rustc --version   # Should show rustc 1.70+
+rustc --version   # Should show rustc 1.85+
 docker --version # Should show Docker 20.10+
 make --version   # Should show GNU Make
 ```

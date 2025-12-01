@@ -32,7 +32,11 @@ Emerald, as a Malachite application, only needs to interact with the consensus e
 
 - `AppMsg::Decided { certificate, reply }`: Notifies the application that consensus has been reached, providing a certificate with the decided value and supporting votes.
 
-**Note.** Emerald doesn't currently support the following Malachite events: `AppMsg::RestreamProposal` , `AppMsg::ExtendVote`, `AppMsg::VerifyVoteExtension`.
+> [!NOTE]
+> Emerald doesn't currently support the following Malachite events: 
+> - `AppMsg::RestreamProposal`
+> - `AppMsg::ExtendVote`
+> - `AppMsg::VerifyVoteExtension`
 
 ## Additional Features
 

@@ -14,10 +14,6 @@ test:
 	cargo test
 	forge test -vvv
 
-# clean:
-# 	cargo clean
-# 	forge clean
-
 # Docs
 
 docs:

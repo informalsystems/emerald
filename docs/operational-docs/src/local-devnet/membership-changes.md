@@ -39,7 +39,8 @@ The local testnet uses a well-known test mnemonic for pre-funded accounts.
 - These are separate from the Ethereum accounts
 - Used for consensus signing, not transactions
 
-**Important**: These keys are for **testing only**. Never use them on public networks or with real funds.
+> [!IMPORTANT]
+> These keys are for **testing only**. Never use them on public networks or with real funds.
 
 ## List Current Validators
 

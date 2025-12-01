@@ -14,6 +14,10 @@
 Emerald is a modular framework for building decentralized networks of trust. 
 Designed with simplicity at its core, it enables users to deploy reliable, easy to operate, high performance, EVM-compatible networks.
 
+> [!IMPORTANT]
+> Emerald is under active development and should be used at your own risk. 
+> The software has not been externally audited, and its security and stability are not guaranteed.
+
 ## Why Emerald 
 
 Society runs on networks of trust: shared expectations and reputations that let us coordinate and innovate at scale.

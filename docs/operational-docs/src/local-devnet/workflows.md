@@ -19,7 +19,7 @@ Here are some typical workflows for using the local testnet during development.
    ```
 
 3. Verify in Otterscan:
-   - Open http://localhost:5100
+   - Open http://localhost:80
    - Search for the contract address
    - View deployment transaction and contract state
 

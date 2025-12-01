@@ -39,7 +39,7 @@ Prometheus collects time-series metrics from all nodes. Use the query interface 
 
 ## Otterscan - Block Explorer
 
-**URL**: http://localhost:5100
+**URL**: http://localhost:80
 
 Otterscan is a lightweight block explorer for inspecting blocks, transactions, and accounts.
 

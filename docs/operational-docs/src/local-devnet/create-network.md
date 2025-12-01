@@ -54,9 +54,7 @@ curl -X POST http://127.0.0.1:8645 \
 **Access monitoring tools:**
 - **Grafana Dashboard**: http://localhost:4000 (metrics visualization)
 - **Prometheus**: http://localhost:9090 (raw metrics data)
-- **Otterscan Block Explorer**: http://localhost:5100 (view blocks and transactions)
-
-> TODO Otterscan not working
+- **Otterscan Block Explorer**: http://localhost:80 (view blocks and transactions)
 
 ### Step by Step
 

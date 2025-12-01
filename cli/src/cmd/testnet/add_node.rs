@@ -19,11 +19,15 @@ use crate::utils::retry::retry_with_timeout;
 
 #[derive(Parser, Debug, Clone, PartialEq)]
 pub struct TestnetAddNodeCmd {
-    /// Path to `emerald` binary
+    /// Path to the `emerald` executable. The program first checks the path provided here;
+    /// if the binary is not found, it will try to resolve
+    /// `emerald` from $PATH instead.
     #[clap(long, default_value = "./target/debug/emerald")]
     pub emerald_bin: String,
 
-    /// Path to `custom-reth` binary
+    /// Path to the `custom-reth` executable. The program first checks the path provided here;
+    /// if the binary is not found, it will try to resolve
+    /// `custom-reth` from $PATH instead.
     #[clap(long, default_value = "./custom-reth/target/debug/custom-reth")]
     pub custom_reth_bin: String,
 

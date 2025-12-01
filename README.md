@@ -24,7 +24,7 @@ Society runs on networks of trust: shared expectations and reputations that let 
 
 Blockchains strengthen these networks with transparent rules and auditable operations. Bitcoin enabled global value transfer. Ethereum made trust programmable. But their large-scale governance makes it hard for institutions to define specific trust rules.
 
-Emerald empowers institutions to build production-ready networks with tailored governance and compliance logic while retaining the reliability and interoperability of decentralized systems.
+Emerald empowers institutions to build networks of trust with tailored governance and compliance logic while retaining the reliability and interoperability of decentralized systems.
 
 ## Architecture
 
@@ -60,7 +60,7 @@ For instructions on how to deploy a local Emerald testnet, please refer to the [
 
 ### Launching a Production Network
 
-For instructions on how to launch an Emerald production-grade network, please refer to the [Launch Production Network](https://emerald-docs.informalsystems.io/production-network/index.html) section of the docs.
+For instructions on how to launch an Emerald network in production, please refer to the [Launch Production Network](https://emerald-docs.informalsystems.io/production-network/index.html) section of the docs.
 
 ## Performance Evaluation
 

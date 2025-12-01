@@ -53,3 +53,5 @@ To get a validator's public key from their private key file:
 cargo run --bin emerald show-pubkey \
   nodes/0/config/priv_validator_key.json
 ```
+
+> TODO: how to use Docker Desktop on macos

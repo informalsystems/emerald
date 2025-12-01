@@ -4,26 +4,24 @@
 
 - **ValidatorManager Contract**: `0x0000000000000000000000000000000000002000`
 - **RPC Endpoints**:
-  - Node 0: `http://127.0.0.1:8545` (primary endpoint for most operations)
-  - Node 1: `http://127.0.0.1:8546`
-  - Node 2: `http://127.0.0.1:8547`
-  - Node 3 (if running): `http://127.0.0.1:8548`
+  - Node 0: `http://127.0.0.1:8645` (primary endpoint for most operations)
+  - Node 1: `http://127.0.0.1:18645`
+  - Node 2: `http://127.0.0.1:28645`
+  - Node 3: `http://127.0.0.1:38645`
 
-**Note**: All nodes share the same blockchain state. You can connect to any endpoint, but `8545` is typically used as the default.
+**Note**: All nodes share the same blockchain state. You can connect to any endpoint, but `8645` is typically used as the default.
 
 ## Genesis Validators
 
-The genesis file is generated with 3 initial validators, each with power 100. Validator public keys are extracted from:
-
-- `nodes/0/config/priv_validator_key.json`
-- `nodes/1/config/priv_validator_key.json`
-- `nodes/2/config/priv_validator_key.json`
+The genesis file is generated with four initial validators, each with power 100. Validator public keys are extracted from `nodes/{0,1,2,3}/config/priv_validator_key.json`.
 
 ## Pre-funded Test Accounts
 
 The genesis file pre-funds accounts from the test mnemonic with ETH for testing:
 
 **Mnemonic**: `test test test test test test test test test test test junk`
+
+> TODO This list is not complete
 
 | Account # | Address | Private Key | Initial Balance |
 |-----------|---------|-------------|-----------------|

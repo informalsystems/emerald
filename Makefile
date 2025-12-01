@@ -35,7 +35,7 @@ testnet-start: testnet-clean build
 	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
 	docker compose up -d reth0 reth1 reth2 reth3 prometheus grafana otterscan
 	./scripts/add_peers.sh --nodes 4
-	@echo 👉 Grafana dashboard is available at http://localhost:3000
+	@echo 👉 Grafana dashboard is available at http://localhost:4000
 	bash scripts/spawn.bash --nodes 4 --home nodes --no-delay
 
 sync: testnet-clean build
@@ -45,7 +45,7 @@ sync: testnet-clean build
 	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
 	docker compose up -d
 	./scripts/add_peers.sh --nodes 4
-	@echo 👉 Grafana dashboard is available at http://localhost:3000
+	@echo 👉 Grafana dashboard is available at http://localhost:4000
 	cp monitoring/prometheus-syncing.yml monitoring/prometheus.yml
 	docker compose restart prometheus
 	bash scripts/spawn.bash --nodes 4 --home nodes

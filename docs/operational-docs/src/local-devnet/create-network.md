@@ -4,47 +4,39 @@
 
 Before starting, ensure you have:
 
-- **Rust**: Install from https://rust-lang.org/tools/install/
-- **Docker**: Install from https://docs.docker.com/get-docker/
-- **Docker Compose**: Usually included with Docker Desktop
-- **Make**: Typically pre-installed on Linux/macOS; Windows users can use WSL
-- **Git**: For cloning the repository
+- [Rust toolchain](https://rust-lang.org/tools/install/) (use rustup for easiest setup)
+- [Foundry](https://getfoundry.sh/introduction/installation/) (for compiling, testing, and deploying EVM smart contracts)
+- [Docker](https://docs.docker.com/get-docker/)
+- Docker Compose (usually included with Docker Desktop)
+- Make (typically pre-installed on Linux/macOS; Windows users can use WSL)
+- Git (for cloning the repository)
 
 **Verify installations:**
 ```bash
-rust --version   # Should show rustc 1.70+
+rustc --version   # Should show rustc 1.70+
 docker --version # Should show Docker 20.10+
 make --version   # Should show GNU Make
 ```
 
+## Installation
+
+```bash
+git clone https://github.com/informalsystems/emerald.git
+cd emerald
+make build # make release for 
+``` 
+
+**Note:** For building in release mode, use `make release`.
+
 ## Start the Network
 
-The default configuration creates a 3-validator network. From the repository root, run:
+The default configuration creates a four validator network. From the repository root, run:
 
 ```bash
-make
+make testnet-start
 ```
 
-This single command performs all setup automatically:
-
-1. **Cleans previous testnet data** - Removes any old network state
-2. **Builds the project** - Compiles Solidity contracts and Rust binaries
-3. **Generates testnet configuration** - Creates network parameters for 3 nodes
-4. **Creates validator keys** - Generates private keys for each validator
-5. **Creates node directories** - Sets up `nodes/0/`, `nodes/1/`, `nodes/2/`
-6. **Extracts validator public keys** - Collects pubkeys into `nodes/validator_public_keys.txt`
-7. **Generates genesis file** - Creates `assets/genesis.json` with initial validator set
-8. **Starts Docker containers** - Launches Reth nodes, Prometheus, Grafana, Otterscan
-9. **Configures peer connections** - Connects all Reth nodes to each other
-10. **Spawns Emerald consensus nodes** - Starts the consensus layer for each validator
-
-**Expected output:** You should see logs from all 3 validators producing blocks. The network should start producing blocks within a few seconds.
-
-To create a network with 4 validators:
-
-```bash
-make four
-```
+The command performs all setup automatically. See [below](#step-by-step) for a step by step deployment.
 
 ### Verify Network is Running
 
@@ -52,7 +44,7 @@ Once the command completes, verify the network is operational:
 
 ```bash
 # Check if blocks are being produced
-curl -X POST http://127.0.0.1:8545 \
+curl -X POST http://127.0.0.1:8645 \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
 
@@ -60,57 +52,93 @@ curl -X POST http://127.0.0.1:8545 \
 ```
 
 **Access monitoring tools:**
-- **Grafana Dashboard**: http://localhost:3000 (metrics visualization)
+- **Grafana Dashboard**: http://localhost:4000 (metrics visualization)
 - **Prometheus**: http://localhost:9090 (raw metrics data)
 - **Otterscan Block Explorer**: http://localhost:5100 (view blocks and transactions)
 
+> TODO Otterscan not working
+
 ### Step by Step
 
-1. **Configuration Generation** (`./scripts/generate_testnet_config.sh`)
-   - Creates `.testnet/testnet_config.toml` with network parameters
+1. **Testnet Data Cleanup**
+  
+    ```bash
+    make testnet-clean
+    ```
 
-2. **Validator Key Generation**
+2. **Emerald Compilation**
+  
+    ```bash
+    make release
+    ``` 
 
-   ```bash
-   cargo run --bin emerald -- testnet \
-     --home nodes \
-     --testnet-config .testnet/testnet_config.toml
-   ```
+3. **Configuration Generation** 
+  
+    ```bash
+    ./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet
+    ```
+    
+    - Creates `.testnet/testnet_config.toml` with network parameters
 
-   - Creates `nodes/0/`, `nodes/1/`, etc.
-   - Each node gets a `config/priv_validator_key.json`
+4. **Validator Key Generation**
+  
+    ```bash
+    cargo run --bin emerald -- testnet \
+      --home nodes \
+      --testnet-config .testnet/testnet_config.toml
+    ```
+    
+    - Create `nodes/0/`, `nodes/1/`, etc.
+    - Every node gets a `config/priv_validator_key.json`
 
-3. **Public Key Extraction**
+5. **Public Key Extraction**
+  
+    ```bash
+    # run for every node
+    cargo run --bin emerald show-pubkey \
+      nodes/0/config/priv_validator_key.json
+    ```
+    
+    - Outputs public keys to `nodes/validator_public_keys.txt`
 
-   ```bash
-   cargo run --bin emerald show-pubkey \
-     nodes/0/config/priv_validator_key.json
-   ```
+6. **Genesis File Generation**
+  
+    ```bash
+    cargo run --bin emerald-utils genesis \
+      --public-keys-file ./nodes/validator_public_keys.txt \
+      --devnet
+    ```
+    
+    - Creates `assets/genesis.json` with:
+      - Initial validator set (four validators with power 100 each)
+      - ValidatorManager contract deployed at genesis
+      - Ethereum genesis block configuration
 
-   - Outputs public keys to `nodes/validator_public_keys.txt`
+7. **Reth & Monitoring Startup**
+  
+    ```bash
+    docker compose up -d reth0 reth1 reth2 reth3 prometheus grafana otterscan
+    ```
+    
+    - Docker Compose starts Reth execution clients and monitoring services
+    - Each Reth node initializes from `assets/genesis.json`
 
-4. **Genesis File Generation**
+8. **Reth Peer Connection**
+ 
+    ```bash
+    ./scripts/add_peers.sh --nodes 4
+    ```
 
-   ```bash
-   cargo run --bin emerald-utils genesis \
-     --public-keys-file ./nodes/validator_public_keys.txt
-   ```
-
-   - Creates `assets/genesis.json` with:
-     - Initial validator set (3 validators with power 100 each)
-     - ValidatorManager contract deployed at genesis
-     - Ethereum genesis block configuration
-
-5. **Network Startup**
-   - Docker Compose starts Reth execution clients
-   - Each Reth node initializes from `assets/genesis.json`
-   - Peer connections established
-   - Emerald consensus nodes spawn and connect to Reth via Engine API
+9.  **Emerald Startup**  
+  
+    ```bash
+    bash scripts/spawn.bash --nodes 4 --home nodes --no-delay
+    ```
 
 ## Stop the Network
 
 ```bash
-make stop
+make testnet-stop
 ```
 
 This stops all Docker containers but preserves data.
@@ -118,13 +146,17 @@ This stops all Docker containers but preserves data.
 ## Clean the Network
 
 ```bash
-make clean
+make testnet-clean
 ```
 
-**Warning**: This deletes:
+**Warning**: All testnet data is deleted.
 
 - All node data (`nodes/`)
 - Genesis file (`assets/genesis.json`)
 - Testnet config (`.testnet/`)
 - Docker volumes (Reth databases)
 - Prometheus/Grafana data
+
+## Stopping and Restarting Nodes
+
+> TODO

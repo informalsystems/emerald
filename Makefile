@@ -1,4 +1,4 @@
-.PHONY: all build release test docs docs-serve testnet-start sync testnet-stop testnet-clean clean-volumes clean-prometheus spam spam-contract
+.PHONY: all build release test docs docs-serve testnet-start sync testnet-node-stop testnet-node-restart testnet-stop testnet-clean clean-volumes clean-prometheus spam spam-contract
 
 all: build
 

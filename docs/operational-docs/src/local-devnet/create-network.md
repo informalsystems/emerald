@@ -133,6 +133,22 @@ curl -X POST http://127.0.0.1:8645 \
     bash scripts/spawn.bash --nodes 4 --home nodes --no-delay
     ```
 
+## Restart a Node
+
+Use the following command to stop the node with ID `1` (folder `nodes/1`): 
+
+```bash
+make testnet-node-stop NODE=1 
+```
+
+Then use the following command to restart a stopped node:
+
+```bash
+make testnet-node-restart NODE=1 
+```
+
+Note that without providing the node ID, the commands default to node 0. 
+
 ## Stop the Network
 
 ```bash
@@ -154,7 +170,3 @@ make testnet-clean
 - Testnet config (`.testnet/`)
 - Docker volumes (Reth databases)
 - Prometheus/Grafana data
-
-## Stopping and Restarting Nodes
-
-> TODO

@@ -50,6 +50,16 @@ sync: testnet-clean build
 	docker compose restart prometheus
 	bash scripts/spawn.bash --nodes 4 --home nodes
 
+NODE ?= 0# default node 0
+
+testnet-node-stop: 
+	@echo "\nStopping node $(NODE) (folder: \"nodes/$(NODE)\")"
+	./scripts/kill_node.sh $(NODE)
+
+testnet-node-restart: testnet-node-stop
+	@echo "\nRestarting node $(NODE) (folder: \"nodes/$(NODE)\")"
+	./scripts/restart_node.sh $(NODE)
+
 testnet-stop:
 	docker compose down
 

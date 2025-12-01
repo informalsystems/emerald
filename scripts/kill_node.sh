@@ -30,7 +30,7 @@ echo "Found PID $PID for node $NODE_ID"
 # Check if process is running
 if ! ps -p "$PID" > /dev/null 2>&1; then
     echo "Warning: Process $PID is not running"
-    exit 1
+    exit
 fi
 
 # Kill the process

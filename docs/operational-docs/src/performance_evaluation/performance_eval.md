@@ -48,7 +48,7 @@ As Malachite does not support variable block sizes in its channel based example 
 </div>
 
 Although the channel-based application deployed on Malachite doesn't have a concept of transactions, 
-we can consider “native” Ethereum EOA-to-EOA transfer (i.e., plain ETH sends), which have ~110bytes. 
+we can consider “native” Ethereum EOA-to-EOA transfers (i.e., plain ETH sends), which have ~110bytes. 
 In this context, 
 - a single datacenter deployment on 4 nodes with 1MB blocks and average block time of 133ms results in around **68k TPS** 
 - a geo-distributed deployment on 8 nodes with 1MB blocks and average block time of 250ms results in around **36k TPS**.
@@ -62,78 +62,89 @@ In this context,
 
 ### Configuration
 
-For optimal performance of a chain, it is important to tune the exeuction engine according to application requirements. 
-We wanted to achieve high throughput of transactions while keeping the system stable. By stable we refer to handling incoming transactions without transactions filling up the entire mempool, building blocks fast enough to keep up with consensus and sending data within the network to avoid congestion at the RPC level. 
+For optimal performance, it is important to tune the execution engine according to application requirements. 
 
-We have change the following reth startup CLI parameters from their default values:
+The goal here is to push the system to achieve high throughput, while keeping it stable. 
+By stable we mean handling incoming transactions without filling up the mempool, 
+building blocks fast enough to keep up with consensus and sending data within the network to avoid congestion at the RPC level. 
 
+We use the following changes to the default [Reth node configuration](https://reth.rs/cli/reth/node#reth-node):
 ```yaml
-          "--txpool.pending-max-count=50000",
-          "--txpool.pending-max-size=500",
-          "--txpool.queued-max-count=50000",
-          "--txpool.queued-max-size=500",
-          "--txpool.basefee-max-count=50000",
-          "--txpool.basefee-max-size=500",
-          "--txpool.max-account-slots=100000",
-          "--txpool.max-batch-size=10000",
-          "--txpool.minimal-protocol-fee=0",
-          "--txpool.minimum-priority-fee=0",
-          "--txpool.max-pending-txns=20000",
-          "--txpool.max-new-txns=20000",
-          "--txpool.max-new-pending-txs-notifications=20000",
-          "--max-tx-reqs=10000",
-          "--max-tx-reqs-peer=255",
-          "--max-pending-imports=10000",
-          "--builder.gaslimit=1000000000",
+    "--txpool.pending-max-count=50000",
+    "--txpool.pending-max-size=500",
+    "--txpool.queued-max-count=50000",
+    "--txpool.queued-max-size=500",
+    "--txpool.basefee-max-count=50000",
+    "--txpool.basefee-max-size=500",
+    "--txpool.max-account-slots=100000",
+    "--txpool.max-batch-size=10000",
+    "--txpool.minimal-protocol-fee=0",
+    "--txpool.minimum-priority-fee=0",
+    "--txpool.max-pending-txns=20000",
+    "--txpool.max-new-txns=20000",
+    "--txpool.max-new-pending-txs-notifications=20000",
+    "--max-tx-reqs=10000",
+    "--max-tx-reqs-peer=255",
+    "--max-pending-imports=10000",
+    "--builder.gaslimit=1000000000",
 ```
+> TODO: confirm these are indeed all changes 
 
-Note, that for your particualr setup this might be suboptimal. These flags allow a very high influx of transactions from one source, they are buffering up to 50000 transactions in the mempool, and gossip them in big batchers. We also incrased the buffer for pending tx notifications to 20000 (from the default of 200). 
+For your particular setup this might be suboptimal.
+These flags allow a very high influx of transactions from one source.
+They are buffering up to 50000 transactions in the mempool, and gossip them in big batches.
+We also increased the buffer for pending tx notifications to 20000 (from the default of 200). 
 
+As transactions, we use “native” Ethereum EOA-to-EOA transfers (i.e., plain ETH sends). 
+A set of spamming nodes are injecting transactions signed by different accounts. 
+Every spammer is sending transactions to one single Reth node. 
 
+### Cloud-Based Deployment
 
-### Bare-metal
-These experiments evalaute Emerald on 4 bare metal machines in a local and geodistributed setup. 
-The goal is to understand the absolute best performance the chain can have.
+#### Setup
 
-### Cloud-based experiments
-We also ran Emerald on Digital ocean in the following setup: 64GB RAM, 16 shared CPU threads and were running on regular SSDs.
+- Deployments: single datacenter and geo-distributed
+- Number of nodes: 4, 8
+- Hardware setup: Digital Ocean nodes, 64GB RAM, 16 shared CPU threads, with regular SSDs
 
-4 nodes geodistributed
-4 nodes in one region
+#### Results
 
-8 nodes geodistributed
-8 nodes in one reagion. 
+Transactions are sent to all nodes in parallel, at a rate of 8000txs/sec.
 
-
-### Load generation
-
-We spammed emerald both with standard asset transfer transactions.
-<!--> and transacations targetting a SmartContract that simply increment the value of a counter. -->
-
-
-Transactions were sent to all nodes in parallel, at a rate of 8000txs/sec.
-
-<!--Emerald can sustain more incoming transactions, but we observed that the number of
-transactions getting into a block is 8000, regardless of the incoming load. 
--->
+> TODO: is this the injection rate per spammer or overall per network? 
 
 We observe a throughput of 8000tx/sec with block sizes of 0.5-1MB. The reported consensus time is averaging 620ms. 
+
+> TODO: how is the block time 230ms and consensus 620ms? 
+
 <div style="text-align: left;">  
-    <img src="../images/perf/emerald_do_4_8000_block_time.png" width="30%" /> <br/>
-    BLock time of 230ms. 
+    <img src="../images/perf/emerald_do_4_8000_block_time.png" width="60%" /> <br/>
+    <p class="caption">Single datacenter deployment on 4 nodes, with a load of 8000 tx/s. Average block time of 230ms.</p>
 </div>
 
 <div style="text-align: left;">  
-    <img src="../images/perf/emerald_do_4_8000_txs_sec.png" width="30%" /> <br/>
-    8000tx/sec sustained on a 4DO network. 
+    <img src="../images/perf/emerald_do_4_8000_txs_sec.png" width="90%" /> <br/>
+    <p class="caption">Single datacenter deployment on 4 nodes. 8000tx/sec sustained.</p>
 </div>
+
+When injecting at once 8000 transactions via RPC we noticed a lot of disconnects.
+Thus, we split it in multiple RPC requests. 
+In the first half of the above figure, we send 1600 transactions every `200ms`. 
+In the second half, we send RPC requests every `100ms`, which results in a slight decrease in sustained TPS. 
 
 <div style="text-align: left;">  
-    <img src="../images/perf/emerald_4_DO_8000_tx_in_block.png" width="30%" /> <br/>
-    Number of transactions in block. 
+    <img src="../images/perf/emerald_4_DO_8000_tx_in_block.png" width="90%" /> <br/>
+    <p class="caption">Single datacenter deployment on 4 nodes. Number of transactions in block.</p>
 </div>
 
-When pushing at once 8000 transactions via RPC we noticed a lot of disconnects. We therefore sent every `interval` a 
-subset of 8000 txs. The default interval is `200ms`, meaning every 200ms we were sending 1600 transactions.
+### Bare-Metal Deployment
 
-The second batch shows a slight decrease in sustained transactions per second when we decresed the interval to 100ms. 
+These experiments evaluate Emerald on 4 bare-metal machines in a local and geo-distributed setup. 
+The goal is to understand the absolute best performance the chain can have.
+
+> TODO add more details about the deployment and the data
+
+#### Setup
+
+#### Results
+

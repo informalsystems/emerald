@@ -66,21 +66,29 @@ Validator #2:
 
 ## Add a Validator
 
-To add a validator to the active set, first get the pubkey of the validator you want to add by running the following command.
+To add a node to the validator set, you need the node's public key. There are two options:
 
-> TODO: you can use the removed validators
-> use this CLI command for adding a new Emerald node `emerald testnet add-node ...  `
+- Use one of the existing validators after [removing](#remove-a-validator) it from the validator set.
+
+- Add a new node using the following command:
+  ```bash
+  # replace ID with a specific node ID (e.g., 4)
+  cargo run --bin emerald -- init --home nodes/{ID}
+  ```
+
+To get the node's public key, run the following command.
 
 ```bash
+# replace ID with a specific node ID (e.g., 4)
 cargo run --bin emerald show-pubkey \
-  path/to/new/validator/priv_validator_key.json
+  nodes/{ID}/config/priv_validator_key.json
 ```
 
 Then run the following command, replacing the placeholder values.
 
 ```bash
 cargo run --bin emerald-utils poa add-validator \
-  --validator-pubkey 0x04abcdef1234567890... \
+  --validator-pubkey <PUBKEY> \
   --power 100 \
   --owner-private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ```

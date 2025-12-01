@@ -150,7 +150,7 @@ impl TestnetStartCmd {
         println!("    emerald testnet status           - Check status of all nodes");
         println!("    emerald testnet stop-node <id>   - Stop a specific node");
         println!("    emerald testnet stop             - Stop all nodes");
-        println!("    emerald testnet rm               - Remove all testnet data");
+        println!("    emerald testnet destroy          - Remove all testnet data");
 
         Ok(())
     }

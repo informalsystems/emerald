@@ -16,7 +16,7 @@ pub struct TestnetDestroyCmd {
 }
 
 impl TestnetDestroyCmd {
-    /// Execute the rm command
+    /// Execute the destroy command
     pub fn run(&self, home_dir: &Path) -> Result<()> {
         if !home_dir.exists() {
             println!(

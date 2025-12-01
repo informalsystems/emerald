@@ -2,9 +2,9 @@
 
 Once the network is running, you can dynamically manage the validator set by adding, removing, or updating validators without restarting the network.
 
-## Proof of Authority (PoA)
+## PoA Module
 
-Emerald uses a PoA smart contract (`ValidatorManager`) to manage the validator set. This contract is deployed at a predefined address (`0x0000000000000000000000000000000000002000`) and controls:
+Emerald uses a Proof of Authority (PoA) smart contract (`ValidatorManager`) to manage the validator set. This contract is deployed at a predefined address (`0x0000000000000000000000000000000000002000`) and controls:
 
 - Which validators are active
 - Each validator's voting power
@@ -20,12 +20,12 @@ Emerald's PoA tooling provides support for the following use cases.
 ## Prerequisites
 
 - Running testnet (see [Create a New Network](create-network.md))
-- RPC endpoint (default `http://127.0.0.1:8545`)
+- RPC endpoint (default `http://127.0.0.1:8645`)
 - Contract owner key (see below for default test key)
 
 ## Testnet Accounts
 
-The local testnet uses a well-known test mnemonic for pre-funded accounts:
+The local testnet uses a well-known test mnemonic for pre-funded accounts.
 
 **Mnemonic**: `test test test test test test test test test test test junk`
 
@@ -35,11 +35,12 @@ The local testnet uses a well-known test mnemonic for pre-funded accounts:
 - **Role**: Has authority to add/remove/update validators
 
 **Validator Keys**:
-- Located at `nodes/{0,1,2}/config/priv_validator_key.json`
+- Located at `nodes/{0,1,2,3}/config/priv_validator_key.json`
 - These are separate from the Ethereum accounts
 - Used for consensus signing, not transactions
 
-**Important**: These keys are for **testing only**. Never use them on public networks or with real funds.
+> [!IMPORTANT]
+> These keys are for **testing only**. Never use them on public networks or with real funds.
 
 ## List Current Validators
 
@@ -52,7 +53,7 @@ cargo run --bin emerald-utils poa list
 Output:
 
 ```
-Total validators: 3
+Total validators: 4
 
 Validator #1:
   Power: 100
@@ -64,20 +65,31 @@ Validator #2:
   ...
 ```
 
-## Add a New Validator
+## Add a Validator
 
-To add a new validator to the active set, first get the pubkey of the validator you want to add by running the following command.
+To add a node to the validator set, you need the node's public key. There are two options:
+
+- Use one of the existing validators after [removing](#remove-a-validator) it from the validator set.
+
+- Add a new node using the following command:
+  ```bash
+  # replace ID with a specific node ID (e.g., 4)
+  cargo run --bin emerald -- init --home nodes/{ID}
+  ```
+
+To get the node's public key, run the following command.
 
 ```bash
+# replace ID with a specific node ID (e.g., 4)
 cargo run --bin emerald show-pubkey \
-  path/to/new/validator/priv_validator_key.json
+  nodes/{ID}/config/priv_validator_key.json
 ```
 
 Then run the following command, replacing the placeholder values.
 
 ```bash
 cargo run --bin emerald-utils poa add-validator \
-  --validator-pubkey 0x04abcdef1234567890... \
+  --validator-pubkey <PUBKEY> \
   --power 100 \
   --owner-private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ```
@@ -90,7 +102,7 @@ Parameters:
 
 Optional flags:
 
-- `--rpc-url`: RPC endpoint (default: `http://127.0.0.1:8545`)
+- `--rpc-url`: RPC endpoint (default: `http://127.0.0.1:8645`)
 - `--contract-address`: ValidatorManager address (default: `0x0000000000000000000000000000000000002000`)
 
 ## Remove a Validator

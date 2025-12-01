@@ -45,7 +45,8 @@ sync_initial_delay_ms = 100
 ...
 ```
 
-**Important**: The `jwt_token_path` must point to the same JWT token used by Reth.
+> [!IMPORTANT]
+> The `jwt_token_path` must point to the same JWT token used by Reth.
 
 This is where you define how Emerald connects to Reth. Make sure to fill in the Reth http and authrpc address.
 

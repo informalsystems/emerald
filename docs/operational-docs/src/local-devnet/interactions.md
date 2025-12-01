@@ -6,21 +6,21 @@ Once your local Emerald testnet is running, you can interact with it like any Et
 
 **Get current block number:**
 ```bash
-curl -X POST http://127.0.0.1:8545 \
+curl -X POST http://127.0.0.1:8645 \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
 ```
 
 **Get account balance:**
 ```bash
-curl -X POST http://127.0.0.1:8545 \
+curl -X POST http://127.0.0.1:8645 \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"eth_getBalance","params":["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266","latest"],"id":1}'
 ```
 
 **Send a transaction:**
 ```bash
-curl -X POST http://127.0.0.1:8545 \
+curl -X POST http://127.0.0.1:8645 \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc":"2.0",
@@ -41,12 +41,12 @@ curl -X POST http://127.0.0.1:8545 \
 
 **Get block number:**
 ```bash
-cast block-number --rpc-url http://127.0.0.1:8545
+cast block-number --rpc-url http://127.0.0.1:8645
 ```
 
 **Check balance:**
 ```bash
-cast balance 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --rpc-url http://127.0.0.1:8545
+cast balance 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --rpc-url http://127.0.0.1:8645
 ```
 
 **Send ETH:**
@@ -54,18 +54,18 @@ cast balance 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --rpc-url http://127.0.0
 cast send 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
   --value 1ether \
   --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
-  --rpc-url http://127.0.0.1:8545
+  --rpc-url http://127.0.0.1:8645
 ```
 
 ## Using Web3 Libraries
 
-Configure your Web3 library to connect to `http://127.0.0.1:8545`:
+Configure your Web3 library to connect to `http://127.0.0.1:8645`:
 
 **ethers.js (JavaScript):**
 ```javascript
 const { ethers } = require('ethers');
 
-const provider = new ethers.JsonRpcProvider('http://127.0.0.1:8545');
+const provider = new ethers.JsonRpcProvider('http://127.0.0.1:8645');
 const wallet = new ethers.Wallet('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80', provider);
 
 // Send transaction
@@ -80,7 +80,7 @@ await tx.wait();
 ```python
 from web3 import Web3
 
-w3 = Web3(Web3.HTTPProvider('http://127.0.0.1:8545'))
+w3 = Web3(Web3.HTTPProvider('http://127.0.0.1:8645'))
 account = w3.eth.account.from_key('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
 
 # Send transaction
@@ -101,7 +101,7 @@ tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
 2. Click "Add Network" → "Add a network manually"
 3. Enter the following details:
    - **Network Name**: Emerald Local
-   - **RPC URL**: `http://127.0.0.1:8545`
+   - **RPC URL**: `http://127.0.0.1:8645`
    - **Chain ID**: `12345` (or whatever you set in genesis)
    - **Currency Symbol**: ETH
 4. Click "Save"

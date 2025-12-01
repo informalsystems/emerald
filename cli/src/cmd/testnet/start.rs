@@ -11,6 +11,7 @@ use color_eyre::Result;
 use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, Node};
 use malachitebft_config::LoggingConfig;
 use malachitebft_core_types::{Context, SigningScheme};
+use serde_json::{json, Value};
 use tracing::info;
 
 use super::reth::{self, RethProcess};
@@ -378,6 +379,32 @@ min_block_time = "500ms"
                 stdout
             ));
         }
+
+        // Fund the owner account 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 with 100 ETH
+        let genesis_path = assets_dir.join("genesis.json");
+        let genesis_str = std::fs::read_to_string(&genesis_path)?;
+
+        let mut genesis: Value = serde_json::from_str(&genesis_str)?;
+
+        let alloc = genesis
+            .get_mut("alloc")
+            .and_then(Value::as_object_mut)
+            .unwrap();
+
+        // 4. Normalize address key (Reth is fine with lowercase hex)
+        let key = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266".to_owned();
+
+        // 5. Insert / overwrite the alloc entry
+        alloc.insert(
+            key,
+            json!({
+                "balance": "0x56bc75e2d63100000",
+            }),
+        );
+
+        // 6. Write back (pretty-printed for readability)
+        let updated = serde_json::to_string_pretty(&genesis)?;
+        fs::write(genesis_path, updated)?;
 
         Ok(())
     }

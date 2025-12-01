@@ -2,8 +2,6 @@
 
 Here are some typical workflows for using the local testnet during development.
 
-> TODO remove `cargo run --bin`
-
 ## Smart Contract Deployment
 
 1. Start the network:

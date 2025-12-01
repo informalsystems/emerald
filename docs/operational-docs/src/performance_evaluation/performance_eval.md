@@ -15,7 +15,7 @@ As Malachite does not support variable block sizes in its channel based example 
 
 ### Setup
 
-- Block size: 1KB, 1MB, 2MB
+- Block size: 1KiB, 1MiB, 2MiB
 - Deployments: single datacenter and geo-distributed
 - Number of nodes: 4, 8, 10
 - Hardware setup: 8GB RAM, 4CPUs Digital Ocean droplets
@@ -43,15 +43,15 @@ As Malachite does not support variable block sizes in its channel based example 
 
 <div style="text-align: left;">   
     <img src="../images/perf/malachite_10_nodes_geo_vs_local.png" width="60%" />
-    <p class="caption"> Deployment on 10 nodes, both in a single datacenter and geo-distributed, with 1MB blocks.  
+    <p class="caption"> Deployment on 10 nodes, both in a single datacenter and geo-distributed, with 1MiB blocks.  
     No significant difference from running on 8 nodes.</p>
 </div>
 
 Although the channel-based application deployed on Malachite doesn't have a concept of transactions, 
 we can consider “native” Ethereum EOA-to-EOA transfers (i.e., plain ETH sends), which have ~110bytes. 
 In this context, 
-- a single datacenter deployment on 4 nodes with 1MB blocks and average block time of 133ms results in around **68k TPS** 
-- a geo-distributed deployment on 8 nodes with 1MB blocks and average block time of 250ms results in around **36k TPS**.
+- a single datacenter deployment on 4 nodes with 1MiB blocks and average block time of 133ms results in around **68k TPS** 
+- a geo-distributed deployment on 8 nodes with 1MiB blocks and average block time of 250ms results in around **36k TPS**.
 
 > TODO: review the estimates for TPS. are the average block times accurate? 
 > - 1,000,000 bytes / 110 bytes ~ 9,090 tx per block
@@ -88,7 +88,9 @@ We use the following changes to the default [Reth node configuration](https://re
     "--max-pending-imports=10000",
     "--builder.gaslimit=1000000000",
 ```
-> TODO: confirm these are indeed all changes 
+> TODO: confirm these are indeed all changes
+
+> TODO: confirm gaslimit 1_000_000_000 vs 100_000_000. It should be 100_000_000
 
 For your particular setup this might be suboptimal.
 These flags allow a very high influx of transactions from one source.
@@ -113,7 +115,7 @@ Transactions are sent to all nodes in parallel, at a rate of 8000txs/sec.
 
 > TODO: is this the injection rate per spammer or overall per network? 
 
-We observe a throughput of 8000tx/sec with block sizes of 0.5-1MB. The reported consensus time is averaging 620ms. 
+We observe a throughput of 8000tx/sec with block sizes of 0.5-1MiB. The reported consensus time is averaging 620ms. 
 
 > TODO: how is the block time 230ms and consensus 620ms? 
 

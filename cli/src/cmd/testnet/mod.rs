@@ -20,6 +20,7 @@ mod status;
 mod stop;
 mod stop_node;
 pub mod types;
+pub mod utils;
 
 pub use add_node::TestnetAddNodeCmd;
 pub use generate::{RuntimeFlavour, TestnetConfig, TestnetGenerateCmd};

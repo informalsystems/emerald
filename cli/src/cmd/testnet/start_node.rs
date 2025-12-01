@@ -13,6 +13,8 @@ use tracing::info;
 use super::reth;
 use super::types::RethNode;
 use crate::cmd::testnet::rpc::RpcClient;
+use crate::cmd::testnet::utils::status::{is_node_running, NodeStatus};
+use crate::cmd::testnet::ProcessHandle;
 use crate::utils::retry::retry_with_timeout;
 
 #[derive(Parser, Debug, Clone, PartialEq)]
@@ -46,6 +48,45 @@ impl TestnetStartNodeCmd {
             ));
         }
 
+        // Early return if the node is already running
+        let node_dir = home_dir.join(self.node_id.to_string());
+        let emerald_pid_file = node_dir.join("emerald.pid");
+        let emerald_status = if emerald_pid_file.exists() {
+            match ProcessHandle::from_pid_file(&emerald_pid_file) {
+                Ok(handle) => is_node_running(&handle),
+                Err(e) => {
+                    info!(
+                        "Process handle for node `{}` not found due to {e}. Will try to start it",
+                        self.node_id
+                    );
+                    NodeStatus::Uninitialised
+                }
+            }
+        } else {
+            NodeStatus::Uninitialised
+        };
+
+        let emerald_pid_file = node_dir.join("reth.pid");
+        let reth_status = if emerald_pid_file.exists() {
+            match ProcessHandle::from_pid_file(&emerald_pid_file) {
+                Ok(handle) => is_node_running(&handle),
+                Err(e) => {
+                    info!(
+                        "Process handle for node `{}` not found due to {e}. Will try to start it",
+                        self.node_id
+                    );
+                    NodeStatus::Uninitialised
+                }
+            }
+        } else {
+            NodeStatus::Uninitialised
+        };
+
+        if (emerald_status, reth_status) == (NodeStatus::Running, NodeStatus::Running) {
+            info!("Emerald and Reth nodes are already running");
+            return Ok(());
+        }
+
         println!("🚀 Starting node {}...", self.node_id);
 
         // Check if custom-reth is available
@@ -63,53 +104,57 @@ impl TestnetStartNodeCmd {
         }
 
         // Start Reth process
-        println!("\n🔗 Starting Reth execution client...");
-        let assets_dir = home_dir.join("assets");
-        let reth_node = RethNode::new(
-            self.node_id,
-            home_dir.to_path_buf(),
-            assets_dir,
-            &self.reth_config_path,
-        );
-        let reth_process = reth_node.spawn(&self.custom_reth_bin)?;
-        println!("✓ Reth node started (PID: {})", reth_process.pid);
+        if reth_status != NodeStatus::Running {
+            println!("\n🔗 Starting Reth execution client...");
+            let assets_dir = home_dir.join("assets");
+            let reth_node = RethNode::new(
+                self.node_id,
+                home_dir.to_path_buf(),
+                assets_dir,
+                &self.reth_config_path,
+            );
+            let reth_process = reth_node.spawn(&self.custom_reth_bin)?;
+            println!("✓ Reth node started (PID: {})", reth_process.pid);
 
-        // Wait for Reth to be ready
-        println!("\n⏳ Waiting for Reth node to initialize...");
-        let rpc = RpcClient::new(reth_node.ports.http);
-        retry_with_timeout(
-            "reth node ready",
-            Duration::from_secs(30),
-            Duration::from_millis(500),
-            || {
-                // Will succeed if the node is ready
-                rpc.get_block_number()
-            },
-        )?;
-        println!("✓ Reth node ready");
+            // Wait for Reth to be ready
+            println!("\n⏳ Waiting for Reth node to initialize...");
+            let rpc = RpcClient::new(reth_node.ports.http);
+            retry_with_timeout(
+                "reth node ready",
+                Duration::from_secs(30),
+                Duration::from_millis(500),
+                || {
+                    // Will succeed if the node is ready
+                    rpc.get_block_number()
+                },
+            )?;
+            println!("✓ Reth node ready");
 
-        // Connect to existing peers
-        println!("\n🔗 Connecting to existing peers...");
-        self.connect_to_peers(home_dir, self.node_id)?;
-        println!("✓ Connected to peers");
+            // Connect to existing peers
+            println!("\n🔗 Connecting to existing peers...");
+            self.connect_to_peers(home_dir, self.node_id)?;
+            println!("✓ Connected to peers");
+        }
 
         // Start Emerald process
-        println!("\n💎 Starting Emerald consensus node...");
-        let emerald_process = self.spawn_emerald_node(home_dir, self.node_id)?;
-        println!("✓ Emerald node started (PID: {})", emerald_process.pid);
+        if emerald_status != NodeStatus::Running {
+            println!("\n💎 Starting Emerald consensus node...");
+            let emerald_process = self.spawn_emerald_node(home_dir, self.node_id)?;
+            println!("✓ Emerald node started (PID: {})", emerald_process.pid);
 
-        println!("\n✅ Node {} started successfully!", self.node_id);
-        println!("\n📁 Logs:");
-        println!(
-            "  Reth: {}/{}/logs/reth.log",
-            home_dir.display(),
-            self.node_id
-        );
-        println!(
-            "  Emerald: {}/{}/logs/emerald.log",
-            home_dir.display(),
-            self.node_id
-        );
+            println!("\n✅ Node {} started successfully!", self.node_id);
+            println!("\n📁 Logs:");
+            println!(
+                "  Reth: {}/{}/logs/reth.log",
+                home_dir.display(),
+                self.node_id
+            );
+            println!(
+                "  Emerald: {}/{}/logs/emerald.log",
+                home_dir.display(),
+                self.node_id
+            );
+        }
 
         Ok(())
     }

@@ -47,8 +47,9 @@ pub struct TestnetCmd {
 
 #[derive(Subcommand, Debug, Clone, PartialEq)]
 pub enum TestnetSubcommand {
+    // Temporarily disable `testnet generate`
     /// Generate testnet configuration (explicit)
-    Generate(TestnetGenerateCmd),
+    //Generate(TestnetGenerateCmd),
 
     /// Start a complete testnet with Reth + Emerald nodes
     Start(TestnetStartCmd),
@@ -80,7 +81,8 @@ impl TestnetCmd {
         PrivateKey<N::Context>: serde::de::DeserializeOwned,
     {
         match &self.command {
-            Some(TestnetSubcommand::Generate(cmd)) => cmd.run(node, home_dir, logging),
+            // Temporarily disable `testnet generate`
+            //Some(TestnetSubcommand::Generate(cmd)) => cmd.run(node, home_dir, logging),
             Some(TestnetSubcommand::Start(cmd)) => cmd.run(node, home_dir, logging),
             Some(TestnetSubcommand::Status(cmd)) => cmd.run(home_dir),
             Some(TestnetSubcommand::AddNode(cmd)) => cmd.run(home_dir),

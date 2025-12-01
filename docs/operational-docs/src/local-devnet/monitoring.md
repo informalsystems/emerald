@@ -1,10 +1,10 @@
 # Monitoring
 
-The `make` command automatically starts monitoring services to help you observe network behavior.
+The `make testnet-start` command automatically starts monitoring services to help you observe network behavior.
 
 ## Grafana - Metrics Visualization
 
-**URL**: http://localhost:3000
+**URL**: http://localhost:4000
 
 Grafana provides visual dashboards for monitoring validator and network metrics.
 
@@ -39,7 +39,7 @@ Prometheus collects time-series metrics from all nodes. Use the query interface 
 
 ## Otterscan - Block Explorer
 
-**URL**: http://localhost:5100
+**URL**: http://localhost:80
 
 Otterscan is a lightweight block explorer for inspecting blocks, transactions, and accounts.
 
@@ -64,7 +64,7 @@ View consensus logs for each validator:
 tail -f nodes/0/emerald.log
 
 # View logs from all validators simultaneously
-tail -f nodes/{0,1,2}/emerald.log
+tail -f nodes/{0,1,2,3}/emerald.log
 ```
 
 **What to look for:**
@@ -82,7 +82,7 @@ View Reth execution client logs:
 docker compose logs -f reth0
 
 # View all Reth logs
-docker compose logs -f reth0 reth1 reth2
+docker compose logs -f reth0 reth1 reth2 reth3
 ```
 
 **What to look for:**

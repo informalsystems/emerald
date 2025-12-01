@@ -184,6 +184,8 @@ services:
     user: "501"
     environment:
       GF_LOG_LEVEL: info
+      GF_SERVER_HTTP_PORT: 4000
+      GF_SERVER_HTTP_ADDR: 0.0.0.0
       GF_ANALYTICS_ENABLED: false
       GF_ANALYTICS_REPORTING_ENABLED: false
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: false

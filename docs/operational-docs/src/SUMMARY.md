@@ -12,9 +12,9 @@
 
 
 - [Architecture](./architecture/index.md)
-  - [Consensus Engine](./architecture/consensus.md)
-  - [Ethereum Execution Client](./architecture/execution-client.md)
-  - [PoA Module](./architecture/poa.md)
+  - [Consensus Layer](./architecture/consensus.md)
+  - [Execution Layer](./architecture/execution-client.md)
+  - [Proof-of-Authority Model](./architecture/poa.md)
 
 ---
 
@@ -28,6 +28,7 @@
   - [Monitoring](local-devnet/monitoring.md)
   - [Troubleshooting](local-devnet/troubleshooting.md)
   - [Common Workflows](local-devnet/workflows.md)
+  - [CLI (Work in Progress)]()
 - [Launch Production Network](production-network/index.md)
   - [Network Overview](production-network/network-overview.md)
   - [Installation](production-network/installation.md)

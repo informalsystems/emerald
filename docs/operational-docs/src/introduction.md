@@ -10,7 +10,7 @@ Blockchains strengthen these networks with transparent rules and auditable opera
 Bitcoin enabled global value transfer. Ethereum made trust programmable. 
 But their large-scale governance makes it hard for institutions to define specific trust rules.
 
-Emerald empowers institutions to build production-ready networks with tailored governance and compliance logic 
+Emerald empowers institutions to build networks of trust with tailored governance and compliance logic 
 while retaining the reliability and interoperability of decentralized systems.
 
 ## Main Components

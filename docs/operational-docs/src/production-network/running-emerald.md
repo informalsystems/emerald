@@ -45,7 +45,10 @@ sync_initial_delay_ms = 100
 ...
 ```
 
-**Important**: The `jwt_token_path` must point to the same JWT token used by Reth.
+> [!IMPORTANT]
+> The `jwt_token_path` must point to the same JWT token used by Reth.
+
+This is where you define how Emerald connects to Reth. Make sure to fill in the Reth http and authrpc address.
 
 ## Configure Peer Connections
 
@@ -71,6 +74,9 @@ persistent_peers = [
 
 Replace `<PEER_IP>` with the actual IP addresses of your validator peers.
 
+In the Malachite BFT config.toml you will need to fill in the 2 sections (consensus.p2p and mempool.p2p) `persistent_peers` array.
+It uses the format `/ip4/<IP_ADDRESS_TO_REMOTE_PEER>/tcp/<PORT_FOR_REMOTE_PEER>`. Make sure to fill in all peers in the testnet.
+
 ## Start Emerald Node
 
 Start the Emerald consensus node:
@@ -91,25 +97,6 @@ An example Malachite BFT config file is provided: [malachitebft-config.toml](../
 
 The `--config` flag should contain the explicit file path to the Emerald config:
 - Example: `--config=/home/emerald/.emerald/config/emerald.toml`
-
-## Emerald Config
-
-A sample Emerald config file has been provided: [emerald-config.toml](../config-examples/emerald-config.toml). 
-
-This is where you define how Emerald connects to Reth. Make sure to fill in the Reth http and authrpc address.
-
-Also make sure to place the JWT token that Reth is using in the JWT file path in Emerald config file, this JWT token needs to be the same so they can communicate.
-
-## Key Ports
-
-- **27000**: Consensus P2P communication (which port to accept incoming traffic on)
-- **28000**: Mempool P2P communication  (which port to accept incoming traffic on)
-- **30000**: Prometheus metrics endpoint port
-
-## Peering
-
-In the Malachite BFT config.toml you will need to fill in the 2 sections (consensus.p2p and mempool.p2p) `persistent_peers` array.
-It uses the format `/ip4/<IP_ADDRESS_TO_REMOTE_PEER>/tcp/<PORT_FOR_REMOTE_PEER>`. Make sure to fill in all peers in the testnet.
 
 ## Monitoring
 

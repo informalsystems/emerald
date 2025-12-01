@@ -1,18 +1,20 @@
-# Ethereum Execution Client
+# Execution Layer
 
 Emerald integrates with Ethereum execution clients through [Engine API](https://github.com/ethereum/execution-apis/tree/main/src/engine), allowing it to plug into a mature execution ecosystem.
 Currently, Emerald integrates with [Reth](https://github.com/paradigmxyz/reth) and the roadmap includes support for additional clients.
 
 ## Key Properties 
 
-- **EVM compatibility:** Users can run existing Ethereum smart contracts on Emerald without modification. 
-  Consequently, they can leverage established standards such as ERC-20, ERC-721, and ERC-4626.
-- **Rich ecosystem support:** Users get immediate access to wallets, block explorers, indexers, and developer frameworks.
-  Emerald provides native compatibility with DeFi protocols, bridges, token standards, and interoperability layers.
-- **Continuous performance improvements:** Emerald benefits from ongoing optimizations and research from active Ethereum client development.
-  Users remain aligned with performance and scalability upgrades adopted by the Ethereum ecosystem.
-- **Reduced development overhead:** Emerald networks do not need to build or maintain a custom execution engine, 
-  resulting in faster time-to-market with lower operational burden. 
+**EVM Compatibility.** Users can run existing Ethereum smart contracts on Emerald without modification. 
+Consequently, they can leverage established standards such as ERC-20, ERC-721, and ERC-4626.
+
+**Rich Ecosystem Support.** Users get immediate access to wallets, block explorers, indexers, and developer frameworks.
+Emerald provides native compatibility with DeFi protocols, bridges, token standards, and interoperability layers.
+
+**Continuous Performance Improvements.** Emerald benefits from ongoing optimizations and research from active Ethereum client development.
+Users remain aligned with performance and scalability upgrades adopted by the Ethereum ecosystem.
+
+**Reduced development overhead.** Emerald networks do not need to build or maintain a custom execution layer, resulting in faster time-to-market with lower operational burden. 
 
 ## Reth Integration 
 

@@ -9,6 +9,8 @@ fi
 NODE_ID=$1
 PID_FILE="nodes/$NODE_ID/node.pid"
 
+docker compose stop reth$NODE_ID
+
 # Check if PID file exists
 if [ ! -f "$PID_FILE" ]; then
     echo "Error: PID file not found at $PID_FILE"
@@ -28,7 +30,7 @@ echo "Found PID $PID for node $NODE_ID"
 # Check if process is running
 if ! ps -p "$PID" > /dev/null 2>&1; then
     echo "Warning: Process $PID is not running"
-    exit 1
+    exit
 fi
 
 # Kill the process

@@ -1,4 +1,4 @@
-# Consensus Engine
+# Consensus Layer
 
 Emerald leverages [Malachite](https://github.com/circlefin/malachite) as its consensus engine. 
 Malachite is the most optimized and lightweight evolution of the [Tendermint](https://arxiv.org/abs/1807.04938) Byzantine Fault Tolerant (BFT) protocol, 
@@ -6,12 +6,16 @@ which is the most battle-tested consensus protocol in blockchain today.
 
 ## Key Properties 
 
-- **Separation from execution:** Consensus is separated from execution, allowing modular development and easy component customization.
-- **Single-slot finality:** Transactions are finalized immediately once blocks are committed, without the risk of reorgs.
-- **Low latency:** Malachite finalizes blocks in under one second, delivering the low-latency confirmation times required for high-performance institutional applications.
-- **High throughput:** 
+**Separation From Execution.** Consensus is separated from execution, allowing modular development and easy component customization.
+
+**Single-Slot Finality.** Transactions are finalized immediately once blocks are committed, without the risk of reorgs.
+
+**Low Latency.** Malachite finalizes blocks in under one second, delivering the low-latency confirmation times required for high-performance institutional applications.
+
+**High Throughput.** 
  > TODO: add throughput results 
-- **Formally specified:** Malachite was formally specified and model checked using the [Quint specification language](https://quint-lang.org). 
+
+**Formally Specified.** Malachite was formally specified and model checked using the [Quint specification language](https://quint-lang.org). 
 
 ## Malachite Integration 
 
@@ -38,10 +42,10 @@ Malachite expects nodes that fall behind to use a different protocol to catch up
 In Malachite terminology, this protocol is referred to as _Value Sync_ (as the nodes sync on the past values decided by Malachite). 
 In the context of Emerald, these values consists of Ethereum blocks. 
 
-Emerald uses the following Malachite events to implement the Value Sync protocol:
+Emerald handles the following events emitted by Malachite, in order to implement the Value Sync protocol:
 
 - `AppMsg::ProcessSyncedValue { height, round, proposer, value_bytes, reply }`: 
-  Used to process and validat values received from other peers while syncing. 
+  Used to process and validate values received from other peers while syncing. 
   The values are validated against the execution client and stored for processing in the Decided function.
 
 - `AppMsg::GetDecidedValue { height, reply }`: 

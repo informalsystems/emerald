@@ -47,6 +47,8 @@ pub struct Spammer {
     max_time: u64,
     /// Maximum number of transactions to send per second.
     max_rate: u64,
+    /// Number of ms between sending batches of txs (default: 200).
+    batch_interval: u64,
     /// Whether to send EIP-4844 blob transactions.
     blobs: bool,
     /// Chain ID for the transactions.
@@ -62,6 +64,7 @@ impl Spammer {
         max_num_txs: u64,
         max_time: u64,
         max_rate: u64,
+        batch_interval: u64,
         blobs: bool,
         chain_id: u64,
     ) -> Result<Self> {
@@ -73,6 +76,7 @@ impl Spammer {
             max_num_txs,
             max_time,
             max_rate,
+            batch_interval,
             blobs,
             chain_id,
             contract_payload: None,
@@ -86,6 +90,7 @@ impl Spammer {
         max_num_txs: u64,
         max_time: u64,
         max_rate: u64,
+        batch_interval: u64,
         contract: &Address,
         function: &str,
         args: &[String],
@@ -104,6 +109,7 @@ impl Spammer {
             max_num_txs,
             max_time,
             max_rate,
+            batch_interval,
             blobs: false, // Contract calls don't use blobs
             contract_payload: Some(contract_payload),
             chain_id,
@@ -179,17 +185,21 @@ impl Spammer {
         // Fetch latest nonce for the sender address.
         let address = self.signer.address();
         let latest_nonce = self.get_latest_nonce(address).await?;
-        let txs_per_batch = self.max_rate / 5;
+        let txs_per_batch = self.max_rate
+            .saturating_mul(self.batch_interval)
+            .checked_div(1000)
+            .unwrap_or(0);
         debug!(
-            "Spamming {address} starting from nonce={latest_nonce} at rate {}, sending {txs_per_batch} txs every 200ms", 
-            self.max_rate
+            "Spamming {address} starting from nonce={latest_nonce} at rate {}, sending {txs_per_batch} txs every {}ms", 
+            self.max_rate, 
+            self.batch_interval,
         );
 
         // Initialize nonce and counters.
         let mut nonce = latest_nonce;
         let start_time = Instant::now();
         let mut txs_sent_total = 0u64;
-        let mut interval = time::interval(Duration::from_millis(200));
+        let mut interval = time::interval(Duration::from_millis(self.batch_interval));
 
         loop {
             // Wait for next one-second tick.

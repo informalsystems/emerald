@@ -130,6 +130,9 @@ pub struct SpamCmd {
     /// Rate of transactions per second
     #[clap(short, long, default_value = "1000")]
     rate: u64,
+    /// Interval in ms for sending batches of transactions
+    #[clap(short, long, default_value = "200")]
+    interval: u64,
     /// Time to run the spammer for in seconds
     #[clap(short, long, default_value = "0")]
     time: u64,
@@ -150,6 +153,7 @@ impl SpamCmd {
             rpc_url,
             num_txs,
             rate,
+            interval,
             time,
             blobs,
             signer_index,
@@ -163,6 +167,7 @@ impl SpamCmd {
             *num_txs,
             *time,
             *rate,
+            *interval,
             *blobs,
             *chain_id,
         )?
@@ -296,6 +301,9 @@ pub struct SpamContractCmd {
     /// Rate of transactions per second
     #[clap(short, long, default_value_t = 1000)]
     rate: u64,
+    /// Interval in ms for sending batches of transactions
+    #[clap(short, long, default_value = "200")]
+    interval: u64,
     /// Time to run the spammer for in seconds
     #[clap(short, long, default_value_t = 0)]
     time: u64,
@@ -315,6 +323,7 @@ impl SpamContractCmd {
             rpc_url,
             num_txs,
             rate,
+            interval,
             time,
             signer_index,
             chain_id,
@@ -326,6 +335,7 @@ impl SpamContractCmd {
             *num_txs,
             *time,
             *rate,
+            *interval,
             contract,
             function,
             args,

@@ -58,3 +58,10 @@ Wallet
 Mnemonic:          test test test test test test test test test test test junk
 Derivation path:   m/44'/60'/0'/0/
 ```
+
+Alternatively, use the following command and vary the `--mnemonic-index` (one value in `0-9`):
+```bash
+cast wallet address --mnemonic-index 0 --mnemonic "test test test test test test test test test test test junk"
+
+# output: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+```

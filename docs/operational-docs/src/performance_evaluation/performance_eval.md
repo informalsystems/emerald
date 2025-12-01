@@ -1,53 +1,62 @@
 # Performance evaluation
 
-While building Emerald we have put an emphasiz on performance testing with the goal of understanding it's limits. 
-While tuning the execution client and malachite will be very application dependant, we wanted to get a best-case baseline
-to understand any potential overhead introduced by applications built on top of Emerald. 
-
-
-# Baseline
-
-Emerald was built on top of Malachite, which is a high performant version of the Tendermint consensus algorithm.
-To understand the overhead of putting an execution client on top of it, we first benchmarked Malachite without 
-Reth. 
-
-We ran a dummy channel based application on top of malachite, which was only generating blocks of a certain size,
-and forwarding them to peers for voting. 
-The channel based application was initially used to build the skeleton of an Emerald application. 
-
-Malachite core does not support variable block sizes in it's channel based example app, and we added this code ourselves :
-[https://github.com/informalsystems/malachite/pull/6]
-
-
-
-# Experiment setup
+While building Emerald we have put an emphasis on performance testing with the goal of understanding its limits. 
+While tuning the execution client and the Malachite consensus engine is very application dependant, 
+the goal is to get a best-case baseline to understand any potential overhead introduced by applications built on top of Emerald. 
 
 ## Malachite
 
-Block size variation : 1kb, 1mb, 2mb
-Number of nodes: 4, 8, 10 nodes in one region vs. 4, 8, 10 nodes geodistributed. 
+Emerald is built on top of Malachite, a high performant version of the Tendermint consensus algorithm.  
+To understand the overhead of running with an execution client, we first benchmark Malachite without Reth. 
 
-Server setup: 8GB, 4CPUs Digital Ocean droplets
+We run a simple channel-based application on top of Malachite. The application only generates blocks of a certain size,  
+and forwards them to peers for voting. 
+As Malachite does not support variable block sizes in its channel based example app, we added this functionality to [our own fork](https://github.com/informalsystems/malachite/pull/6).
 
+### Setup
+
+- Block size: 1KB, 1MB, 2MB
+- Deployments: single datacenter and geo-distributed
+- Number of nodes: 4, 8, 10
+- Hardware setup: 8GB RAM, 4CPUs Digital Ocean droplets
+
+> TODO we need more details on HW setup
+
+### Results
 
 <div style="text-align: left;">  
-    <img src="../images/perf/malachite_4_nodes_one_region_block_size.png" width="30%" /> <br/>
-    4 nodes in a single region, running Malachite with a varying block size. On 4 nodes, the average block time for 1MB blocks is 133ms.
-    
+    <img src="../images/perf/malachite_4_nodes_one_region_block_size.png" width="60%" /> <br/>
+    <p class="caption">Single datacenter deployment on 4 nodes, with a varying block size. The average block time is 133 ms.</p>
 </div>
 
+> TODO: it's not clear for which block size is the 133ms average
+
 <div style="text-align: left;">  
-    <img src="../images/perf/malachite_8_nodes_geo_block_size.png" width="30%" />  <p>
-   Comparison of the performance of Malachite in a geodistributed setup, on 8 nodes, where each 2 nodes were in a different datencter (NYC, LON, AMS). The geodistribution adds certian overhad on consensus and we see that for 1MB blocks, there are spikes up to 260ms. </p>
-    
+    <img src="../images/perf/malachite_8_nodes_geo_block_size.png" width="60%" />  
+    <p class="caption">Geo-distributed deployment on 8 nodes, with each 2 nodes in a different datacenter (NYC, LON, AMS).
+    The geo-distribution impacts performance, with spikes in block times. </p>
 </div>
+
+> TODO: 2 nodes in a different datacenter (NYC, LON, AMS) --> we are missing a DC
+
+> TODO: the spikes seem higher thant 260ms
+
 <div style="text-align: left;">   
-    <img src="../images/perf/malachite_10_nodes_geo_vs_local.png" width="30%" />
-    We also increased the number of nodes to 10, but did not observe a big decrease in block time compared to running on 8 nodes. 
-
+    <img src="../images/perf/malachite_10_nodes_geo_vs_local.png" width="60%" />
+    <p class="caption"> Deployment on 10 nodes, both in a single datacenter and geo-distributed, with 1MB blocks.  
+    No significant difference from running on 8 nodes.</p>
 </div>
 
+Although the channel-based application deployed on Malachite doesn't have a concept of transactions, 
+we can consider “native” Ethereum EOA-to-EOA transfer (i.e., plain ETH sends), which have ~110bytes. 
+In this context, 
+- a single datacenter deployment on 4 nodes with 1MB blocks and average block time of 133ms results in around **68k TPS** 
+- a geo-distributed deployment on 8 nodes with 1MB blocks and average block time of 250ms results in around **36k TPS**.
 
+> TODO: review the estimates for TPS. are the average block times accurate? 
+> - 1,000,000 bytes / 110 bytes ~ 9,090 tx per block
+> - 9,090 / 0.133 ~ 68,346 TPS
+> - 9,090 ÷ 0.25 ~ 36,360 TPS
 
 ## Emerald
 

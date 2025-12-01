@@ -10,9 +10,9 @@ use malachitebft_core_types::{Context, SigningScheme};
 
 mod add_node;
 pub mod config;
+mod destroy;
 mod generate;
 pub mod reth;
-mod rm;
 mod rpc;
 mod start;
 mod start_node;
@@ -23,9 +23,9 @@ pub mod types;
 pub mod utils;
 
 pub use add_node::TestnetAddNodeCmd;
+pub use destroy::TestnetDestroyCmd;
 pub use generate::{RuntimeFlavour, TestnetConfig, TestnetGenerateCmd};
 pub use reth::check_installation;
-pub use rm::TestnetRmCmd;
 pub use start::TestnetStartCmd;
 pub use start_node::TestnetStartNodeCmd;
 pub use status::TestnetStatusCmd;
@@ -69,7 +69,7 @@ pub enum TestnetSubcommand {
     Stop(TestnetStopCmd),
 
     /// Remove all testnet data
-    Rm(TestnetRmCmd),
+    Destroy(TestnetDestroyCmd),
 }
 
 impl TestnetCmd {
@@ -87,7 +87,7 @@ impl TestnetCmd {
             Some(TestnetSubcommand::StartNode(cmd)) => cmd.run(home_dir),
             Some(TestnetSubcommand::StopNode(cmd)) => cmd.run(home_dir),
             Some(TestnetSubcommand::Stop(cmd)) => cmd.run(home_dir),
-            Some(TestnetSubcommand::Rm(cmd)) => cmd.run(home_dir),
+            Some(TestnetSubcommand::Destroy(cmd)) => cmd.run(home_dir),
             // Backward compatibility: if no subcommand, use generate with flattened opts
             None => self.generate_opts.run(node, home_dir, logging),
         }

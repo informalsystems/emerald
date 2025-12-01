@@ -9,13 +9,13 @@ use color_eyre::eyre::eyre;
 use color_eyre::Result;
 
 #[derive(Parser, Debug, Clone, PartialEq)]
-pub struct TestnetRmCmd {
+pub struct TestnetDestroyCmd {
     /// Skip confirmation prompt
     #[clap(long, short)]
     pub force: bool,
 }
 
-impl TestnetRmCmd {
+impl TestnetDestroyCmd {
     /// Execute the rm command
     pub fn run(&self, home_dir: &Path) -> Result<()> {
         if !home_dir.exists() {

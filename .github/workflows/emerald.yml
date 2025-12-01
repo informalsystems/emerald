@@ -54,7 +54,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Run emerald
         run: |
-          testnet-clean build
+          cargo build
           ./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet
           cargo run --bin emerald -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
           ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt

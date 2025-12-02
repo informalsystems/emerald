@@ -8,8 +8,10 @@
   - Node 1: `http://127.0.0.1:18645`
   - Node 2: `http://127.0.0.1:28645`
   - Node 3: `http://127.0.0.1:38645`
-
-**Note**: All nodes share the same blockchain state. You can connect to any endpoint, but `8645` is typically used as the default.
+  
+> [!NOTE]
+> All nodes share the same blockchain state. 
+> You can connect to any endpoint, but `:8645` is typically used as the default.
 
 ## Genesis Validators
 
@@ -22,9 +24,10 @@ Use these accounts for sending transactions, deploying contracts, or testing.
 
 Use the `anvil` command to get a list of the pre-funded accounts.
 
-```bash
-anvil
+<details>
+<summary><code>anvil</code></summary>
 
+```shell
 Available Accounts
 ==================
 
@@ -58,6 +61,7 @@ Wallet
 Mnemonic:          test test test test test test test test test test test junk
 Derivation path:   m/44'/60'/0'/0/
 ```
+</details>
 
 Alternatively, use the following command and vary the `--mnemonic-index` (one value in `0-9`):
 ```bash

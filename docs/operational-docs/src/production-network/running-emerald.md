@@ -1,8 +1,8 @@
 # Running Emerald (Consensus Engine)
 
-**Note**: This section applies to **all network participants** (both the coordinator and all validators). Each validator must run their own Emerald node with the private key they generated earlier.
-
-Emerald is the consensus client, built on Malachite BFT. It coordinates with Reth via the Engine API to produce blocks and achieve consensus across the validator network.
+> [!NOTE]
+> This section applies to **all network participants** (both the coordinator and all validators). 
+> Each validator must run their own Emerald node with the private key they generated earlier.
 
 ## Prerequisites
 

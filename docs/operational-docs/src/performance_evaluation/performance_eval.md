@@ -109,7 +109,10 @@ Every spammer is sending transactions to one single Reth node.
 
 #### Results: 4-node deployment - single data center
 
-Transactions are sent to all nodes in parallel, at a rate of 8000txs/sec per node.
+Transactions are sent to all nodes in parallel. The load is designed to keep the mempool full but not destabilize the system. By destabilizing we refer to nonce gaps, rpc timeouts etc. What we wanted to void is to not have empty blocks. 
+
+When injecting a higher number of transactions into a node (8000), we observed instabilitiy most likely on the RPC side. 
+Thus, we split it in multiple RPC requests, sending smaller batches every `200ms`, instead of a big batch every second. 
 
 We observe a throughput of 8000tx/sec with block sizes of 0.5-1MiB. The reported block time is averaging 220ms with spikes up to 230ms. 
 
@@ -125,10 +128,7 @@ We observe a throughput of 8000tx/sec with block sizes of 0.5-1MiB. The reported
     <p class="caption">Single datacenter deployment on 4 nodes. 8000tx/sec sustained.</p>
 </div>
 
-When injecting at once 8000 transactions via RPC we noticed a lot of disconnects.
-Thus, we split it in multiple RPC requests. 
-In the first half of the above figure, we send 1600 transactions every `200ms`. 
-In the second half, we send RPC requests every `100ms`, which results in a slight decrease in sustained TPS. 
+
 
 <div style="text-align: left;">  
     <img src="../images/perf/emerald_4_DO_8000_tx_in_block.png" width="90%" /> <br/>
@@ -141,7 +141,7 @@ The graph below shows the average block size accross the run , where each block 
 
 In this setting, we distributed the nodes between different datacenters, where two nodes were placed in each of the following datacenters: New York, SanFrancisco, Amsterdan and London. 
 
-The system also sustained an influx of 8000 transactions per second, but it could not process more than 6000 transactions /second overall. 
+The system processed up to 6000 transactions per second. 
 
 <div style="text-align: left;">  
     <img src="../images/perf/emerald_8_geo_distributed_pending_pool_count.png" width="90%" /> <br/>
@@ -149,7 +149,6 @@ The system also sustained an influx of 8000 transactions per second, but it coul
 </div>
 
 The graph above shows that some nodes have fewer transactions in their pool, thus proposing smaller blocks. 
-
 
 For this setup to be able to sustain more than 3000 transactions per second of incoming transactions, we lowered the interval between sending batches of transactions (from `200ms` to `100ms`). Thus we had more freuqent batches of smaller transactions. 
 
@@ -191,7 +190,7 @@ The server configuration is as follows:
 CPU: AMD EPYC 4584PX;
 Micron 7500 1TB NVMe
 
-We spam each node with a load of 8000tx/sec with the same Reth configuration as above. Emerald reaches a peek throughput of 9200 tx/sec with overall 8300 tps sustained throughput throughout the run.  Block size was between 1 and 1.5MB. 
+We spam each node with a high load, keeping the mempool full. Emerald reaches a peek throughput of 9200 tx/sec with overall 8300 tps sustained throughput throughout the run.  Block size was between 1 and 1.5MB. 
 The reported block time was between 170ms to 230ms compared to an average of 133ms for Malachite core for 1MB blocks. 
 
 <div style="text-align: left;">  

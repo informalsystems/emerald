@@ -26,7 +26,8 @@ cd emerald
 make build
 ``` 
 
-**Note:** For building in release mode, use `make release`.
+> [!NOTE]
+> For building in release mode, use `make release`.
 
 ## Start the Network
 

@@ -107,4 +107,6 @@ tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
 4. Click "Save"
 5. Import one of the test accounts using its private key
 
-**Security Note**: Only use test private keys with local networks. _**Never import test keys into wallets used for real funds.**_
+> [!WARNING]
+> Only use test private keys with local networks. 
+> _**Never import test keys into wallets used for real funds.**_

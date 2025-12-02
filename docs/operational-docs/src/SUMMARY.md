@@ -8,7 +8,7 @@
 
 ---
 
-# Architecture
+# Core Concepts
 
 
 - [Architecture](./architecture/index.md)
@@ -18,7 +18,7 @@
 
 ---
 
-# Guides
+# Run & Deploy
 
 - [Deploy Local Testnet](local-devnet/index.md)
   - [Creating a Testnet](local-devnet/create-network.md)
@@ -35,10 +35,10 @@
   - [Creating Network Genesis](production-network/genesis.md)
   - [Running Reth](production-network/running-reth.md)
   - [Running Emerald](production-network/running-emerald.md)
+- [Configuration Examples](./config-examples.md)
 
 ---
 
-# References 
+# Performance
 
-- [Configuration Examples](./config-examples.md)
-
+- [Performance Evaluation](./performance_evaluation/index.md)

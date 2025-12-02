@@ -10,12 +10,13 @@ which is the most battle-tested consensus protocol in blockchain today.
 
 **Single-Slot Finality.** Transactions are finalized immediately once blocks are committed, without the risk of reorgs.
 
+**Formally Specified.** Malachite was formally specified using the [Quint specification language](https://quint-lang.org). 
+
 **Low Latency.** Malachite finalizes blocks in under one second, delivering the low-latency confirmation times required for high-performance institutional applications.
 
-**High Throughput.** Malachite without an Ethereum execution client on top can reach up to 71700 TPS for single datacenter deployments and up to 41400 TPS for geo-distributed deployments. 
-When deploying with Reth as an execution client, Emerald achieves around 9200 TPS peak and 8300 TPS sustained on a single datacenter deployment.
-
-**Formally Specified.** Malachite was formally specified and model checked using the [Quint specification language](https://quint-lang.org). 
+**High Throughput.** Malachite without an Ethereum execution client on top can reach up to 71.7k TPS for single datacenter deployments and up to 41.4k TPS for geo-distributed deployments. 
+When deploying with Reth as an execution client, Emerald achieves around 9,200 TPS peak and 8,300 TPS sustained on a single datacenter deployment.
+This demonstrates both the strength of the underlying consensus engine and the clear potential to further optimize Emerald.
 
 ## Malachite Integration 
 

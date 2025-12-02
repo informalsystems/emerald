@@ -18,9 +18,7 @@ As Malachite does not support variable block sizes in its channel based example 
 - Block size: 1KiB, 1MiB, 2MiB
 - Deployments: single datacenter and geo-distributed
 - Number of nodes: 4, 8, 10
-- Hardware setup: 8GB RAM, 4CPUs Digital Ocean droplets
-
-> TODO we need more details on HW setup
+- Hardware setup: Digital Ocean nodes, 8GB RAM, 4CPUs, with regular SSDs
 
 ### Results
 
@@ -44,8 +42,8 @@ As Malachite does not support variable block sizes in its channel based example 
 Although the channel-based application deployed on Malachite doesn't have a concept of transactions, 
 we can consider “native” Ethereum EOA-to-EOA transfers (i.e., plain ETH sends), which have ~110bytes. 
 In this context, 
-- a single datacenter deployment on 4 nodes with 1MiB blocks and average block time of 133ms results in around **71700 TPS** 
-- a geo-distributed deployment on 8 nodes with 1MiB blocks and average block time of 230ms results in around **41400 TPS**.
+- a single datacenter deployment on 4 nodes with 1MiB blocks and average block time of 133ms results in around **71.7k TPS** 
+- a geo-distributed deployment on 8 nodes with 1MiB blocks and average block time of 230ms results in around **41.4k TPS**.
 
 ## Emerald
 
@@ -75,15 +73,13 @@ We use the following changes to the default [Reth node configuration](https://re
     "--max-tx-reqs=10000",
     "--max-tx-reqs-peer=255",
     "--max-pending-imports=10000",
-    "--builder.gaslimit=1000000000",
 ```
-
-> TODO: cloud deployments with gaslimit 1_000_000_000 vs bare metal with 200_000_000
+In addition we are setting the `--builder.gaslimit` to `1_000_000_000` for cloud-based deployments and to `200_000_000` for bare-metal deployments. 
  
 For your particular setup this might be suboptimal.
 These flags allow a very high influx of transactions from one source.
-They are buffering up to 50000 transactions in the mempool, and gossip them in big batches.
-We also increased the buffer for pending tx notifications to 20000 (from the default of 200). 
+They are buffering up to `50_000` transactions in the mempool, and gossip them in big batches.
+We also increased the buffer for pending tx notifications to `20_000` (from the default of 200). 
 
 As transactions, we use “native” Ethereum EOA-to-EOA transfers (i.e., plain ETH sends). 
 A set of spamming nodes are injecting transactions signed by different accounts. 
@@ -94,7 +90,7 @@ Every spammer is sending transactions to one single Reth node.
 #### Setup
 
 - Deployments: single datacenter on 4 nodes and geo-distributed on 8 nodes
-- Hardware setup: Digital Ocean nodes, 64GB RAM, 16 shared CPU threads, with regular SSDs
+- Hardware setup: Digital Ocean nodes, 64GB RAM, 16CPUs, with regular SSDs
 
 #### Results
 
@@ -124,33 +120,12 @@ Sending more frequently, every 100ms, results in a drop of performance.
 
 **Geo-distributed deployment, 8 nodes.**
 For a geo-distributed deployment on 8 nodes, with two nodes placed in each datacenters (NYC, LON, AMS, SFO), we observed a throughput of around **5800 TPS** sustained. 
-
-> TODO: mention the average block time
-
-
-<div style="text-align: left;">  
-    <img src="../images/perf/emerald_8_geo_distributed_pending_pool_count.png" width="90%" /> <br/>
-    <p class="caption"> Number of pending transactions in the mempool of Reth. </p>
-</div>
-
-The graph above shows that some nodes have fewer transactions in their pool, thus proposing smaller blocks. 
-
-For this setup to be able to sustain more than 3000 transactions per second of incoming transactions, we lowered the interval between sending batches of transactions (from `200ms` to `100ms`). Thus we had more freuqent batches of smaller transactions. 
-
-Another thing we observed is that, having the nodes fully connected improved performance. The performance was less impacted by Reth nodes having fewer peers than when consensus nodes did not have connections to all the peers.
-
-> TODO: not sure we need the above figure 
-
+The reported block time is averaging at **220ms**.
 
 <div style="text-align: left;">  
     <img src="../images/perf/emerald_8_geo_distributed_throughput.png" width="70%" /> <br/>
     <p class="caption">Geo-distributed deployment on 8 nodes. 5800 TPS. </p>
 </div>
-
-<!-- <div style="text-align: left;">  
-    <img src="../images/perf/emerald_8_geo_distributed_block_size.png" width="70%" /> <br/>
-    <p class="caption">Geo-distributed deployment on 8 nodes. Block size. </p>
-</div> -->
 
 <div style="text-align: left;">  
     <img src="../images/perf/emerald_8_geo_distributed_blocktx_count.png" width="70%" /> <br/>
@@ -159,10 +134,8 @@ Another thing we observed is that, having the nodes fully connected improved per
 
 <div style="text-align: left;">  
     <img src="../images/perf/emerald_8_geo_distributed_block_time.png" width="70%" /> <br/>
-    <p class="caption">Geo-distributed deployment on 8 nodes.Average block time of TBA. </p>
+    <p class="caption">Geo-distributed deployment on 8 nodes. Average block time of 220ms. </p>
 </div>
-
-> TODO: add block time in the above caption
 
 ### Bare-Metal Deployment
 

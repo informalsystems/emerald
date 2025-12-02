@@ -1,6 +1,8 @@
 # Running Reth (Execution Client)
 
-**Note**: This section applies to **all network participants** (both the coordinator and all validators). Each validator must run their own Reth node.
+> [!NOTE]
+> This section applies to **all network participants** (both the coordinator and all validators). 
+> Each validator must run their own Reth node.
 
 Reth is the Ethereum execution client. It handles transaction execution, state management, and provides JSON-RPC endpoints for interacting with the blockchain.
 
@@ -135,11 +137,10 @@ custom-reth node \
 --trusted-peers=enode://a0fd9e095d89320c27b2a07460f4046f63747e5b99ca14dd94475f65910bf0c67037fc1194a04d083afb13d61def3f6f1112757f514ca2fdabd566610658d030@203.0.113.10:30303,enode://add24465ccee48d97a0212afde6b2c0373c8b2b37a1f44c46be9d252896fe6c55256fd4bd8652cf5d41a11ffae1f7537922810b160a4fd3ed0c6f388d137587e@203.0.113.11:30303
 ```
 
-**Notes:**
-- Each validator excludes their own enode from their `--trusted-peers` list
-- All enodes should use the **public IP addresses** of the validator servers
-- Make sure port 30303 (or your configured P2P port) is open in firewalls between validators
-
+> [!NOTE]
+> - Each validator excludes their own enode from their `--trusted-peers` list
+> - All enodes should use the **public IP addresses** of the validator servers
+> - Make sure port 30303 (or your configured P2P port) is open in firewalls between validators
 
 ### Method 2: Adding Peers at Runtime (Alternative)
 

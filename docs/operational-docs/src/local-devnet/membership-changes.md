@@ -47,7 +47,7 @@ The local testnet uses a well-known test mnemonic for pre-funded accounts.
 View all registered validators and their voting power:
 
 ```bash
-cargo run --bin emerald-utils poa list
+cargo run --bin emerald-utils poa -r http://127.0.0.1:8645 list
 ```
 
 Output:
@@ -88,7 +88,7 @@ cargo run --bin emerald show-pubkey \
 Then run the following command, replacing the placeholder values.
 
 ```bash
-cargo run --bin emerald-utils poa add-validator \
+cargo run --bin emerald-utils poa -r http://127.0.0.1:8645 add-validator \
   --validator-pubkey <PUBKEY> \
   --power 100 \
   --owner-private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
@@ -110,7 +110,7 @@ Optional flags:
 To remove a validator from the active set:
 
 ```bash
-cargo run --bin emerald-utils poa remove-validator \
+cargo run --bin emerald-utils poa -r http://127.0.0.1:8645 remove-validator \
   --validator-pubkey 0x04681eaaa34e491e6c8335abc9ea92b024ef52eb91442ca3b84598c79a79f31b75... \
   --owner-private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ```
@@ -120,7 +120,7 @@ cargo run --bin emerald-utils poa remove-validator \
 To change a validator's voting weight:
 
 ```bash
-cargo run --bin emerald-utils poa update-validator \
+cargo run --bin emerald-utils poa -r http://127.0.0.1:8645 update-validator \
   --validator-pubkey 0x04681eaaa34e491e6c8335abc9ea92b024ef52eb91442ca3b84598c79a79f31b75... \
   --power 200 \
   --owner-private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80

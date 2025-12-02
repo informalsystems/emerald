@@ -2,6 +2,7 @@
 
 This guide explains how to create and manage a local Emerald testnet.
 The goal is to enable developers and testers to run an Emerald network on their machine for development, testing, and experimentation.
+Users can spin up a testnet with a [single make command](./create-network.md) or through an [experimental CLI](./command-line.md).
 
 A local testnet is a fully functional blockchain network running entirely on your computer. It provides:
 

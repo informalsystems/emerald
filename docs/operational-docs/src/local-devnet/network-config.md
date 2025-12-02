@@ -8,8 +8,10 @@
   - Node 1: `http://127.0.0.1:18645`
   - Node 2: `http://127.0.0.1:28645`
   - Node 3: `http://127.0.0.1:38645`
-
-**Note**: All nodes share the same blockchain state. You can connect to any endpoint, but `8645` is typically used as the default.
+  
+> [!NOTE]
+> All nodes share the same blockchain state. 
+> You can connect to any endpoint, but `:8645` is typically used as the default.
 
 ## Genesis Validators
 

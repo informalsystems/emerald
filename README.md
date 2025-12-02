@@ -64,7 +64,12 @@ For instructions on how to launch an Emerald network in production, please refer
 
 ## Performance Evaluation
 
-> TODO: some performance number and link to how to run benchmarks
+Emerald delivers high performance with sub-second block times, providing the low-latency confirmations needed for demanding institutional applications. 
+In benchmarking, Emerald reaches approximately 9,200 TPS peak and 8,300 TPS sustained. 
+Its consensus engine, Malachite, can achieve up to 71.7k TPS without an execution client, 
+demonstrating both the strength of the underlying consensus layer and the clear potential to further optimize Emerald. 
+
+For more details, please refer to the [Performance Evaluation](https://emerald-docs.informalsystems.io/performance_evaluation/index.html) section of the docs.
 
 ## Contributing
 

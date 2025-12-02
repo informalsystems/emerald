@@ -31,7 +31,6 @@ use crate::state::{assemble_value_from_parts, decode_value, extract_block_header
 use crate::sync_handler::{get_decided_value_for_sync, validate_payload};
 
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
-    // TODO Unify this with code above @Jasmina
     // Get the genesis block from the execution engine
     let genesis_block = engine
         .eth

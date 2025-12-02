@@ -166,6 +166,9 @@ engine_authrpc_address = "http://localhost:$AUTH_PORT"
 jwt_token_path = "./assets/jwtsecret"
 sync_timeout_ms = 10000
 sync_initial_delay_ms = 100
+retry_config.initial_delay = "100ms"
+retry_config.max_delay = "2s"
+retry_config.max_elapsed_time = "20s"
 EOF
  # Set max_retain_blocks for pruning nodes
       if [[ ${#PRUNING_NODES[@]} -gt 0 && " ${PRUNING_NODES[@]} " =~ " ${i} " ]]; then

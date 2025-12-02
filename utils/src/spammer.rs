@@ -185,13 +185,14 @@ impl Spammer {
         // Fetch latest nonce for the sender address.
         let address = self.signer.address();
         let latest_nonce = self.get_latest_nonce(address).await?;
-        let txs_per_batch = self.max_rate
+        let txs_per_batch = self
+            .max_rate
             .saturating_mul(self.batch_interval)
             .checked_div(1000)
             .unwrap_or(0);
         debug!(
             "Spamming {address} starting from nonce={latest_nonce} at rate {}, sending {txs_per_batch} txs every {}ms", 
-            self.max_rate, 
+            self.max_rate,
             self.batch_interval,
         );
 

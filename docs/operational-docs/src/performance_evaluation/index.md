@@ -1,4 +1,4 @@
-# Performance evaluation
+# Performance Evaluation
 
 While building Emerald we have put an emphasis on performance testing with the goal of understanding its limits. 
 While tuning the execution client and the Malachite consensus engine is very application dependant, 

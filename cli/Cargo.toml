@@ -12,6 +12,7 @@ workspace = true
 [dependencies]
 malachitebft-core-types = { workspace = true }
 malachitebft-eth-types  = { workspace = true }
+malachitebft-eth-engine = { workspace = true }
 malachitebft-metrics    = { workspace = true }
 malachitebft-config     = { workspace = true }
 malachitebft-app        = { workspace = true }
@@ -27,6 +28,7 @@ config = { workspace = true }
 directories = { workspace = true }
 hex = "0.4"
 itertools = { workspace = true }
+reqwest = { version = "0.12.2", default-features = false, features = [ "json", "rustls-tls" ] }
 tokio = { workspace = true, features = [ "full" ] }
 thiserror = { workspace = true }
 tracing = { workspace = true }

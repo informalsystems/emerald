@@ -154,7 +154,11 @@ pub fn generate_config(
             gossip_batch_size: 0,
             load: MempoolLoadConfig::default(),
         },
-        value_sync: ValueSyncConfig::default(),
+        value_sync: ValueSyncConfig {
+            batch_size: 500,
+            parallel_requests: 25,
+            ..ValueSyncConfig::default()
+        },
         metrics: MetricsConfig {
             enabled: true,
             listen_addr: format!("127.0.0.1:{metrics_port}").parse().unwrap(),

@@ -19,7 +19,6 @@ use crate::cmd::start::StartCmd;
 use crate::cmd::testnet::TestnetCmd;
 use crate::error::Error;
 
-const APP_FOLDER: &str = ".malachite";
 const EMERALD_FOLDER: &str = ".emerald";
 const CONFIG_FILE: &str = "config.toml";
 const GENESIS_FILE: &str = "genesis.json";
@@ -28,7 +27,7 @@ const PRIV_VALIDATOR_KEY_FILE: &str = "priv_validator_key.json";
 #[derive(Parser, Clone, Debug, Default)]
 #[command(version, about, long_about = None)]
 pub struct Args {
-    /// Home directory for Malachite (default: `~/.malachite`)
+    /// Home directory for Malachite (default: `$HOME/.emerald-devnet`)
     #[arg(long, global = true, value_name = "HOME_DIR")]
     pub home: Option<PathBuf>,
 
@@ -79,14 +78,14 @@ impl Args {
     }
 
     /// get_home_dir returns the application home folder.
-    /// Typically, `$HOME/.malachite`, dependent on the operating system.
+    /// Defaults to `$HOME/.emerald-devnet`.
     pub fn get_home_dir(&self) -> Result<PathBuf, Error> {
         match self.home {
             Some(ref path) => Ok(path.clone()),
             None => Ok(BaseDirs::new()
                 .ok_or(Error::DirPath)?
                 .home_dir()
-                .join(APP_FOLDER)),
+                .join(".emerald-devnet")),
         }
     }
 

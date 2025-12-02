@@ -5,6 +5,7 @@ all: build
 build:
 	forge build
 	cargo build
+	cd custom-reth && cargo build
 
 release:
 	forge build

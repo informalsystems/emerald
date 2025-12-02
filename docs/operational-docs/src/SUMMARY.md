@@ -21,6 +21,7 @@
 # Run & Deploy
 
 - [Deploy Local Testnet](local-devnet/index.md)
+  - [Setup](local-devnet/setup.md)
   - [Creating a Testnet](local-devnet/create-network.md)
   - [Managing Validators](local-devnet/membership-changes.md)
   - [Network Configuration](local-devnet/network-config.md)

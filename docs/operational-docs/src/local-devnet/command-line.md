@@ -1,8 +1,12 @@
-# Testnet commands
+# CLI (Work in Progress)
 
-## Starting the testnet
+> [!NOTE]
+> The Emerald CLI is a work in progress and should be considered experimental. 
+> Functionality may change, and users should expect potential instability or incomplete features.
 
-The command used to start the local testnet is the following:
+## Start the Network
+
+Use the following command to start a local testnet:
 
 <details>
 <summary><code>emerald testnet start</code></summary>
@@ -12,7 +16,7 @@ The command used to start the local testnet is the following:
 ```
 </details>
 
-Start a testnet with 4 Reth nodes and 4 Emerald nodes.
+For example, starting a testnet with four nodes results in the following output:
 
 <details>
 <summary>Output for <code>emerald testnet start -n 4</code></summary>
@@ -131,9 +135,9 @@ Checking custom-reth installation... ✓ Reth Version: 1.9.2-dev
 ```
 </details>
 
-## Checking the status of the testnet
+## Check Network Status
 
-The status of the testnet can be displayed with the following:
+Use the following command to check the network status:
 
 <details>
 <summary><code>emerald testnet status</code></summary>
@@ -143,8 +147,7 @@ The status of the testnet can be displayed with the following:
 ```
 </details>
 
-Running the status after having started the testnet should give the following output:
-
+For example, checking the status after having started a four-node testnet should results in the following output:
 
 <details>
 <summary>Output for <code>emerald testnet status</code></summary>
@@ -184,9 +187,9 @@ Summary:
 ```
 </details>
 
-## Stopping a node
+## Stop Node
 
-The command used to stop a single node is the following:
+Use the following command to stop a single node:
 
 <details>
 <summary><code>emerald testnet stop-node $NODE_ID</code></summary>
@@ -196,7 +199,7 @@ The command used to stop a single node is the following:
 ```
 </details>
 
-Running this command for Node `1` should output:
+For example, running this command for Node `1` should results in the following output:
 <details>
 <summary>Output for <code>emerald stop-node 1</code></summary>
 
@@ -209,7 +212,7 @@ Running this command for Node `1` should output:
 ```
 </details>
 
-And if the status should now output the following:
+And checking the network status should results in the following output:
 <details>
 <summary>Output for <code>emerald status</code></summary>
 
@@ -246,9 +249,9 @@ Summary:
 ```
 </details>
 
-## Restarting a node
+## Restart Node
 
-The command used to restart an existing node is the following:
+Use the following command to restart an existing node:
 
 <details>
 <summary><code>emerald testnet start-node $NODE_ID</code></summary>
@@ -258,7 +261,7 @@ The command used to restart an existing node is the following:
 ```
 </details>
 
-The node which was previously sopped can be restored and should output the following:
+For example, restarting the node that was previously stopped should results in the following output:
 
 <details>
 <summary>Output for <code>emerald start-node 1</code></summary>
@@ -297,7 +300,7 @@ Starting Reth node 1 on ports:
 ```
 </details>
 
-And if the status should now output the following:
+And checking the network status should results in the following output:
 <details>
 <summary>Output for <code>emerald status</code></summary>
 
@@ -336,10 +339,9 @@ Summary:
 ```
 </details>
 
-## Adding a node
+## Add Node
 
-The command used to add a non-validator node is the following:
-
+Use the following command to add a new node to the network:
 
 <details>
 <summary><code>emerald testnet add-node</code></summary>
@@ -349,7 +351,7 @@ The command used to add a non-validator node is the following:
 ```
 </details>
 
-Running this command should output:
+Running this command should results in the following output:
 <details>
 <summary>Output for <code>emerald add-node</code></summary>
 
@@ -407,7 +409,7 @@ Starting Reth node 4 on ports:
 ```
 </details>
 
-And if the status should now output the following:
+And checking the network status should results in the following output:
 <details>
 <summary>Output for <code>emerald status</code></summary>
 
@@ -452,7 +454,7 @@ Summary:
 ```
 </details>
 
-## Set the new node as validator
+## Set Node as Validator
 
 If we now look at the list of validator we should only see 4 as we previously added a non-validator node.
 <details>
@@ -485,7 +487,7 @@ Validator address: 0xe95eaa9dcd4f9e3b4eec820355c03b4f4499ab87
 ```
 </details>
 
-In order to add the new node as a validator first the public key needs to be retrieved.
+To add the new node as a validator, we first need to get its public key.
 <details>
 <summary>Output for <code>emerald show-pubkey $HOME/.emerald-devnet/4/config/priv_validator_key.json</code></summary>
 
@@ -494,13 +496,17 @@ In order to add the new node as a validator first the public key needs to be ret
 ```
 </details>
 
-The validator can now be added.
-<details>
-<summary>Output for <code>
+Once we have the public key, we can add the new node to the validator set using the following command:
+```shell
 emerald-utils poa -r http://127.0.0.1:8645 add-validator \
   --validator-pubkey 0x670252bba7f17bfa44ed4148aee562108a57f49e90017f940d80bd4a34e367710c192ed04ad87a71f6c3cff5d48b1baab8f423c01f534a01dee18b151b25a0f7 \
   --power 100 \
   --owner-private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+```
+
+<details>
+<summary>Output for <code>
+emerald-utils poa -r http://127.0.0.1:8645 add-validator 
 </code></summary>  
 
 ```
@@ -512,7 +518,7 @@ Gas used: 153301
 ```
 </details>
 
-And listing the validators should now output the following:
+And listing the validators should results in the following output:
 
 <details>
 <summary>Output for <code>emerald-utils poa -r http://127.0.0.1:8645 list</code></summary>
@@ -549,9 +555,11 @@ Validator address: 0x42dccf7844765f8205edbe4364d69d955fd1330a
 ```
 </details>
 
-## Stopping the testnet
+For more details on interacting with the PoA Module, see [Managing Validators](./membership-changes.md) section.
 
-The command used to start the local testnet is the following:
+## Stop the Network
+
+Use the following command to stop the local testnet:
 
 <details>
 <summary><code>emerald testnet stop</code></summary>
@@ -561,7 +569,7 @@ The command used to start the local testnet is the following:
 ```
 </details>
 
-The testnet can be stopped running this command and should output:
+Running this command should results in the following output:
 
 <details>
 <summary>Output for <code>emerald testnet stop</code></summary>
@@ -589,9 +597,9 @@ Stopping node 2...
 ```
 </details>
 
-## Destroying the testnet
+## Clean the Network
 
-The command used to remove all testnet data is the following:
+Use the following command to remove all testnet data:
 
 <details>
 <summary><code>emerald testnet destroy</code></summary>
@@ -601,7 +609,7 @@ The command used to remove all testnet data is the following:
 ```
 </details>
 
-The testnet data can now be removed:
+Running this command should results in the following output:
 
 <details>
 <summary>Output for <code>emerald testnet destroy</code></summary>

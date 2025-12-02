@@ -12,8 +12,8 @@ which is the most battle-tested consensus protocol in blockchain today.
 
 **Low Latency.** Malachite finalizes blocks in under one second, delivering the low-latency confirmation times required for high-performance institutional applications.
 
-**High Throughput.** 
- > TODO: add throughput results 
+**High Throughput.** Malachite without an Ethereum execution client on top can reach up to 71700 TPS for single datacenter deployments and up to 41400 TPS for geo-distributed deployments. 
+When deploying with Reth as an execution client, Emerald achieves around 9200 TPS peak and 8300 TPS sustained on a single datacenter deployment.
 
 **Formally Specified.** Malachite was formally specified and model checked using the [Quint specification language](https://quint-lang.org). 
 

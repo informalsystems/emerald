@@ -26,18 +26,14 @@ As Malachite does not support variable block sizes in its channel based example 
 
 <div style="text-align: left;">  
     <img src="../images/perf/malachite_4_nodes_one_region_block_size.png" width="60%" /> <br/>
-    <p class="caption">Single datacenter deployment on 4 nodes, with a varying block size. The average block time is 133 ms for 1MB blocks.</p>
+    <p class="caption">Single datacenter deployment on 4 nodes, with a varying block size. The average block time for 1MiB blocks is 133 ms.</p>
 </div>
-
-> TODO: it's not clear for which block size is the 133ms average (DONE)
 
 <div style="text-align: left;">  
     <img src="../images/perf/malachite_8_nodes_geo_block_size.png" width="60%" />  
     <p class="caption">Geo-distributed deployment on 8 nodes, with each 2 nodes in a different datacenter (NYC, LON, AMS, SFO).
-    The geo-distribution impacts performance, with spikes in block times. The time for 1MB blocks varies around 230ms but has spikes above 300ms. </p>
+    The geo-distribution impacts performance, with spikes in block times. The time for 1MiB blocks varies around 230ms, but has spikes above 300ms. </p>
 </div>
-
-> TODO: the spikes seem higher thant 260ms (DONE)
 
 <div style="text-align: left;">   
     <img src="../images/perf/malachite_10_nodes_geo_vs_local.png" width="60%" />
@@ -48,13 +44,8 @@ As Malachite does not support variable block sizes in its channel based example 
 Although the channel-based application deployed on Malachite doesn't have a concept of transactions, 
 we can consider “native” Ethereum EOA-to-EOA transfers (i.e., plain ETH sends), which have ~110bytes. 
 In this context, 
-- a single datacenter deployment on 4 nodes with 1MiB blocks and average block time of 133ms results in around **68k TPS** 
-- a geo-distributed deployment on 8 nodes with 1MiB blocks and average block time of 250ms results in around **36k TPS**.
-
-> TODO: review the estimates for TPS. are the average block times accurate? 
-> - 1,000,000 bytes / 110 bytes ~ 9,090 tx per block
-> - 9,090 / 0.133 ~ 68,346 TPS
-> - 9,090 ÷ 0.25 ~ 36,360 TPS
+- a single datacenter deployment on 4 nodes with 1MiB blocks and average block time of 133ms results in around **71700 TPS** 
+- a geo-distributed deployment on 8 nodes with 1MiB blocks and average block time of 230ms results in around **41400 TPS**.
 
 ## Emerald
 
@@ -86,9 +77,8 @@ We use the following changes to the default [Reth node configuration](https://re
     "--max-pending-imports=10000",
     "--builder.gaslimit=1000000000",
 ```
-> TODO: confirm these are indeed all changes (DONE)
 
-> TODO: confirm gaslimit 1_000_000_000 vs 100_000_000. It should be 100_000_000 (in my runs it was as stated above) (DONE)
+> TODO: cloud deployments with gaslimit 1_000_000_000 vs bare metal with 200_000_000
  
 For your particular setup this might be suboptimal.
 These flags allow a very high influx of transactions from one source.
@@ -103,45 +93,40 @@ Every spammer is sending transactions to one single Reth node.
 
 #### Setup
 
-- Deployments: single datacenter and geo-distributed
-- Number of nodes: 4, 8
+- Deployments: single datacenter on 4 nodes and geo-distributed on 8 nodes
 - Hardware setup: Digital Ocean nodes, 64GB RAM, 16 shared CPU threads, with regular SSDs
 
-#### Results: 4-node deployment - single data center
+#### Results
 
-Transactions are sent to all nodes in parallel. The load is designed to keep the mempool full but not destabilize the system. By destabilizing we refer to nonce gaps, rpc timeouts etc. What we wanted to void is to not have empty blocks. 
-
-When injecting a higher number of transactions into a node (8000), we observed instabilitiy most likely on the RPC side. 
-Thus, we split it in multiple RPC requests, sending smaller batches every `200ms`, instead of a big batch every second. 
-
-We observe a throughput of 8000tx/sec with block sizes of 0.5-1MiB. The reported block time is averaging 220ms with spikes up to 230ms. 
-
-> TODO: how is the block time 230ms and consensus 620ms?  (DONE this was from previous runs)
+**Single datacenter deployment, 4 nodes.**
+For a single datacenter deployments on 4 nodes, with block sizes of 0.5MiB to 1MiB, we observed a throughput of around **8000 TPS** sustained. 
+The reported block time is averaging at **220ms** with spikes up to 230ms.
 
 <div style="text-align: left;">  
     <img src="../images/perf/emerald_do_4_8000_block_time.png" width="60%" /> <br/>
-    <p class="caption">Single datacenter deployment on 4 nodes, with a load of 8000 tx/s. Average block time of 230ms.</p>
+    <p class="caption">Single datacenter deployment on 4 nodes. Average block time of 230ms.</p>
 </div>
 
 <div style="text-align: left;">  
     <img src="../images/perf/emerald_do_4_8000_txs_sec.png" width="90%" /> <br/>
-    <p class="caption">Single datacenter deployment on 4 nodes. 8000tx/sec sustained.</p>
+    <p class="caption">Single datacenter deployment on 4 nodes. 8000 TPS sustained.</p>
 </div>
 
-
+Note that when injecting a higher number of transactions into a node, we observed instabilities most likely on the RPC side.
+Thus, we split the injection into multiple RPC requests. Sending batches every 200ms leads to 8000 TPS sustained.
+Sending more frequently, every 100ms, results in a drop of performance. 
 
 <div style="text-align: left;">  
     <img src="../images/perf/emerald_4_DO_8000_tx_in_block.png" width="90%" /> <br/>
-    <p class="caption">Single datacenter deployment on 4 nodes. Number of transactions in block.</p>
+    <p class="caption">Single datacenter deployment on 4 nodes. Number of transactions per block.</p>
 </div>
 
-The graph below shows the average block size accross the run , where each block consumes ~1MB.
 
-#### Results: 8-node deployment - geo-distributed
+**Geo-distributed deployment, 8 nodes.**
+For a geo-distributed deployment on 8 nodes, with two nodes placed in each datacenters (NYC, LON, AMS, SFO), we observed a throughput of around **5800 TPS** sustained. 
 
-In this setting, we distributed the nodes between different datacenters, where two nodes were placed in each of the following datacenters: New York, SanFrancisco, Amsterdan and London. 
+> TODO: mention the average block time
 
-The system processed up to 6000 transactions per second. 
 
 <div style="text-align: left;">  
     <img src="../images/perf/emerald_8_geo_distributed_pending_pool_count.png" width="90%" /> <br/>
@@ -154,54 +139,58 @@ For this setup to be able to sustain more than 3000 transactions per second of i
 
 Another thing we observed is that, having the nodes fully connected improved performance. The performance was less impacted by Reth nodes having fewer peers than when consensus nodes did not have connections to all the peers.
 
+> TODO: not sure we need the above figure 
 
 
 <div style="text-align: left;">  
-    <img src="../images/perf/emerald_8_geo_distributed_throughput.png" width="90%" /> <br/>
-    <p class="caption"> Throughput of up to 5800tps when running on a 8 node network distributed in 4 data centers (NYC, SFO, AMS, LON). </p>
+    <img src="../images/perf/emerald_8_geo_distributed_throughput.png" width="70%" /> <br/>
+    <p class="caption">Geo-distributed deployment on 8 nodes. 5800 TPS. </p>
+</div>
+
+<!-- <div style="text-align: left;">  
+    <img src="../images/perf/emerald_8_geo_distributed_block_size.png" width="70%" /> <br/>
+    <p class="caption">Geo-distributed deployment on 8 nodes. Block size. </p>
+</div> -->
+
+<div style="text-align: left;">  
+    <img src="../images/perf/emerald_8_geo_distributed_blocktx_count.png" width="70%" /> <br/>
+    <p class="caption">Geo-distributed deployment on 8 nodes. Number of transactions per block.</p>
 </div>
 
 <div style="text-align: left;">  
-    <img src="../images/perf/emerald_8_geo_distributed_block_size.png" width="90%" /> <br/>
-    <p class="caption"> Block size when running on a 8 node network distributed in 4 data centers (NYC, SFO, AMS, LON). </p>
+    <img src="../images/perf/emerald_8_geo_distributed_block_time.png" width="70%" /> <br/>
+    <p class="caption">Geo-distributed deployment on 8 nodes.Average block time of TBA. </p>
 </div>
 
-<div style="text-align: left;">  
-    <img src="../images/perf/emerald_8_geo_distributed_blocktx_count.png" width="90%" /> <br/>
-    <p class="caption"> Number of transactions in a block when running on a 8 node network distributed in 4 data centers (NYC, SFO, AMS, LON). </p>
-</div>
-
-
-<div style="text-align: left;">  
-    <img src="../images/perf/emerald_8_geo_distributed_block_time.png" width="90%" /> <br/>
-    <p class="caption"> Block time when running on a 8 node network distributed in 4 data centers (NYC, SFO, AMS, LON). </p>
-</div>
-
-
+> TODO: add block time in the above caption
 
 ### Bare-Metal Deployment
+
+#### Setup 
+
+- Deployments: single datacenter on 4 bare-metal nodes
+- Hardware setup: 32Gb RAM, AMD EPYC 4584PX CPU, Micron 7500 1TB NVMe
 
 These experiments evaluate Emerald on 4 bare-metal machines in a local and geo-distributed setup. 
 The goal is to understand the absolute best performance the chain can have.
 
-The server configuration is as follows:
+#### Results
 
-32Gb RAM; 
-CPU: AMD EPYC 4584PX;
-Micron 7500 1TB NVMe
-
-We spam each node with a high load, keeping the mempool full. Emerald reaches a peek throughput of 9200 tx/sec with overall 8300 tps sustained throughput throughout the run.  Block size was between 1 and 1.5MB. 
-The reported block time was between 170ms to 230ms compared to an average of 133ms for Malachite core for 1MB blocks. 
+We observed a throughput of around **9200 TPS** peak and **8300 TPS** sustained. 
+The reported block time was between 170ms to 230ms.
 
 <div style="text-align: left;">  
     <img src="../images/perf/emerald_4_bare_metal_throughput.png" width="90%" /> <br/>
-    <p class="caption"> Throughput of up to 9200tps when running Emerald on 4 nodes within a datacenter. </p>
+    <p class="caption">Bare-metal deployment in a single datacenter deployment on 4 nodes. **8300 TPS** sustained.</p>
 </div>
 
 <div style="text-align: left;">  
     <img src="../images/perf/emerald_4_bare_metal_block_speed.png" width="90%" /> <br/>
-    <p class="caption"> Block speed when running Emerald on 4 nodes within a datacenter. </p>
+    <p class="caption">Bare-metal deployment in a single datacenter deployment on 4 nodes. Block time between 170ms and 230ms.</p>
 </div>
 
-> TODO add more details about the deployment and the data (DONE)
+<div style="text-align: left;">  
+    <img src="../images/perf/emerald_4_bare_metal_block_size.png" width="90%" /> <br/>
+    <p class="caption">Bare-metal deployment in a single datacenter deployment on 4 nodes. Number of transactions per block.</p>
+</div>
 

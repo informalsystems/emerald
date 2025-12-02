@@ -28,7 +28,7 @@
   - [Monitoring](local-devnet/monitoring.md)
   - [Troubleshooting](local-devnet/troubleshooting.md)
   - [Common Workflows](local-devnet/workflows.md)
-  - [CLI (Work in Progress)]()
+  - [CLI (Work in Progress)](local-devnet/command-line.md)
 - [Launch Production Network](production-network/index.md)
   - [Network Overview](production-network/network-overview.md)
   - [Installation](production-network/installation.md)

@@ -88,8 +88,8 @@ We use the following changes to the default [Reth node configuration](https://re
 ```
 > TODO: confirm these are indeed all changes (DONE)
 
-> TODO: confirm gaslimit 1_000_000_000 vs 100_000_000. It should be 100_000_000 
-
+> TODO: confirm gaslimit 1_000_000_000 vs 100_000_000. It should be 100_000_000 (in my runs it was as stated above) (DONE)
+ 
 For your particular setup this might be suboptimal.
 These flags allow a very high influx of transactions from one source.
 They are buffering up to 50000 transactions in the mempool, and gossip them in big batches.
@@ -135,8 +135,48 @@ In the second half, we send RPC requests every `100ms`, which results in a sligh
     <p class="caption">Single datacenter deployment on 4 nodes. Number of transactions in block.</p>
 </div>
 
+The graph below shows the average block size accross the run , where each block consumes ~1MB.
 
 #### Results: 8-node deployment - geo-distributed
+
+In this setting, we distributed the nodes between different datacenters, where two nodes were placed in each of the following datacenters: New York, SanFrancisco, Amsterdan and London. 
+
+The system also sustained an influx of 8000 transactions per second, but it could not process more than 6000 transactions /second overall. 
+
+<div style="text-align: left;">  
+    <img src="../images/perf/emerald_8_geo_distributed_pending_pool_count.png" width="90%" /> <br/>
+    <p class="caption"> Number of pending transactions in the mempool of Reth. </p>
+</div>
+
+The graph above shows that some nodes have fewer transactions in their pool, thus proposing smaller blocks. 
+
+
+For this setup to be able to sustain more than 3000 transactions per second of incoming transactions, we lowered the interval between sending batches of transactions (from `200ms` to `100ms`). Thus we had more freuqent batches of smaller transactions. 
+
+Another thing we observed is that, having the nodes fully connected improved performance. The performance was less impacted by Reth nodes having fewer peers than when consensus nodes did not have connections to all the peers.
+
+
+
+<div style="text-align: left;">  
+    <img src="../images/perf/emerald_8_geo_distributed_throughput.png" width="90%" /> <br/>
+    <p class="caption"> Throughput of up to 5800tps when running on a 8 node network distributed in 4 data centers (NYC, SFO, AMS, LON). </p>
+</div>
+
+<div style="text-align: left;">  
+    <img src="../images/perf/emerald_8_geo_distributed_block_size.png" width="90%" /> <br/>
+    <p class="caption"> Block size when running on a 8 node network distributed in 4 data centers (NYC, SFO, AMS, LON). </p>
+</div>
+
+<div style="text-align: left;">  
+    <img src="../images/perf/emerald_8_geo_distributed_blocktx_count.png" width="90%" /> <br/>
+    <p class="caption"> Number of transactions in a block when running on a 8 node network distributed in 4 data centers (NYC, SFO, AMS, LON). </p>
+</div>
+
+
+<div style="text-align: left;">  
+    <img src="../images/perf/emerald_8_geo_distributed_block_time.png" width="90%" /> <br/>
+    <p class="caption"> Block time when running on a 8 node network distributed in 4 data centers (NYC, SFO, AMS, LON). </p>
+</div>
 
 
 
@@ -165,8 +205,4 @@ The reported block time was between 170ms to 230ms compared to an average of 133
 </div>
 
 > TODO add more details about the deployment and the data (DONE)
-
-#### Setup
-
-#### Results
 

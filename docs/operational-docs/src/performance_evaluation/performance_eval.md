@@ -26,20 +26,18 @@ As Malachite does not support variable block sizes in its channel based example 
 
 <div style="text-align: left;">  
     <img src="../images/perf/malachite_4_nodes_one_region_block_size.png" width="60%" /> <br/>
-    <p class="caption">Single datacenter deployment on 4 nodes, with a varying block size. The average block time is 133 ms.</p>
+    <p class="caption">Single datacenter deployment on 4 nodes, with a varying block size. The average block time is 133 ms for 1MB blocks.</p>
 </div>
 
-> TODO: it's not clear for which block size is the 133ms average
+> TODO: it's not clear for which block size is the 133ms average (DONE)
 
 <div style="text-align: left;">  
     <img src="../images/perf/malachite_8_nodes_geo_block_size.png" width="60%" />  
-    <p class="caption">Geo-distributed deployment on 8 nodes, with each 2 nodes in a different datacenter (NYC, LON, AMS).
-    The geo-distribution impacts performance, with spikes in block times. </p>
+    <p class="caption">Geo-distributed deployment on 8 nodes, with each 2 nodes in a different datacenter (NYC, LON, AMS, SFO).
+    The geo-distribution impacts performance, with spikes in block times. The time for 1MB blocks varies around 230ms but has spikes above 300ms. </p>
 </div>
 
-> TODO: 2 nodes in a different datacenter (NYC, LON, AMS) --> we are missing a DC
-
-> TODO: the spikes seem higher thant 260ms
+> TODO: the spikes seem higher thant 260ms (DONE)
 
 <div style="text-align: left;">   
     <img src="../images/perf/malachite_10_nodes_geo_vs_local.png" width="60%" />
@@ -88,9 +86,9 @@ We use the following changes to the default [Reth node configuration](https://re
     "--max-pending-imports=10000",
     "--builder.gaslimit=1000000000",
 ```
-> TODO: confirm these are indeed all changes
+> TODO: confirm these are indeed all changes (DONE)
 
-> TODO: confirm gaslimit 1_000_000_000 vs 100_000_000. It should be 100_000_000
+> TODO: confirm gaslimit 1_000_000_000 vs 100_000_000. It should be 100_000_000 
 
 For your particular setup this might be suboptimal.
 These flags allow a very high influx of transactions from one source.
@@ -109,15 +107,13 @@ Every spammer is sending transactions to one single Reth node.
 - Number of nodes: 4, 8
 - Hardware setup: Digital Ocean nodes, 64GB RAM, 16 shared CPU threads, with regular SSDs
 
-#### Results
+#### Results: 4-node deployment - single data center
 
-Transactions are sent to all nodes in parallel, at a rate of 8000txs/sec.
+Transactions are sent to all nodes in parallel, at a rate of 8000txs/sec per node.
 
-> TODO: is this the injection rate per spammer or overall per network? 
+We observe a throughput of 8000tx/sec with block sizes of 0.5-1MiB. The reported block time is averaging 220ms with spikes up to 230ms. 
 
-We observe a throughput of 8000tx/sec with block sizes of 0.5-1MiB. The reported consensus time is averaging 620ms. 
-
-> TODO: how is the block time 230ms and consensus 620ms? 
+> TODO: how is the block time 230ms and consensus 620ms?  (DONE this was from previous runs)
 
 <div style="text-align: left;">  
     <img src="../images/perf/emerald_do_4_8000_block_time.png" width="60%" /> <br/>
@@ -139,12 +135,36 @@ In the second half, we send RPC requests every `100ms`, which results in a sligh
     <p class="caption">Single datacenter deployment on 4 nodes. Number of transactions in block.</p>
 </div>
 
+
+#### Results: 8-node deployment - geo-distributed
+
+
+
 ### Bare-Metal Deployment
 
 These experiments evaluate Emerald on 4 bare-metal machines in a local and geo-distributed setup. 
 The goal is to understand the absolute best performance the chain can have.
 
-> TODO add more details about the deployment and the data
+The server configuration is as follows:
+
+32Gb RAM; 
+CPU: AMD EPYC 4584PX;
+Micron 7500 1TB NVMe
+
+We spam each node with a load of 8000tx/sec with the same Reth configuration as above. Emerald reaches a peek throughput of 9200 tx/sec with overall 8300 tps sustained throughput throughout the run.  Block size was between 1 and 1.5MB. 
+The reported block time was between 170ms to 230ms compared to an average of 133ms for Malachite core for 1MB blocks. 
+
+<div style="text-align: left;">  
+    <img src="../images/perf/emerald_4_bare_metal_throughput.png" width="90%" /> <br/>
+    <p class="caption"> Throughput of up to 9200tps when running Emerald on 4 nodes within a datacenter. </p>
+</div>
+
+<div style="text-align: left;">  
+    <img src="../images/perf/emerald_4_bare_metal_block_speed.png" width="90%" /> <br/>
+    <p class="caption"> Block speed when running Emerald on 4 nodes within a datacenter. </p>
+</div>
+
+> TODO add more details about the deployment and the data (DONE)
 
 #### Setup
 

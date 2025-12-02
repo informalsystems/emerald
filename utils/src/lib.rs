@@ -161,18 +161,15 @@ impl SpamCmd {
         } = self;
 
         let url: Url = rpc_url.parse()?;
-        Spammer::new(
-            url,
-            *signer_index,
-            *num_txs,
-            *time,
-            *rate,
-            *interval,
-            *blobs,
-            *chain_id,
-        )?
-        .run()
-        .await
+        let config = spammer::SpammerConfig {
+            max_num_txs: *num_txs,
+            max_time: *time,
+            max_rate: *rate,
+            batch_interval: *interval,
+            blobs: *blobs,
+            chain_id: *chain_id,
+        };
+        Spammer::new(url, *signer_index, config)?.run().await
     }
 }
 
@@ -329,19 +326,16 @@ impl SpamContractCmd {
             chain_id,
         } = self;
         let url = format!("http://{rpc_url}").parse()?;
-        Spammer::new_contract(
-            url,
-            *signer_index,
-            *num_txs,
-            *time,
-            *rate,
-            *interval,
-            contract,
-            function,
-            args,
-            *chain_id,
-        )?
-        .run()
-        .await
+        let config = spammer::SpammerConfig {
+            max_num_txs: *num_txs,
+            max_time: *time,
+            max_rate: *rate,
+            batch_interval: *interval,
+            blobs: false,
+            chain_id: *chain_id,
+        };
+        Spammer::new_contract(url, *signer_index, config, contract, function, args)?
+            .run()
+            .await
     }
 }

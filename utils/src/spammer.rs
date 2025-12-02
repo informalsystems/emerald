@@ -32,6 +32,22 @@ struct ContractPayload {
     args: Vec<String>,
 }
 
+/// Configuration for the transaction spammer.
+pub struct SpammerConfig {
+    /// Maximum number of transactions to send (0 for no limit).
+    pub max_num_txs: u64,
+    /// Maximum number of seconds to run the spammer (0 for no limit).
+    pub max_time: u64,
+    /// Maximum number of transactions to send per second.
+    pub max_rate: u64,
+    /// Number of ms between sending batches of txs (default: 200).
+    pub batch_interval: u64,
+    /// Whether to send EIP-4844 blob transactions.
+    pub blobs: bool,
+    /// Chain ID for the transactions.
+    pub chain_id: u64,
+}
+
 /// A transaction spammer that sends Ethereum transactions at a controlled rate.
 /// Tracks and reports statistics on sent transactions.
 pub struct Spammer {
@@ -58,43 +74,29 @@ pub struct Spammer {
 }
 
 impl Spammer {
-    pub fn new(
-        url: Url,
-        signer_index: usize,
-        max_num_txs: u64,
-        max_time: u64,
-        max_rate: u64,
-        batch_interval: u64,
-        blobs: bool,
-        chain_id: u64,
-    ) -> Result<Self> {
+    pub fn new(url: Url, signer_index: usize, config: SpammerConfig) -> Result<Self> {
         let signers = make_signers();
         Ok(Self {
             id: signer_index.to_string(),
             client: RpcClient::new(url)?,
             signer: signers[signer_index].clone(),
-            max_num_txs,
-            max_time,
-            max_rate,
-            batch_interval,
-            blobs,
-            chain_id,
+            max_num_txs: config.max_num_txs,
+            max_time: config.max_time,
+            max_rate: config.max_rate,
+            batch_interval: config.batch_interval,
+            blobs: config.blobs,
+            chain_id: config.chain_id,
             contract_payload: None,
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn new_contract(
         url: Url,
         signer_index: usize,
-        max_num_txs: u64,
-        max_time: u64,
-        max_rate: u64,
-        batch_interval: u64,
+        config: SpammerConfig,
         contract: &Address,
         function: &str,
         args: &[String],
-        chain_id: u64,
     ) -> Result<Self> {
         let signers = make_signers();
         let contract_payload = ContractPayload {
@@ -106,13 +108,13 @@ impl Spammer {
             id: signer_index.to_string(),
             client: RpcClient::new(url)?,
             signer: signers[signer_index].clone(),
-            max_num_txs,
-            max_time,
-            max_rate,
-            batch_interval,
+            max_num_txs: config.max_num_txs,
+            max_time: config.max_time,
+            max_rate: config.max_rate,
+            batch_interval: config.batch_interval,
             blobs: false, // Contract calls don't use blobs
             contract_payload: Some(contract_payload),
-            chain_id,
+            chain_id: config.chain_id,
         })
     }
 

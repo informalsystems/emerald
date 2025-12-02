@@ -53,3 +53,7 @@ To get a validator's public key from their private key file:
 cargo run --bin emerald show-pubkey \
   nodes/0/config/priv_validator_key.json
 ```
+
+## Cannot Connect to Docker
+
+When using Docker Desktop, ensure that `Enable host networking` is turned on in the Docker Desktop settings. This option allows the containers to bind correctly to the host machine’s network interface, ensuring the Reth nodes and the monitoring services are reachable on the expected ports.

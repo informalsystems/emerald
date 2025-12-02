@@ -19,3 +19,6 @@ A local testnet is a fully functional blockchain network running entirely on you
 | Network access | Localhost only | Public or permissioned network |
 | Use case | Development/testing | Real applications |
 | Setup time | ~30 seconds | Requires coordination |
+
+
+For instructions on how to launch an Emerald production-grade network, please refer to the [Launch Production Network](https://emerald-docs.informalsystems.io/production-network/index.html) section.

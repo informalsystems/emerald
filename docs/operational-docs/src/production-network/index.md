@@ -1,6 +1,10 @@
 # Launch Production Network
 
-This guide is designed for network coordinator (companies, foundations, or organizations) that want to launch a new production-grade Emerald network.
+This guide is designed for network coordinator (companies, foundations, or organizations) that want to launch a new Emerald network.
+
+> [!IMPORTANT]
+> Emerald is under active development and should be used at your own risk. 
+> The software has not been externally audited, and its security and stability are not guaranteed.
 
 Network coordinators are typically responsible for:
 

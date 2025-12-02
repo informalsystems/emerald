@@ -6,7 +6,7 @@ Here are some typical workflows for using the local testnet during development.
 
 1. Start the network:
    ```bash
-   make
+   make testnet-start
    ```
 
 2. Deploy your contract using Foundry:
@@ -17,7 +17,7 @@ Here are some typical workflows for using the local testnet during development.
    ```
 
 3. Verify in Otterscan:
-   - Open http://localhost:5100
+   - Open http://localhost:80
    - Search for the contract address
    - View deployment transaction and contract state
 
@@ -30,7 +30,7 @@ Here are some typical workflows for using the local testnet during development.
 
 1. Start the network:
    ```bash
-   make
+   make testnet-start
    ```
 
 2. Check initial validator set:
@@ -40,12 +40,14 @@ Here are some typical workflows for using the local testnet during development.
 
 3. Create a new validator key:
    ```bash
-   cargo run --bin emerald -- init --home nodes/new_validator
+   # replace ID with a specific node ID (e.g., 4)
+   cargo run --bin emerald -- init --home nodes/{ID}
    ```
 
 4. Get the public key:
    ```bash
-   cargo run --bin emerald show-pubkey nodes/new_validator/config/priv_validator_key.json
+   # replace ID with a specific node ID (e.g., 4)
+   cargo run --bin emerald show-pubkey nodes/{ID}/config/priv_validator_key.json
    ```
 
 5. Add the validator to the network:
@@ -67,19 +69,19 @@ Here are some typical workflows for using the local testnet during development.
 
 1. Start the network:
    ```bash
-   make
+   make testnet-start
    ```
 
-2. Run the transaction spammer (if available in your repo):
+2. Run the transaction spammer:
    ```bash
-   cargo run --bin tx-spammer -- \
-     --rpc-url http://127.0.0.1:8545 \
+   emerald-utils spam --chain-id 12345 \
+     --rpc-url http://127.0.0.1:8645 \
      --rate 10 \
      --duration 60
    ```
 
 3. Monitor performance in Grafana:
-   - Open http://localhost:3000
+   - Open http://localhost:4000
    - Watch block production rate
    - Monitor transaction processing time
    - Check for any consensus delays
@@ -87,7 +89,7 @@ Here are some typical workflows for using the local testnet during development.
 4. Check mempool and logs:
    ```bash
    # Check mempool size
-   curl -X POST http://127.0.0.1:8545 \
+   curl -X POST http://127.0.0.1:8645 \
      -H "Content-Type: application/json" \
      -d '{"jsonrpc":"2.0","method":"txpool_status","params":[],"id":1}'
 
@@ -95,33 +97,15 @@ Here are some typical workflows for using the local testnet during development.
    tail -f nodes/0/emerald.log
    ```
 
-## Iterative Development
-
-When you need a clean state:
-
-1. Stop and clean:
-   ```bash
-   make clean
-   ```
-
-2. Restart fresh:
-   ```bash
-   make
-   ```
-
-3. Redeploy contracts and test again
-
-Tip: This is faster than manually resetting the blockchain state and ensures a consistent starting point.
-
 ## Application Integration
 
 1. Start the network:
    ```bash
-   make
+   make testnet-start
    ```
 
 2. Configure your application to use:
-   - RPC URL: `http://127.0.0.1:8545`
+   - RPC URL: `http://127.0.0.1:8645`
    - Chain ID: `12345`
    - Test account private key (from pre-funded accounts)
 

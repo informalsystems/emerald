@@ -30,7 +30,9 @@ This will build the Emerald binary and place it under `target/release/custom-ret
 
    This creates a private key file at `<home_dir>/config/priv_validator_key.json`
 
-   **IMPORTANT**: Keep this file secure and private. Never share this file with anyone, including the network coordinator.
+   > [!IMPORTANT]
+   > Keep this file secure and private. 
+   > Never share this file with anyone, including the network coordinator.
 
 3. **Extract your public key**:
    ```bash
@@ -68,7 +70,8 @@ As the network coordinator, you need to create a _PoA admin key_ that will contr
 
 Use your preferred Ethereum key management tool (e.g., MetaMask, cast, or any Ethereum wallet) to generate a new private key. You will need the **address** (e.g., `0x123abc...`) for the next step.
 
-**Important**: This PoA address will have authority over the validator set, so keep the private key secure.
+> [!IMPORTANT]
+> This PoA address will have authority over the validator set, so keep the private key secure.
 
 ## Step 4: Generate Genesis Files
 
@@ -100,4 +103,6 @@ Now you need to share the generated genesis files with all validator participant
    - Peer connection details (IP addresses and ports for other validators)
 3. **Coordinate node configurations**: Each validator will need to configure their Reth and Emerald nodes (see sections below)
 
-**Important**: All nodes in the network must use the **same** genesis files. Any difference will result in nodes being unable to reach consensus.
+> [!IMPORTANT]
+> All nodes in the network must use the **same** genesis files. 
+> Any difference will result in nodes being unable to reach consensus.

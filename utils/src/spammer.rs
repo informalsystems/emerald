@@ -40,7 +40,7 @@ pub struct SpammerConfig {
     pub max_time: u64,
     /// Maximum number of transactions to send per second.
     pub max_rate: u64,
-    /// Number of ms between sending batches of txs (default: 200).
+    /// Number of ms between sending batches of txs.
     pub batch_interval: u64,
     /// Whether to send EIP-4844 blob transactions.
     pub blobs: bool,

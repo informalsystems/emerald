@@ -13,6 +13,7 @@ Optional arguments:
     --nodes                Number of nodes to include in the generated config
     --node-keys            Private key for a node (can be specified multiple times)
                           If provided, the number of nodes is inferred from the number of keys
+    --fee-recipient       Fee recipient address
 
 Note: Either --nodes or --node-keys must be provided
 EOF
@@ -22,6 +23,7 @@ EOF
 nodes=""
 testnet_config_dir=""
 node_keys=()
+fee_recipient=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -50,6 +52,15 @@ while [[ $# -gt 0 ]]; do
             ;;
         --testnet-config-dir=*)
             testnet_config_dir="${1#*=}"
+            shift
+            ;;
+        --fee-recipient)
+            [[ $# -ge 2 ]] || usage
+            fee_recipient="$2"
+            shift 2
+            ;;
+        --fee-recipient=*)
+            fee_recipient="${1#*=}"
             shift
             ;;
         -h|--help)
@@ -84,6 +95,16 @@ fi
 if [[ ${#node_keys[@]} -gt 0 && ${#node_keys[@]} -ne $nodes ]]; then
     echo "Number of node keys (${#node_keys[@]}) doesn't match number of nodes ($nodes)" >&2
     exit 2
+fi
+
+# Validate --fee-recipient
+if [[ -n "$fee_recipient" ]]; then
+    # must be 0x + 40 hex chars
+    if ! [[ "$fee_recipient" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
+        echo "Invalid --fee-recipient: must be 0x followed by 40 hex characters" >&2
+        echo "Example: 0x0000000000000000000000000000000000000000" >&2
+        exit 2
+    fi
 fi
 
 TESTNET_DIR="$testnet_config_dir"
@@ -176,5 +197,8 @@ EOF
           echo "el_node_type = \"custom\"" >> "$TESTNET_DIR/config/$i/config.toml"
       else
           echo "el_node_type = \"archive\"" >> "$TESTNET_DIR/config/$i/config.toml"
+      fi
+      if [[ -n "$fee_recipient" ]]; then
+          echo "fee_recipient = \"$fee_recipient\"" >> "$TESTNET_DIR/config/$i/config.toml"
       fi
 done

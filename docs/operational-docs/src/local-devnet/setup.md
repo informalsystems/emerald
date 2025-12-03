@@ -10,7 +10,6 @@ Before starting, ensure you have:
 - Docker Compose (usually included with Docker Desktop)
 - Make (typically pre-installed on Linux/macOS; Windows users can use WSL)
 - Git (for cloning the repository)
-- [Protobuf](https://protobuf.dev/installation) (to compile Emerald `.proto` files)
 
 **Verify installations:**
 
@@ -27,7 +26,7 @@ protoc --version # Should show libprotoc 33.1+
 git clone https://github.com/informalsystems/emerald.git
 cd emerald
 make build
-```
+``` 
 
 > [!NOTE]
 > For building in release mode, use `make release`.

@@ -20,7 +20,7 @@ curl -X POST http://127.0.0.1:8645 \
   -d '{"jsonrpc":"2.0","method":"eth_getBalance","params":["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266","latest"],"id":1}'
 ```
 
-**Send a transaction:** (requires the "from" address private key in the Ethereum client)
+**Send a transaction:**
 
 ```bash
 curl -X POST http://127.0.0.1:8645 \
@@ -116,5 +116,5 @@ tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
 5. Import one of the test accounts using its private key
 
 > [!WARNING]
-> Only use test private keys with local networks.
+> Only use test private keys with local networks. 
 > _**Never import test keys into wallets used for real funds.**_

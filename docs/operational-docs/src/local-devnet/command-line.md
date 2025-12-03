@@ -1,7 +1,7 @@
 # CLI (Work in Progress)
 
 > [!NOTE]
-> The Emerald CLI is a work in progress and should be considered experimental.
+> The Emerald CLI is a work in progress and should be considered experimental. 
 > Functionality may change, and users should expect potential instability or incomplete features.
 
 ## Start the Network
@@ -14,7 +14,6 @@ Use the following command to start a local testnet:
 ```shell
 {{#include ../templates/help_templates/testnet/start.md}}
 ```
-
 </details>
 
 For example, starting a testnet with four nodes results in the following output:
@@ -134,7 +133,6 @@ Checking custom-reth installation... ✓ Reth Version: 1.9.2-dev
     emerald testnet stop             - Stop all nodes
     emerald testnet destroy          - Remove all testnet data
 ```
-
 </details>
 
 ## Check Network Status
@@ -147,7 +145,6 @@ Use the following command to check the network status:
 ```shell
 {{#include ../templates/help_templates/testnet/status.md}}
 ```
-
 </details>
 
 For example, checking the status after having started a four-node testnet should result in the following output:
@@ -188,7 +185,6 @@ Summary:
   Emerald running: 4/4
   Reth running:    4/4
 ```
-
 </details>
 
 ## Stop Node
@@ -201,7 +197,6 @@ Use the following command to stop a single node:
 ```
 {{#include ../templates/help_templates/testnet/stop-node.md}}
 ```
-
 </details>
 
 For example, running this command for Node `1` should result in the following output:
@@ -215,7 +210,6 @@ For example, running this command for Node `1` should result in the following ou
 
 ✅ Stopped 2 process(es) for node 1
 ```
-
 </details>
 
 And checking the network status should result in the following output:
@@ -253,7 +247,6 @@ Summary:
   Emerald running: 3/4
   Reth running:    3/4
 ```
-
 </details>
 
 ## Restart Node
@@ -266,7 +259,6 @@ Use the following command to restart an existing node:
 ```shell
 {{#include ../templates/help_templates/testnet/start-node.md}}
 ```
-
 </details>
 
 For example, restarting the node that was previously stopped should result in the following output:
@@ -306,7 +298,6 @@ Starting Reth node 1 on ports:
   Reth: $HOME/.emerald-devnet/1/logs/reth.log
   Emerald: $HOME/.emerald-devnet/1/logs/emerald.log
 ```
-
 </details>
 
 And checking the network status should result in the following output:
@@ -346,7 +337,6 @@ Summary:
   Emerald running: 4/4
   Reth running:    4/4
 ```
-
 </details>
 
 ## Add Node
@@ -359,7 +349,6 @@ Use the following command to add a new node to the network:
 ```shell
 {{#include ../templates/help_templates/testnet/add-node.md}}
 ```
-
 </details>
 
 Running this command should result in the following output:
@@ -418,7 +407,6 @@ Starting Reth node 4 on ports:
   Reth: $HOME/.emerald-devnet/4/logs/reth.log
   Emerald: $HOME/.emerald-devnet/4/logs/emerald.log
 ```
-
 </details>
 
 And checking the network status should result in the following output:
@@ -464,7 +452,6 @@ Summary:
   Emerald running: 5/5
   Reth running:    5/5
 ```
-
 </details>
 
 ## Set Node as Validator
@@ -498,7 +485,6 @@ Validator #4:
   Pubkey: 049cdba83f09fd9f66cf5b45ce3db1866c85ce0041f0dcb3d64070196fc38690acc00c0dafa3289404b5615986e467720cf43ab970cc14c4f1f1a07774a992b3e0
 Validator address: 0xe95eaa9dcd4f9e3b4eec820355c03b4f4499ab87
 ```
-
 </details>
 
 To add the new node as a validator, we first need to get its public key.
@@ -508,11 +494,9 @@ To add the new node as a validator, we first need to get its public key.
 ```
 0x670252bba7f17bfa44ed4148aee562108a57f49e90017f940d80bd4a34e367710c192ed04ad87a71f6c3cff5d48b1baab8f423c01f534a01dee18b151b25a0f7
 ```
-
 </details>
 
 Once we have the public key, we can add the new node to the validator set using the following command:
-
 ```shell
 emerald-utils poa -r http://127.0.0.1:8645 add-validator \
   --validator-pubkey 0x670252bba7f17bfa44ed4148aee562108a57f49e90017f940d80bd4a34e367710c192ed04ad87a71f6c3cff5d48b1baab8f423c01f534a01dee18b151b25a0f7 \
@@ -522,7 +506,7 @@ emerald-utils poa -r http://127.0.0.1:8645 add-validator \
 
 <details>
 <summary>Output for <code>
-emerald-utils poa -r http://127.0.0.1:8645 add-validator
+emerald-utils poa -r http://127.0.0.1:8645 add-validator 
 </code></summary>  
 
 ```
@@ -532,7 +516,6 @@ Transaction sent: 0xe1796369404585429fa24300d8f1f5433c8e5b477c992f1bd23e39d6c7de
 Transaction confirmed in block: Some(466)
 Gas used: 153301
 ```
-
 </details>
 
 And listing the validators should result in the following output:
@@ -570,7 +553,6 @@ Validator #5:
   Pubkey: 04670252bba7f17bfa44ed4148aee562108a57f49e90017f940d80bd4a34e367710c192ed04ad87a71f6c3cff5d48b1baab8f423c01f534a01dee18b151b25a0f7
 Validator address: 0x42dccf7844765f8205edbe4364d69d955fd1330a
 ```
-
 </details>
 
 For more details on interacting with the PoA Module, see [Managing Validators](./membership-changes.md) section.
@@ -585,7 +567,6 @@ Use the following command to stop the local testnet:
 ```shell
 {{#include ../templates/help_templates/testnet/stop.md}}
 ```
-
 </details>
 
 Running this command should result in the following output:
@@ -614,7 +595,6 @@ Stopping node 2...
 
 ✅ Stopped 10/10 processes
 ```
-
 </details>
 
 ## Clean the Network
@@ -627,7 +607,6 @@ Use the following command to remove all testnet data:
 ```shell
 {{#include ../templates/help_templates/testnet/destroy.md}}
 ```
-
 </details>
 
 Running this command should result in the following output:
@@ -645,5 +624,4 @@ Running this command should result in the following output:
 🗑️  Removing testnet data...
 ✅ Testnet data removed successfully
 ```
-
 </details>

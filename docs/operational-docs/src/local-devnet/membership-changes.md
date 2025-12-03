@@ -10,7 +10,7 @@ Emerald uses a Proof of Authority (PoA) smart contract (`ValidatorManager`) to m
 - Each validator's voting power
 - Who can modify the validator set (the contract owner)
 
-Emerald's PoA tooling provides support for the following use cases.
+Emerald's PoA tooling provides support for the following use cases. 
 
 - **Testing validator changes.** Simulate adding/removing validators in a running network
 - **Testing voting power.** Experiment with different power distributions

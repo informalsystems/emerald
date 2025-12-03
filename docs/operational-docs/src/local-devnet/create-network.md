@@ -45,7 +45,7 @@ curl -X POST http://127.0.0.1:8645 \
 3. **Configuration Generation** 
   
     ```bash
-    ./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet
+    ./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet --fee-recipient 0x0000000000000000000000000000000000000042
     ```
     
     - Creates `.testnet/testnet_config.toml` with network parameters

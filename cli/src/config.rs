@@ -66,7 +66,7 @@ pub struct EmeraldConfig {
     #[serde(with = "humantime_serde", default = "default_min_block_time")]
     pub min_block_time: Duration,
 
-    #[serde(default = "default_fee_recipient")]
+    // Address used to receive fees
     pub fee_recipient: Address,
 }
 
@@ -79,10 +79,6 @@ fn max_retain_block_default() -> u64 {
 }
 fn prune_at_interval_default() -> u64 {
     10
-}
-
-fn default_fee_recipient() -> Address {
-    Address::repeat_byte(42)
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

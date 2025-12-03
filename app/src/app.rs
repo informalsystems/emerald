@@ -338,7 +338,7 @@ pub async fn run(
                                 .generate_block(
                                     &Some(latest_block),
                                     &emerald_config.retry_config,
-                                    &state.fee_recipient,
+                                    &emerald_config.fee_recipient,
                                 )
                                 .await?;
 

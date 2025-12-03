@@ -106,9 +106,6 @@ pub struct State {
     pub min_block_time: Duration,
 
     pub last_block_time: Instant,
-
-    // Address recipient for fees
-    pub fee_recipient: Address,
 }
 
 /// Represents errors that can occur during the verification of a proposal's signature.
@@ -184,7 +181,6 @@ impl State {
         max_retain_blocks: u64,
         prune_at_interval: u64,
         min_block_time: Duration,
-        fee_recipient: Address,
     ) -> Self {
         // Calculate start_time by subtracting elapsed_seconds from now.
         // It represents the start time of measuring metrics, not the actual node start time.
@@ -217,8 +213,6 @@ impl State {
             prune_at_block_interval: prune_at_interval,
             min_block_time,
             last_block_time: Instant::now(),
-
-            fee_recipient,
         }
     }
 

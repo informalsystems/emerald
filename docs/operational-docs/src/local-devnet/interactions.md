@@ -5,6 +5,7 @@ Once your local Emerald testnet is running, you can interact with it like any Et
 ## Using `curl` (JSON-RPC)
 
 **Get current block number:**
+
 ```bash
 curl -X POST http://127.0.0.1:8645 \
   -H "Content-Type: application/json" \
@@ -12,13 +13,15 @@ curl -X POST http://127.0.0.1:8645 \
 ```
 
 **Get account balance:**
+
 ```bash
 curl -X POST http://127.0.0.1:8645 \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"eth_getBalance","params":["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266","latest"],"id":1}'
 ```
 
-**Send a transaction:**
+**Send a transaction:** (requires the "from" address private key in the Ethereum client)
+
 ```bash
 curl -X POST http://127.0.0.1:8645 \
   -H "Content-Type: application/json" \
@@ -40,16 +43,19 @@ curl -X POST http://127.0.0.1:8645 \
 **Prerequisite:** [Foundry](https://getfoundry.sh/introduction/installation/)
 
 **Get block number:**
+
 ```bash
 cast block-number --rpc-url http://127.0.0.1:8645
 ```
 
 **Check balance:**
+
 ```bash
 cast balance 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --rpc-url http://127.0.0.1:8645
 ```
 
 **Send ETH:**
+
 ```bash
 cast send 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
   --value 1ether \
@@ -62,8 +68,9 @@ cast send 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
 Configure your Web3 library to connect to `http://127.0.0.1:8645`:
 
 **ethers.js (JavaScript):**
+
 ```javascript
-const { ethers } = require('ethers');
+import { ethers } from 'ethers';
 
 const provider = new ethers.JsonRpcProvider('http://127.0.0.1:8645');
 const wallet = new ethers.Wallet('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80', provider);
@@ -77,6 +84,7 @@ await tx.wait();
 ```
 
 **web3.py (Python):**
+
 ```python
 from web3 import Web3
 
@@ -108,5 +116,5 @@ tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
 5. Import one of the test accounts using its private key
 
 > [!WARNING]
-> Only use test private keys with local networks. 
+> Only use test private keys with local networks.
 > _**Never import test keys into wallets used for real funds.**_

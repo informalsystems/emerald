@@ -10,7 +10,7 @@ Emerald uses a Proof of Authority (PoA) smart contract (`ValidatorManager`) to m
 - Each validator's voting power
 - Who can modify the validator set (the contract owner)
 
-Emerald's PoA tooling provides support for the following use cases. 
+Emerald's PoA tooling provides support for the following use cases.
 
 - **Testing validator changes.** Simulate adding/removing validators in a running network
 - **Testing voting power.** Experiment with different power distributions
@@ -30,11 +30,13 @@ The local testnet uses a well-known test mnemonic for pre-funded accounts.
 **Mnemonic**: `test test test test test test test test test test test junk`
 
 **PoA Contract Owner (Account #0)**:
+
 - **Private Key**: `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`
 - **Address**: `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`
 - **Role**: Has authority to add/remove/update validators
 
 **Validator Keys**:
+
 - Located at `nodes/{0,1,2,3}/config/priv_validator_key.json`
 - These are separate from the Ethereum accounts
 - Used for consensus signing, not transactions
@@ -72,6 +74,7 @@ To add a node to the validator set, you need the node's public key. There are tw
 - Use one of the existing validators after [removing](#remove-a-validator) it from the validator set.
 
 - Add a new node using the following command:
+
   ```bash
   # replace ID with a specific node ID (e.g., 4)
   cargo run --bin emerald -- init --home nodes/{ID}
@@ -111,7 +114,7 @@ To remove a validator from the active set:
 
 ```bash
 cargo run --bin emerald-utils poa -r http://127.0.0.1:8645 remove-validator \
-  --validator-pubkey 0x04681eaaa34e491e6c8335abc9ea92b024ef52eb91442ca3b84598c79a79f31b75... \
+  --validator-identifier 0x04681eaaa34e491e6c8335abc9ea92b024ef52eb91442ca3b84598c79a79f31b75... \
   --owner-private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ```
 
@@ -121,7 +124,7 @@ To change a validator's voting weight:
 
 ```bash
 cargo run --bin emerald-utils poa -r http://127.0.0.1:8645 update-validator \
-  --validator-pubkey 0x04681eaaa34e491e6c8335abc9ea92b024ef52eb91442ca3b84598c79a79f31b75... \
+  --validator-identifier 0x04681eaaa34e491e6c8335abc9ea92b024ef52eb91442ca3b84598c79a79f31b75... \
   --power 200 \
   --owner-private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ```

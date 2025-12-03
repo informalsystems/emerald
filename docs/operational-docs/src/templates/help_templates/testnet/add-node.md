@@ -17,5 +17,7 @@ Options:
           Path to reth node spawning configurations. If not specified will use default values
       --config <CONFIG_FILE>
           Emerald configuration file (default: `~/.emerald/config/config.toml`)
+      --fee-receiver <FEE_RECEIVER>
+          Address which will receive fees. If not specified will default to `0x4242424242424242424242424242424242424242`
   -h, --help
           Print help

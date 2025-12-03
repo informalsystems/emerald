@@ -23,5 +23,7 @@ Options:
           Path to the `custom-reth` executable. The program first checks the path provided here; if the binary is not found, it will try to resolve `custom-reth` from $PATH instead [default: ./custom-reth/target/debug/custom-reth]
       --reth-config-path <RETH_CONFIG_PATH>
           Path to reth node spawning configurations. If not specified will use default values
+      --fee-receiver <FEE_RECEIVER>
+          Address which will receive fees. If not specified will default to `0x4242424242424242424242424242424242424242`
   -h, --help
           Print help

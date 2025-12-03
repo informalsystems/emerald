@@ -10,6 +10,7 @@ Before starting, ensure you have:
 - Docker Compose (usually included with Docker Desktop)
 - Make (typically pre-installed on Linux/macOS; Windows users can use WSL)
 - Git (for cloning the repository)
+- [Protobuf](https://protobuf.dev/installation) (to compile Emerald `.proto` files)
 
 **Verify installations:**
 ```bash

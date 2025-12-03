@@ -6,9 +6,16 @@ volumes:
 
 services:
   reth0:
-    network_mode: host
+    # network_mode: host
     image: ghcr.io/informalsystems/custom-reth:latest
     container_name: reth0
+    ports:
+      - "8645:8645"   # HTTP RPC
+      - "8646:8646"   # WS RPC
+      - "8551:8551"   # Auth RPC
+      - "9000:9000"   # Metrics
+      - "31303:31303" # P2P
+      - "31303:31303/udp" # P2P discovery
     volumes:
       - reth0:/data
       - ./assets:/root/assets/
@@ -46,7 +53,14 @@ services:
       # - "--txpool.pending-max-count=50000" # default=10000
       # - "--txpool.queued-max-count=50000" # default=10000
   reth1:
-    network_mode: host
+#    network_mode: host
+    ports:
+      - "18645:18645"
+      - "18646:18646"
+      - "18551:18551"
+      - "9001:9001"
+      - "41303:41303"
+      - "41303:41303/udp"
     image: ghcr.io/informalsystems/custom-reth:latest
     container_name: reth1
     volumes:
@@ -94,7 +108,14 @@ services:
       # - "--txpool.pending-max-count=50000" # default=10000
       # - "--txpool.queued-max-count=50000" # default=10000
   reth2:
-    network_mode: host
+#    network_mode: host
+    ports:
+      - "28645:28645"
+      - "28646:28646"
+      - "28551:28551"
+      - "9002:9002"
+      - "51303:51303"
+      - "51303:51303/udp"
     image: ghcr.io/informalsystems/custom-reth:latest
     container_name: reth2
     volumes:
@@ -134,7 +155,14 @@ services:
       # - "--txpool.pending-max-count=50000" # default=10000
       # - "--txpool.queued-max-count=50000" # default=10000
   reth3:
-    network_mode: host
+#    network_mode: host
+    ports:
+      - "38645:38645"
+      - "38646:38646"
+      - "38551:38551"
+      - "9003:9003"
+      - "61303:61303"
+      - "61303:61303/udp"
     image: ghcr.io/informalsystems/custom-reth:latest
     container_name: reth3
     volumes:
@@ -173,12 +201,16 @@ services:
       # - "--txpool.pending-max-count=50000" # default=10000
       # - "--txpool.queued-max-count=50000" # default=10000
   prometheus:
-    network_mode: host
+    # network_mode: host
+    ports:
+      - "9090:9090"
     build:
       dockerfile: Dockerfile.prometheus
     user: "65534"
   grafana:
-    network_mode: host
+    # network_mode: host
+    ports:
+      - "4000:4000"
     build:
       dockerfile: Dockerfile.grafana
     user: "501"
@@ -203,6 +235,8 @@ services:
     image: otterscan/otterscan:develop
     depends_on:
       - reth0
-    network_mode: host # frontend is at http://127.0.0.1:80
+    # network_mode: host # frontend is at http://127.0.0.1:80
+    ports:
+      - "80:80"
     environment:
       ERIGON_URL: "http://127.0.0.1:8645"

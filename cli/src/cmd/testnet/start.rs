@@ -1,16 +1,19 @@
 //! Testnet start command - Initialize and run a complete testnet with Reth + Emerald nodes
 
+use core::str::FromStr;
 use core::time::Duration;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use alloy_primitives::Address as AlloyAddress;
 use clap::Parser;
 use color_eyre::eyre::{eyre, Context as _};
 use color_eyre::Result;
 use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, Node};
 use malachitebft_config::LoggingConfig;
 use malachitebft_core_types::{Context, SigningScheme};
+use malachitebft_eth_types::Address;
 use serde_json::{json, Value};
 use tracing::info;
 
@@ -53,6 +56,10 @@ pub struct TestnetStartCmd {
     /// Path to reth node spawning configurations. If not specified will use default values
     #[clap(long)]
     pub reth_config_path: Option<PathBuf>,
+
+    /// Address which will receive fees. If not specified will default to `0x4242424242424242424242424242424242424242`
+    #[clap(long)]
+    pub fee_receiver: Option<String>,
 }
 
 impl TestnetStartCmd {
@@ -96,9 +103,16 @@ impl TestnetStartCmd {
         self.setup_assets_directory(home_dir)?;
         println!("✓ Assets directory set up");
 
+        let fee_receiver = if let Some(fee_receiver_str) = &self.fee_receiver {
+            Address::from(AlloyAddress::from_str(fee_receiver_str)?)
+        } else {
+            Address::repeat_byte(42)
+        };
+
         // 2c. Generate Emerald configs
         println!("\n⚙️  Generating Emerald configs...");
-        self.generate_emerald_configs(home_dir)?;
+        info!("Will use address `{fee_receiver}` as Fee Receiver address");
+        self.generate_emerald_configs(home_dir, fee_receiver)?;
         println!("✓ Emerald configs generated");
 
         // 3. Extract validator public keys
@@ -237,7 +251,7 @@ impl TestnetStartCmd {
         Ok(())
     }
 
-    fn generate_emerald_configs(&self, home_dir: &Path) -> Result<()> {
+    fn generate_emerald_configs(&self, home_dir: &Path, fee_receiver: Address) -> Result<()> {
         use super::types::RethPorts;
 
         for i in 0..self.nodes {
@@ -260,11 +274,13 @@ sync_timeout_ms = 120000
 sync_initial_delay_ms = 100
 el_node_type = "archive"
 min_block_time = "500ms"
+fee_recipient = "{}"
 "#,
                 i,
                 ports.http,    // execution RPC port
                 ports.authrpc, // engine auth RPC port
                 jwt_path.display(),
+                fee_receiver,
             );
 
             fs::write(&config_path, config_content)

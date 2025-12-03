@@ -123,6 +123,7 @@ impl Engine {
         &self,
         latest_block: &Option<ExecutionBlock>,
         retry_config: &RetryConfig,
+        fee_recipient: &Address,
     ) -> eyre::Result<ExecutionPayloadV3> {
         debug!("🟠 generate_block on top of {:?}", latest_block);
         let payload_attributes: PayloadAttributes;
@@ -146,7 +147,7 @@ impl Engine {
                     prev_randao: lb.prev_randao,
 
                     // TODO: provide proper address.
-                    suggested_fee_recipient: Address::repeat_byte(42).to_alloy_address(),
+                    suggested_fee_recipient: fee_recipient.to_alloy_address(),
 
                     // Cannot be None in V3.
                     withdrawals: Some(vec![]),

@@ -1,14 +1,17 @@
 //! Add a non-validator node to an existing testnet
 
 use core::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use core::str::FromStr;
 use core::time::Duration;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use alloy_primitives::Address as AlloyAddress;
 use clap::Parser;
 use color_eyre::eyre::{eyre, Context as _};
 use color_eyre::Result;
+use malachitebft_eth_types::Address;
 use tracing::info;
 
 use super::reth::{self, RethProcess};
@@ -34,6 +37,10 @@ pub struct TestnetAddNodeCmd {
     /// Path to reth node spawning configurations. If not specified will use default values
     #[clap(long)]
     pub reth_config_path: Option<PathBuf>,
+
+    /// Address which will receive fees. If not specified will default to `0x4242424242424242424242424242424242424242`
+    #[clap(long)]
+    pub fee_receiver: Option<String>,
 }
 
 impl TestnetAddNodeCmd {
@@ -78,9 +85,16 @@ impl TestnetAddNodeCmd {
         self.generate_malachite_config(home_dir, node_id)?;
         println!("✓ Malachite config generated");
 
+        let fee_receiver = if let Some(fee_receiver_str) = &self.fee_receiver {
+            Address::from(AlloyAddress::from_str(fee_receiver_str)?)
+        } else {
+            Address::repeat_byte(42)
+        };
+
         // 6. Generate Emerald config
         println!("\n⚙️  Generating Emerald config...");
-        self.generate_emerald_config(home_dir, node_id)?;
+        info!("Will use address `{fee_receiver}` as Fee Receiver address");
+        self.generate_emerald_config(home_dir, node_id, fee_receiver)?;
         println!("✓ Emerald config generated");
 
         // 7. Generate private validator key
@@ -282,7 +296,12 @@ impl TestnetAddNodeCmd {
         Ok(())
     }
 
-    fn generate_emerald_config(&self, home_dir: &Path, node_id: usize) -> Result<()> {
+    fn generate_emerald_config(
+        &self,
+        home_dir: &Path,
+        node_id: usize,
+        fee_receiver: Address,
+    ) -> Result<()> {
         use super::types::RethPorts;
 
         let config_dir = home_dir.join(node_id.to_string()).join("config");
@@ -302,11 +321,13 @@ sync_timeout_ms = 120000
 sync_initial_delay_ms = 100
 el_node_type = "archive"
 min_block_time = "0ms"
+fee_recipient = "{}"
 "#,
             node_id,
             ports.http,    // execution RPC port
             ports.authrpc, // engine auth RPC port
             jwt_path.display(),
+            fee_receiver,
         );
 
         fs::write(&config_path, config_content)

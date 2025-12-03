@@ -36,6 +36,7 @@ Checking custom-reth installation... ✓ Reth Version: 1.9.2-dev
 ✓ Assets directory set up
 
 ⚙️  Generating Emerald configs...
+2025-12-02T10:10:54.669560Z  INFO Will use address `2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A` as Fee Receiver address
 ✓ Emerald configs generated
 
 🔑 Extracting validator public keys...
@@ -372,6 +373,7 @@ Checking custom-reth installation... ✓ Reth Version: 1.9.2-dev
 ✓ Malachite config generated
 
 ⚙️  Generating Emerald config...
+2025-12-02T10:13:59.649184Z  INFO Will use address `2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A2A` as Fee Receiver address
 ✓ Emerald config generated
 
 🔑 Generating private validator key...

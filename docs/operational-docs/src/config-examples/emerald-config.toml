@@ -5,6 +5,7 @@ jwt_token_path = "/home/emerald/jwt"
 el_node_type = "archive"
 sync_timeout_ms = 1000000
 sync_initial_delay_ms = 100
+fee_recipient = "0x4242424242424242424242424242424242424242"
 
 max_retain_blocks = 0
 prune_at_block_interval = 5

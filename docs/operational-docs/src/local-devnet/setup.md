@@ -12,7 +12,6 @@ Before starting, ensure you have:
 - Git (for cloning the repository)
 
 **Verify installations:**
-
 ```bash
 rustc --version   # Should show rustc 1.88+
 docker --version # Should show Docker 20.10+

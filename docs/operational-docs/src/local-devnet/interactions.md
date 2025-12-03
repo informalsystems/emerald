@@ -5,7 +5,6 @@ Once your local Emerald testnet is running, you can interact with it like any Et
 ## Using `curl` (JSON-RPC)
 
 **Get current block number:**
-
 ```bash
 curl -X POST http://127.0.0.1:8645 \
   -H "Content-Type: application/json" \
@@ -13,7 +12,6 @@ curl -X POST http://127.0.0.1:8645 \
 ```
 
 **Get account balance:**
-
 ```bash
 curl -X POST http://127.0.0.1:8645 \
   -H "Content-Type: application/json" \
@@ -21,7 +19,6 @@ curl -X POST http://127.0.0.1:8645 \
 ```
 
 **Send a transaction:**
-
 ```bash
 curl -X POST http://127.0.0.1:8645 \
   -H "Content-Type: application/json" \
@@ -43,19 +40,16 @@ curl -X POST http://127.0.0.1:8645 \
 **Prerequisite:** [Foundry](https://getfoundry.sh/introduction/installation/)
 
 **Get block number:**
-
 ```bash
 cast block-number --rpc-url http://127.0.0.1:8645
 ```
 
 **Check balance:**
-
 ```bash
 cast balance 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 --rpc-url http://127.0.0.1:8645
 ```
 
 **Send ETH:**
-
 ```bash
 cast send 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
   --value 1ether \
@@ -68,7 +62,6 @@ cast send 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 \
 Configure your Web3 library to connect to `http://127.0.0.1:8645`:
 
 **ethers.js (JavaScript):**
-
 ```javascript
 import { ethers } from 'ethers';
 
@@ -84,7 +77,6 @@ await tx.wait();
 ```
 
 **web3.py (Python):**
-
 ```python
 from web3 import Web3
 

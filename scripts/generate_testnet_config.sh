@@ -4,16 +4,16 @@ set -euo pipefail
 
 usage() {
     cat <<EOF >&2
-Usage: $0 [--nodes <number>] [--node-keys <key>]... --testnet-config-dir <path> --fee-recipient <address>
+Usage: $0 [--nodes <number>] [--node-keys <key>]... --testnet-config-dir <path>
 
 Required arguments:
     --testnet-config-dir   Directory where the testnet configuration should be written
-    --fee-recipient        Fee recipient address
 
 Optional arguments:
     --nodes                Number of nodes to include in the generated config
     --node-keys            Private key for a node (can be specified multiple times)
                           If provided, the number of nodes is inferred from the number of keys
+    --fee-recipient        Fee recipient address
 
 Note: Either --nodes or --node-keys must be provided
 EOF
@@ -23,7 +23,7 @@ EOF
 nodes=""
 testnet_config_dir=""
 node_keys=()
-fee_recipient=""
+fee_recipient="0x4242424242424242424242424242424242424242"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -97,16 +97,10 @@ if [[ ${#node_keys[@]} -gt 0 && ${#node_keys[@]} -ne $nodes ]]; then
     exit 2
 fi
 
-# Validate mandatory --fee-recipient
-if [[ -z "$fee_recipient" ]]; then
-    echo "Missing required argument: --fee-recipient <address>" >&2
-    usage
-fi
-
 # Validate --fee-recipient format: must be 0x + 40 hex chars
 if ! [[ "$fee_recipient" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
     echo "Invalid --fee-recipient: must be 0x followed by 40 hex characters" >&2
-    echo "Example: 0x0000000000000000000000000000000000000000" >&2
+    echo "Example: 0x4242424242424242424242424242424242424242" >&2
     exit 2
 fi
 

@@ -235,7 +235,7 @@ impl Spammer {
                     }
                 } else {
                     debug!("Batch eth_sendRawTransaction timed out; skipping this tick");
-                    let _ = report_sender.send(interval_start).await;
+                    report_sender.send(interval_start).await?;
                     continue;
                 }
             }

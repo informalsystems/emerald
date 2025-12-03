@@ -335,7 +335,11 @@ pub async fn run(
                             let latest_block =
                                 state.latest_block.expect("Head block hash is not set");
                             let execution_payload = engine
-                                .generate_block(&Some(latest_block), &emerald_config.retry_config)
+                                .generate_block(
+                                    &Some(latest_block),
+                                    &emerald_config.retry_config,
+                                    &state.fee_recipient,
+                                )
                                 .await?;
 
                             debug!("🌈 Got execution payload: {:?}", execution_payload);

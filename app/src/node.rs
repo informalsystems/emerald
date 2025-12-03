@@ -218,6 +218,7 @@ impl Node for App {
             max_retain_blocks,
             prune_at_block_interval,
             min_block_time,
+            emerald_config.fee_recipient,
         );
 
         let app_handle = tokio::spawn(async move {

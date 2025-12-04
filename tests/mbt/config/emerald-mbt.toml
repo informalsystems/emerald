@@ -1,0 +1,24 @@
+# Emerald configuration for MBT testing
+moniker = "mbt-test-node"
+
+# Local reth instance
+execution_authrpc_address = "http://localhost:8545"
+engine_authrpc_address = "http://localhost:8551"
+jwt_token_path = "../../assets/jwtsecret"
+
+# Archive node for testing
+el_node_type = "archive"
+
+# Fast block times for testing
+min_block_time = "100ms"
+
+# Retain all blocks for testing
+max_retain_blocks = 1000
+prune_at_block_interval = 100
+
+# Retry configuration
+[retry_config]
+initial_delay = "100ms"
+max_delay = "2s"
+max_elapsed_time = "10s"
+multiplier = 2.0

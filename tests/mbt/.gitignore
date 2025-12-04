@@ -1,0 +1,8 @@
+# MBT test artifacts
+.reth-data/
+*.db
+*.db-shm
+*.db-wal
+
+# Test temporary files
+/tmp/

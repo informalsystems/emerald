@@ -14,6 +14,7 @@ use malachitebft_app_channel::app::node::{
     CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, EngineHandle, Node, NodeHandle,
 };
 use malachitebft_app_channel::app::types::core::VotingPower;
+use malachitebft_app_channel::Channels;
 use malachitebft_eth_cli::config::{Config, EmeraldConfig};
 use malachitebft_eth_cli::metrics;
 use malachitebft_eth_engine::engine::Engine;
@@ -53,7 +54,7 @@ impl App {
                 )
             })?;
         let emerald_config =
-            toml::from_str::<crate::config::EmeraldConfig>(&emerald_config_content)
+            toml::from_str::<EmeraldConfig>(&emerald_config_content)
                 .map_err(|e| eyre::eyre!("Failed to parse emerald config file: {e}"))?;
         Ok(emerald_config)
     }
@@ -62,6 +63,16 @@ impl App {
 pub struct Handle {
     pub app: JoinHandle<()>,
     pub engine: EngineHandle,
+    pub tx_event: TxEvent<EmeraldContext>,
+}
+
+/// Components needed to run the application
+pub struct StateComponents {
+    pub state: State,
+    pub channels: Channels<EmeraldContext>,
+    pub engine: Engine,
+    pub emerald_config: EmeraldConfig,
+    pub engine_handle: EngineHandle,
     pub tx_event: TxEvent<EmeraldContext>,
 }
 
@@ -79,59 +90,13 @@ impl NodeHandle<EmeraldContext> for Handle {
     }
 }
 
-#[async_trait]
-impl Node for App {
-    type Context = EmeraldContext;
-    type Config = Config;
-    type Genesis = Genesis;
-    type PrivateKeyFile = PrivateKey;
-    type SigningProvider = K256Provider;
-    type NodeHandle = Handle;
-
-    fn get_home_dir(&self) -> PathBuf {
-        self.home_dir.to_owned()
-    }
-
-    fn load_config(&self) -> eyre::Result<Self::Config> {
-        Ok(self.config.clone())
-    }
-
-    fn get_signing_provider(&self, private_key: PrivateKey) -> Self::SigningProvider {
-        K256Provider::new(private_key)
-    }
-
-    fn get_address(&self, pk: &PublicKey) -> Address {
-        Address::from_public_key(pk)
-    }
-
-    fn get_public_key(&self, pk: &PrivateKey) -> PublicKey {
-        pk.public_key()
-    }
-
-    fn get_keypair(&self, pk: PrivateKey) -> Keypair {
-        use libp2p_identity::secp256k1::{Keypair as Secp256k1Keypair, SecretKey};
-
-        let secret_bytes: [u8; 32] = pk.inner().to_bytes().into();
-        let secret_key =
-            SecretKey::try_from_bytes(secret_bytes).expect("failed to decode secp256k1 secret key");
-        Secp256k1Keypair::from(secret_key).into()
-    }
-
-    fn load_private_key(&self, file: Self::PrivateKeyFile) -> PrivateKey {
-        file
-    }
-
-    fn load_private_key_file(&self) -> eyre::Result<Self::PrivateKeyFile> {
-        let private_key = std::fs::read_to_string(&self.private_key_file)?;
-        serde_json::from_str(&private_key).map_err(Into::into)
-    }
-
-    fn load_genesis(&self) -> eyre::Result<Self::Genesis> {
-        let genesis = std::fs::read_to_string(&self.genesis_file)?;
-        serde_json::from_str(&genesis).map_err(Into::into)
-    }
-
-    async fn start(&self) -> eyre::Result<Handle> {
+impl App {
+    /// Build the application state and all necessary components.
+    /// This function performs all the initialization and setup required to run the application,
+    /// including loading configuration, initializing the consensus engine, and creating the state.
+    ///
+    /// Returns a `StateComponents` struct containing the state and all components needed to run the app.
+    pub async fn build_state(&self) -> eyre::Result<StateComponents> {
         let config = self.load_config()?;
         let span = tracing::error_span!("node", moniker = %config.moniker);
         let _enter = span.enter();
@@ -148,7 +113,7 @@ impl Node for App {
 
         let codec = ProtobufCodec;
 
-        let (mut channels, engine_handle) = malachitebft_app_channel::start_engine(
+        let (channels, engine_handle) = malachitebft_app_channel::start_engine(
             ctx,
             self.clone(),
             config.clone(),
@@ -207,7 +172,7 @@ impl Node for App {
             "prune block interval cannot be 0"
         );
 
-        let mut state = State::new(
+        let state = State::new(
             genesis,
             ctx,
             signing_provider,
@@ -219,6 +184,79 @@ impl Node for App {
             prune_at_block_interval,
             min_block_time,
         );
+
+        Ok(StateComponents {
+            state,
+            channels,
+            engine,
+            emerald_config,
+            engine_handle,
+            tx_event,
+        })
+    }
+}
+
+#[async_trait]
+impl Node for App {
+    type Context = EmeraldContext;
+    type Config = Config;
+    type Genesis = Genesis;
+    type PrivateKeyFile = PrivateKey;
+    type SigningProvider = K256Provider;
+    type NodeHandle = Handle;
+
+    fn get_home_dir(&self) -> PathBuf {
+        self.home_dir.to_owned()
+    }
+
+    fn load_config(&self) -> eyre::Result<Self::Config> {
+        Ok(self.config.clone())
+    }
+
+    fn get_signing_provider(&self, private_key: PrivateKey) -> Self::SigningProvider {
+        K256Provider::new(private_key)
+    }
+
+    fn get_address(&self, pk: &PublicKey) -> Address {
+        Address::from_public_key(pk)
+    }
+
+    fn get_public_key(&self, pk: &PrivateKey) -> PublicKey {
+        pk.public_key()
+    }
+
+    fn get_keypair(&self, pk: PrivateKey) -> Keypair {
+        use libp2p_identity::secp256k1::{Keypair as Secp256k1Keypair, SecretKey};
+
+        let secret_bytes: [u8; 32] = pk.inner().to_bytes().into();
+        let secret_key =
+            SecretKey::try_from_bytes(secret_bytes).expect("failed to decode secp256k1 secret key");
+        Secp256k1Keypair::from(secret_key).into()
+    }
+
+    fn load_private_key(&self, file: Self::PrivateKeyFile) -> PrivateKey {
+        file
+    }
+
+    fn load_private_key_file(&self) -> eyre::Result<Self::PrivateKeyFile> {
+        let private_key = std::fs::read_to_string(&self.private_key_file)?;
+        serde_json::from_str(&private_key).map_err(Into::into)
+    }
+
+    fn load_genesis(&self) -> eyre::Result<Self::Genesis> {
+        let genesis = std::fs::read_to_string(&self.genesis_file)?;
+        serde_json::from_str(&genesis).map_err(Into::into)
+    }
+
+    async fn start(&self) -> eyre::Result<Handle> {
+        let StateComponents {
+            mut state,
+            mut channels,
+            engine,
+            emerald_config,
+            engine_handle,
+            tx_event,
+        } = self.build_state().await?;
 
         let app_handle = tokio::spawn(async move {
             if let Err(e) = crate::app::run(&mut state, &mut channels, engine, emerald_config).await

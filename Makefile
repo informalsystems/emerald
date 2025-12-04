@@ -1,4 +1,4 @@
-.PHONY: all build release test docs docs-serve testnet-start sync testnet-node-stop testnet-node-restart testnet-stop testnet-clean clean-volumes clean-prometheus spam spam-contract
+.PHONY: all build release test docs docs-serve testnet-start sync testnet-node-stop testnet-node-restart testnet-stop testnet-clean clean-volumes clean-prometheus spam spam-contract mbt-start-reth mbt-test mbt-clean
 
 all: build
 
@@ -99,3 +99,20 @@ spam-contract:
 		--time=60 \
 		--rate=1000 \
 		--rpc-url=127.0.0.1:8645
+
+# Model-Based Testing (MBT)
+
+mbt-start-reth: build
+	@echo "Starting custom-reth for MBT testing..."
+	@echo "Note: This will run in the foreground. Use Ctrl+C to stop."
+	@echo "To run tests, open another terminal and run: make mbt-test"
+	./tests/mbt/start-reth.sh
+
+mbt-test:
+	@echo "Running MBT tests..."
+	./tests/mbt/run-tests.sh
+
+mbt-clean:
+	rm -rf ./tests/mbt/.reth-data
+	rm -f ./assets/emerald_genesis.json
+	rm -f ./assets/validator_public_keys.txt

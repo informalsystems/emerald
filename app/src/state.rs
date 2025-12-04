@@ -792,6 +792,12 @@ impl State {
     pub fn set_validator_set(&mut self, validator_set: ValidatorSet) {
         self.validator_set = Some(validator_set);
     }
+
+    /// Gets the validator set if it has been initialized.
+    #[allow(dead_code)]
+    pub fn try_get_validator_set(&self) -> Option<&ValidatorSet> {
+        self.validator_set.as_ref()
+    }
 }
 
 /// Re-assemble a [`ProposedValue`] from its [`ProposalParts`].

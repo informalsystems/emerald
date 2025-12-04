@@ -1,0 +1,36 @@
+[package]
+name = "emerald-mbt"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lints.rust]
+dead_code = "allow"
+
+[dependencies]
+quint-connect = { git = "ssh://git@github.com/informalsystems/quint-connect.git" }
+serde = { version = "1.0", features = ["derive"] }
+itf = "0.4"
+anyhow = "1.0"
+
+# Emerald dependencies
+emerald = { path = "../../app" }
+malachitebft-eth-types = { path = "../../types" }
+malachitebft-eth-engine = { path = "../../engine" }
+malachitebft-eth-cli = { path = "../../cli" }
+malachitebft-app-channel = { package = "informalsystems-malachitebft-app-channel", git = "https://github.com/informalsystems/malachite.git", rev = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a" }
+informalsystems-malachitebft-core-consensus = { git = "https://github.com/informalsystems/malachite.git", rev = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a" }
+
+# Additional utilities
+bytes = "1"
+tracing = "0.1"
+tokio = { version = "1", features = ["rt", "sync", "macros"] }
+rand = "0.8"
+toml = "0.8"
+serde_json = "1.0"
+hex = "0.4"
+k256 = { workspace = true }
+
+[dev-dependencies]
+test-log = { version = "0.2", features = ["trace"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }

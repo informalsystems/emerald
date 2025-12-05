@@ -109,7 +109,7 @@ TESTNET_DIR="$testnet_config_dir"
 # Function to calculate engine port for a given node ID
 get_engine_port() {
     local node_id=$1
-    PORT=$((8645 + i * 100))
+    PORT=$((8645 + $node_id * 100))
     if (( node_id == 0 )); then
         echo "8645"
     else
@@ -120,7 +120,7 @@ get_engine_port() {
 # Function to calculate auth port for a given node ID
 get_auth_port() {
     local node_id=$1
-    PORT=$((8551 + i * 1000))
+    PORT=$((8551 + $node_id * 1000))
     if (( node_id == 0 )); then
         echo "8551"
     else

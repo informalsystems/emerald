@@ -1,70 +1,72 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 # Script to manually add peers (their enodes) to each node
+# Usage: ./script.sh --nodes N
 
 NODES_COUNT=0
+
 while [[ "$#" -gt 0 ]]; do
-    case $1 in
-        --nodes) NODES_COUNT="$2"; shift ;;
-        *) echo "Unknown parameter: $1"; exit 1 ;;
+    case "$1" in
+        --nodes)
+            NODES_COUNT="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown parameter: $1" >&2
+            exit 1
+            ;;
     esac
-    shift
 done
 
-PORT=8645
-PORT_INCREMENT=10000
+if [[ "$NODES_COUNT" -le 0 ]]; then
+    echo "You must specify a positive --nodes value" >&2
+    exit 1
+fi
 
-for _ in {0..NODES_COUNT-1}; do
-    echo "Waiting for Reth node on port ${PORT} to be ready..."
+PORT_BASE=8645
+PORT_INCREMENT=100
+
+declare -a PORTS
+declare -a ENODES
+
+echo "Waiting for ${NODES_COUNT} Reth nodes to be ready and collecting enodes..."
+
+# Wait for each node and collect its enode
+for ((i = 0; i < NODES_COUNT; i++)); do
+    PORT=$((PORT_BASE + i * PORT_INCREMENT))
+    PORTS[i]=$PORT
+
+    echo "Waiting for Reth node $i on port ${PORT} to be ready..."
     until cast rpc --rpc-url "127.0.0.1:${PORT}" net_listening > /dev/null 2>&1; do
         sleep 1
     done
-    PORT=$((PORT + PORT_INCREMENT))
+
+    ENODE=$(cast rpc --rpc-url "127.0.0.1:${PORT}" admin_nodeInfo | jq -r .enode)
+    ENODES[i]="$ENODE"
+
+    echo "Node $i (port ${PORT}) ENODE: ${ENODES[i]}"
 done
 
-RETH0_ENODE=$(cast rpc --rpc-url 127.0.0.1:8645 admin_nodeInfo | jq -r .enode )
-RETH1_ENODE=$(cast rpc --rpc-url 127.0.0.1:18645 admin_nodeInfo | jq -r .enode )
-RETH2_ENODE=$(cast rpc --rpc-url 127.0.0.1:28645 admin_nodeInfo | jq -r .enode )
+echo
+echo "Connecting all nodes to each other..."
 
-echo "RETH0_ENODE: ${RETH0_ENODE}"
-cast rpc --rpc-url 127.0.0.1:8645 admin_addTrustedPeer "${RETH1_ENODE}"
-cast rpc --rpc-url 127.0.0.1:8645 admin_addTrustedPeer "${RETH2_ENODE}"
-cast rpc --rpc-url 127.0.0.1:8645 admin_addPeer "${RETH1_ENODE}"
-cast rpc --rpc-url 127.0.0.1:8645 admin_addPeer "${RETH2_ENODE}"
+# For each node i, add all other nodes j as peers / trusted peers
+for ((i = 0; i < NODES_COUNT; i++)); do
+    RPC_URL="127.0.0.1:${PORTS[i]}"
 
-echo "RETH1_ENODE: ${RETH1_ENODE}"
-cast rpc --rpc-url 127.0.0.1:18645 admin_addTrustedPeer "${RETH0_ENODE}"
-cast rpc --rpc-url 127.0.0.1:18645 admin_addTrustedPeer "${RETH2_ENODE}"
-cast rpc --rpc-url 127.0.0.1:18645 admin_addPeer "${RETH0_ENODE}"
-cast rpc --rpc-url 127.0.0.1:18645 admin_addPeer "${RETH2_ENODE}"
+    for ((j = 0; j < NODES_COUNT; j++)); do
+        # Don't add self as peer
+        if [[ "$i" -eq "$j" ]]; then
+            continue
+        fi
 
-echo "RETH2_ENODE: ${RETH2_ENODE}"
-cast rpc --rpc-url 127.0.0.1:28645 admin_addTrustedPeer "${RETH0_ENODE}"
-cast rpc --rpc-url 127.0.0.1:28645 admin_addTrustedPeer "${RETH1_ENODE}"
-cast rpc --rpc-url 127.0.0.1:28645 admin_addPeer "${RETH0_ENODE}"
-cast rpc --rpc-url 127.0.0.1:28645 admin_addPeer "${RETH1_ENODE}"
+        ENODE="${ENODES[j]}"
 
-# If 4 nodes, add reth3
-if [ "$NODES_COUNT" -eq 4 ]; then
-    RETH3_ENODE=$(cast rpc --rpc-url 127.0.0.1:38645 admin_nodeInfo | jq -r .enode )
+        echo "Adding node $j as peer to node $i (rpc ${RPC_URL})"
+        cast rpc --rpc-url "${RPC_URL}" admin_addTrustedPeer "${ENODE}"
+        cast rpc --rpc-url "${RPC_URL}" admin_addPeer "${ENODE}"
+    done
+done
 
-    echo "RETH3_ENODE: ${RETH3_ENODE}"
-
-    # Add reth3 to all other nodes
-    cast rpc --rpc-url 127.0.0.1:8645 admin_addTrustedPeer "${RETH3_ENODE}"
-    cast rpc --rpc-url 127.0.0.1:8645 admin_addPeer "${RETH3_ENODE}"
-
-    cast rpc --rpc-url 127.0.0.1:18645 admin_addTrustedPeer "${RETH3_ENODE}"
-    cast rpc --rpc-url 127.0.0.1:18645 admin_addPeer "${RETH3_ENODE}"
-
-    cast rpc --rpc-url 127.0.0.1:28645 admin_addTrustedPeer "${RETH3_ENODE}"
-    cast rpc --rpc-url 127.0.0.1:28645 admin_addPeer "${RETH3_ENODE}"
-
-    # Add all nodes to reth3
-    cast rpc --rpc-url 127.0.0.1:38645 admin_addTrustedPeer "${RETH0_ENODE}"
-    cast rpc --rpc-url 127.0.0.1:38645 admin_addTrustedPeer "${RETH1_ENODE}"
-    cast rpc --rpc-url 127.0.0.1:38645 admin_addTrustedPeer "${RETH2_ENODE}"
-    cast rpc --rpc-url 127.0.0.1:38645 admin_addPeer "${RETH0_ENODE}"
-    cast rpc --rpc-url 127.0.0.1:38645 admin_addPeer "${RETH1_ENODE}"
-    cast rpc --rpc-url 127.0.0.1:38645 admin_addPeer "${RETH2_ENODE}"
-fi
+echo "Done: fully meshed ${NODES_COUNT} nodes."

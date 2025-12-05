@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Script to manually add peers (their enodes) to each node
-# Usage: ./script.sh --nodes N
+# Usage: ./scripts/add_peers.sh --nodes N
 
 NODES_COUNT=0
 

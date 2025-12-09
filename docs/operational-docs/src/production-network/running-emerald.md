@@ -42,11 +42,13 @@ jwt_token_path = "/path/to/jwt.hex"
 el_node_type = "archive"
 sync_timeout_ms = 1000000
 sync_initial_delay_ms = 100
+fee_recipient = "0x4242424242424242424242424242424242424242"
 ...
 ```
 
 > [!IMPORTANT]
 > The `jwt_token_path` must point to the same JWT token used by Reth.
+> The `fee_recipient` must point to a valid address as this address will receive fees.
 
 This is where you define how Emerald connects to Reth. Make sure to fill in the Reth http and authrpc address.
 

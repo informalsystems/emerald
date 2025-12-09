@@ -7,7 +7,7 @@ pub use malachitebft_config::{
     MempoolLoadConfig, MetricsConfig, P2pConfig, PubSubProtocol, RuntimeConfig, ScoringStrategy,
     Selector, TestConfig, TimeoutConfig, TransportProtocol, ValuePayload, ValueSyncConfig,
 };
-use malachitebft_eth_types::RetryConfig;
+use malachitebft_eth_types::{Address, RetryConfig};
 use serde::{Deserialize, Serialize};
 use tokio::time::Duration;
 
@@ -65,6 +65,9 @@ pub struct EmeraldConfig {
     // Default: 500ms
     #[serde(with = "humantime_serde", default = "default_min_block_time")]
     pub min_block_time: Duration,
+
+    // Address used to receive fees
+    pub fee_recipient: Address,
 }
 
 fn default_min_block_time() -> Duration {

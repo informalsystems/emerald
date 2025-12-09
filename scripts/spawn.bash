@@ -62,8 +62,8 @@ function exit_and_cleanup {
 function wait_for_reth {
     NODE_PORT=$1
     echo "Waiting for reth node at port $NODE_PORT to reach height 1..."
-    echo "trying 10 times"
-    for i in $(seq 1 10); do
+    echo "trying 20 times"
+    for i in $(seq 1 20); do
         BLOCK_NUMBER=$(cast block-number --rpc-url 127.0.0.1:$NODE_PORT)
         if [[ $BLOCK_NUMBER -ge 1 ]]; then
             echo "Reth node at port $NODE_PORT has reached height $BLOCK_NUMBER."
@@ -143,14 +143,10 @@ fi
 
 wait_for_reth 8645
 
-for NODE_PORT in 8645 18645 28645; do
-    check_reth_progress $NODE_PORT || exit_and_cleanup 1
+for ((i = 0; i < NODES_COUNT; i++)); do
+    PORT=$((8645 + i * 100))
+    check_reth_progress $PORT || exit_and_cleanup 1
 done
-
-# Check progress for additional node only if 4 nodes and not in sync mode
-if [[ $NODES_COUNT -ge 4 ]] && [[ -n "$NO_DELAY" ]]; then
-    check_reth_progress 38645 || exit_and_cleanup 1
-fi
 
 # Trap the INT signal (Ctrl+C) to run the cleanup function
 trap exit_and_cleanup INT

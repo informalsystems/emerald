@@ -5,9 +5,9 @@
 - **ValidatorManager Contract**: `0x0000000000000000000000000000000000002000`
 - **RPC Endpoints**:
   - Node 0: `http://127.0.0.1:8645` (primary endpoint for most operations)
-  - Node 1: `http://127.0.0.1:18645`
-  - Node 2: `http://127.0.0.1:28645`
-  - Node 3: `http://127.0.0.1:38645`
+  - Node 1: `http://127.0.0.1:8745`
+  - Node 2: `http://127.0.0.1:8845`
+  - Node 3: `http://127.0.0.1:8945`
   
 > [!NOTE]
 > All nodes share the same blockchain state. 

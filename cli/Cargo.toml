@@ -18,6 +18,7 @@ malachitebft-config     = { workspace = true }
 malachitebft-app        = { workspace = true }
 
 
+alloy-primitives = { workspace = true }
 humantime-serde = { workspace = true }
 axum = { workspace = true }
 base64 = "0.22"

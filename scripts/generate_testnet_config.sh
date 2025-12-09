@@ -13,6 +13,7 @@ Optional arguments:
     --nodes                Number of nodes to include in the generated config
     --node-keys            Private key for a node (can be specified multiple times)
                           If provided, the number of nodes is inferred from the number of keys
+    --fee-recipient        Fee recipient address
 
 Note: Either --nodes or --node-keys must be provided
 EOF
@@ -22,6 +23,7 @@ EOF
 nodes=""
 testnet_config_dir=""
 node_keys=()
+fee_recipient="0x4242424242424242424242424242424242424242"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -50,6 +52,15 @@ while [[ $# -gt 0 ]]; do
             ;;
         --testnet-config-dir=*)
             testnet_config_dir="${1#*=}"
+            shift
+            ;;
+        --fee-recipient)
+            [[ $# -ge 2 ]] || usage
+            fee_recipient="$2"
+            shift 2
+            ;;
+        --fee-recipient=*)
+            fee_recipient="${1#*=}"
             shift
             ;;
         -h|--help)
@@ -86,25 +97,34 @@ if [[ ${#node_keys[@]} -gt 0 && ${#node_keys[@]} -ne $nodes ]]; then
     exit 2
 fi
 
+# Validate --fee-recipient format: must be 0x + 40 hex chars
+if ! [[ "$fee_recipient" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
+    echo "Invalid --fee-recipient: must be 0x followed by 40 hex characters" >&2
+    echo "Example: 0x4242424242424242424242424242424242424242" >&2
+    exit 2
+fi
+
 TESTNET_DIR="$testnet_config_dir"
 
 # Function to calculate engine port for a given node ID
 get_engine_port() {
     local node_id=$1
+    PORT=$((8645 + $node_id * 100))
     if (( node_id == 0 )); then
         echo "8645"
     else
-        echo "${node_id}8645"
+        echo "$PORT"
     fi
 }
 
 # Function to calculate auth port for a given node ID
 get_auth_port() {
     local node_id=$1
+    PORT=$((8551 + $node_id * 1000))
     if (( node_id == 0 )); then
         echo "8551"
     else
-        echo "${node_id}8551"
+        echo "$PORT"
     fi
 }
 
@@ -176,5 +196,8 @@ EOF
           echo "el_node_type = \"custom\"" >> "$TESTNET_DIR/config/$i/config.toml"
       else
           echo "el_node_type = \"archive\"" >> "$TESTNET_DIR/config/$i/config.toml"
+      fi
+      if [[ -n "$fee_recipient" ]]; then
+          echo "fee_recipient = \"$fee_recipient\"" >> "$TESTNET_DIR/config/$i/config.toml"
       fi
 done

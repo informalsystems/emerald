@@ -23,6 +23,7 @@ const EMERALD_FOLDER: &str = ".emerald";
 const CONFIG_FILE: &str = "config.toml";
 const GENESIS_FILE: &str = "genesis.json";
 const PRIV_VALIDATOR_KEY_FILE: &str = "priv_validator_key.json";
+const P2P_KEY_FILE: &str = "p2p_key.json";
 
 #[derive(Parser, Clone, Debug, Default)]
 #[command(version, about, long_about = None)]
@@ -129,5 +130,11 @@ impl Args {
     /// configuration folder.
     pub fn get_priv_validator_key_file_path(&self) -> Result<PathBuf, Error> {
         Ok(self.get_config_dir()?.join(PRIV_VALIDATOR_KEY_FILE))
+    }
+
+    /// get_p2p_key_file_path returns the p2p key file path based on the
+    /// configuration folder.
+    pub fn get_p2p_key_file_path(&self) -> Result<PathBuf, Error> {
+        Ok(self.get_config_dir()?.join(P2P_KEY_FILE))
     }
 }

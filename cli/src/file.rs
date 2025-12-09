@@ -41,6 +41,18 @@ pub fn save_priv_validator_key<N: Node>(
     )
 }
 
+/// Save p2p key to file
+pub fn save_p2p_key<N: Node>(
+    _node: &N,
+    p2p_key_file: &Path,
+    p2p_key: &N::P2pKeyFile,
+) -> Result<(), Error> {
+    save(
+        p2p_key_file,
+        &serde_json::to_string_pretty(p2p_key).map_err(|e| Error::ToJSON(e.to_string()))?,
+    )
+}
+
 fn save(path: &Path, data: &str) -> Result<(), Error> {
     use std::io::Write;
 

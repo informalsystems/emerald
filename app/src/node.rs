@@ -11,7 +11,8 @@ use libp2p_identity::Keypair;
 use malachitebft_app_channel::app::events::{RxEvent, TxEvent};
 use malachitebft_app_channel::app::metrics::SharedRegistry;
 use malachitebft_app_channel::app::node::{
-    CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, EngineHandle, Node, NodeHandle,
+    CanGeneratePrivateKey, CanMakeGenesis, CanMakeP2pKeyFile, CanMakePrivateKeyFile, EngineHandle,
+    Node, NodeHandle,
 };
 use malachitebft_app_channel::app::types::core::VotingPower;
 use malachitebft_eth_cli::config::{Config, EmeraldConfig};
@@ -40,6 +41,7 @@ pub struct App {
     pub genesis_file: PathBuf,
     pub emerald_config_file: PathBuf,
     pub private_key_file: PathBuf,
+    pub p2p_key_file: PathBuf,
     pub start_height: Option<Height>,
 }
 
@@ -85,6 +87,7 @@ impl Node for App {
     type Config = Config;
     type Genesis = Genesis;
     type PrivateKeyFile = PrivateKey;
+    type P2pKeyFile = PrivateKey;
     type SigningProvider = K256Provider;
     type NodeHandle = Handle;
 
@@ -124,6 +127,15 @@ impl Node for App {
     fn load_private_key_file(&self) -> eyre::Result<Self::PrivateKeyFile> {
         let private_key = std::fs::read_to_string(&self.private_key_file)?;
         serde_json::from_str(&private_key).map_err(Into::into)
+    }
+
+    fn load_p2p_key(&self, file: Self::P2pKeyFile) -> PrivateKey {
+        file
+    }
+
+    fn load_p2p_key_file(&self) -> eyre::Result<Self::P2pKeyFile> {
+        let p2p_key = std::fs::read_to_string(&self.p2p_key_file)?;
+        serde_json::from_str(&p2p_key).map_err(Into::into)
     }
 
     fn load_genesis(&self) -> eyre::Result<Self::Genesis> {
@@ -263,6 +275,12 @@ impl CanGeneratePrivateKey for App {
 
 impl CanMakePrivateKeyFile for App {
     fn make_private_key_file(&self, private_key: PrivateKey) -> Self::PrivateKeyFile {
+        private_key
+    }
+}
+
+impl CanMakeP2pKeyFile for App {
+    fn make_p2p_key_file(&self, private_key: PrivateKey) -> Self::P2pKeyFile {
         private_key
     }
 }

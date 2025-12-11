@@ -26,14 +26,13 @@ docs-serve:
 # Testnet (local deployment)
 
 testnet-start: testnet-clean build
-	./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet
+	./scripts/generate_testnet_config.sh --nodes 3 --testnet-config-dir .testnet
 	cargo run --bin emerald -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt
 	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
-	docker compose up -d reth0 reth1 reth2 reth3 prometheus grafana otterscan
-	./scripts/add_peers.sh --nodes 4
+
 	@echo 👉 Grafana dashboard is available at http://localhost:4000
-	bash scripts/spawn.bash --nodes 4 --home nodes --no-delay
+	bash scripts/spawn.bash --nodes 3 --home nodes --no-delay
 
 sync: testnet-clean build
 	./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet

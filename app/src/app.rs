@@ -1,6 +1,7 @@
 use alloy_primitives::{address, Address};
 use alloy_provider::ProviderBuilder;
 use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
+use alloy_rpc_types_eth::BlockNumberOrTag;
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre, OptionExt};
 use malachitebft_app_channel::app::engine::host::Next;
@@ -103,18 +104,19 @@ pub async fn initialize_state_from_existing_block(
 
 pub async fn read_validators_from_contract(
     eth_url: &str,
-    block_hash: &BlockHash,
+    _block_hash: &BlockHash,
 ) -> eyre::Result<ValidatorSet> {
     let provider = ProviderBuilder::new().on_builtin(eth_url).await?;
-
+    debug!("Queried contract1");
     let validator_manager_contract =
         ValidatorManager::new(GENESIS_VALIDATOR_MANAGER_ACCOUNT, provider);
 
-    let genesis_validator_set_sol = validator_manager_contract
+    let genesis_validator_set_sol1 = validator_manager_contract
         .getValidators()
-        .block((*block_hash).into())
-        .call()
-        .await?;
+        .block((BlockNumberOrTag::Latest).into());
+    debug!("Queried contract2");
+    let genesis_validator_set_sol = genesis_validator_set_sol1.call().await?;
+    debug!("Queried contract");
 
     let validators = genesis_validator_set_sol
         .validators

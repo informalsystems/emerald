@@ -35,9 +35,9 @@ jobs:
         with:
           filters: |
             code:
-              - '**/*.go'
+              - '**/*.rs'
               - 'Makefile'
-              - 'go.*'
+              - 'rs.*'
       - name: Checkout
         uses: actions/checkout@v5
         with:

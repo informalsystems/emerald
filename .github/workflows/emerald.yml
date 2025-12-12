@@ -30,14 +30,6 @@ jobs:
     name: Block Production
     runs-on: ubuntu-latest
     steps:
-      - id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            code:
-              - '**/*.rs'
-              - 'Makefile'
-              - 'rs.*'
       - name: Checkout
         uses: actions/checkout@v5
         with:

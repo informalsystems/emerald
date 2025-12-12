@@ -1,0 +1,1 @@
+- Allow nodes to sync to higher heights ([#13](https://github.com/informalsystems/emerald/issues/13))

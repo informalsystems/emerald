@@ -1,0 +1,1 @@
+- Reth is forced to persist every block ([#125](https://github.com/informalsystems/emerald/pull/125))

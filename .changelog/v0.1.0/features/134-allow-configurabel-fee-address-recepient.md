@@ -1,0 +1,1 @@
+- Fee address recepient is now configurable ([#134](https://github.com/informalsystems/emerald/pull/134))

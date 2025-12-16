@@ -3,8 +3,8 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use alloy_rpc_types_engine::{
-    ExecutionPayloadEnvelopeV3, ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated,
-    PayloadAttributes, PayloadId as AlloyPayloadId, PayloadStatus,
+    ExecutionPayloadEnvelopeV3, ExecutionPayloadEnvelopeV5, ExecutionPayloadV3, ForkchoiceState,
+    ForkchoiceUpdated, PayloadAttributes, PayloadId as AlloyPayloadId, PayloadStatus,
 };
 use color_eyre::eyre;
 use malachitebft_eth_types::{BlockHash, B256};
@@ -26,6 +26,7 @@ pub const ENGINE_GET_PAYLOAD_V1: &str = "engine_getPayloadV1";
 pub const ENGINE_GET_PAYLOAD_V2: &str = "engine_getPayloadV2";
 pub const ENGINE_GET_PAYLOAD_V3: &str = "engine_getPayloadV3";
 pub const ENGINE_GET_PAYLOAD_V4: &str = "engine_getPayloadV4";
+pub const ENGINE_GET_PAYLOAD_V5: &str = "engine_getPayloadV5";
 pub const ENGINE_GET_PAYLOAD_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub const ENGINE_FORKCHOICE_UPDATED_V1: &str = "engine_forkchoiceUpdatedV1";
@@ -44,6 +45,7 @@ pub const ENGINE_GET_CLIENT_VERSION_V1: &str = "engine_getClientVersionV1";
 pub const ENGINE_GET_CLIENT_VERSION_TIMEOUT: Duration = Duration::from_secs(1);
 
 pub const ENGINE_GET_BLOBS_V1: &str = "engine_getBlobsV1";
+pub const ENGINE_GET_BLOBS_V2: &str = "engine_getBlobsV2";
 pub const ENGINE_GET_BLOBS_TIMEOUT: Duration = Duration::from_secs(1);
 
 // Engine API methods supported by this implementation
@@ -56,7 +58,7 @@ pub static NODE_CAPABILITIES: &[&str] = &[
     // ENGINE_GET_PAYLOAD_V2,
     // ENGINE_GET_PAYLOAD_V3,
     ENGINE_GET_PAYLOAD_V4,
-    // ENGINE_GET_PAYLOAD_V5,
+    ENGINE_GET_PAYLOAD_V5,
     // ENGINE_FORKCHOICE_UPDATED_V1,
     // ENGINE_FORKCHOICE_UPDATED_V2,
     ENGINE_FORKCHOICE_UPDATED_V3,
@@ -82,8 +84,15 @@ pub struct EngineCapabilities {
     pub get_payload_v2: bool,
     pub get_payload_v3: bool,
     pub get_payload_v4: bool,
+    pub get_payload_v5: bool,
     pub get_client_version_v1: bool,
     pub get_blobs_v1: bool,
+    pub get_blobs_v2: bool,
+}
+
+pub enum Fork {
+    Osaka,
+    Prague,
 }
 
 // RPC client for connecting to Engine RPC endpoint with JWT authentication.
@@ -167,8 +176,10 @@ impl EngineRPC {
             get_payload_v2: capabilities.contains(ENGINE_GET_PAYLOAD_V2),
             get_payload_v3: capabilities.contains(ENGINE_GET_PAYLOAD_V3),
             get_payload_v4: capabilities.contains(ENGINE_GET_PAYLOAD_V4),
+            get_payload_v5: capabilities.contains(ENGINE_GET_PAYLOAD_V5),
             get_client_version_v1: capabilities.contains(ENGINE_GET_CLIENT_VERSION_V1),
             get_blobs_v1: capabilities.contains(ENGINE_GET_BLOBS_V1),
+            get_blobs_v2: capabilities.contains(ENGINE_GET_BLOBS_V2),
         })
     }
 
@@ -197,15 +208,30 @@ impl EngineRPC {
     pub async fn get_payload(
         &self,
         payload_id: AlloyPayloadId,
+        fork: Fork,
     ) -> eyre::Result<ExecutionPayloadV3> {
-        let response: ExecutionPayloadEnvelopeV3 = self
-            .rpc_request(
-                ENGINE_GET_PAYLOAD_V4,
-                json!([payload_id]),
-                ENGINE_GET_PAYLOAD_TIMEOUT,
-            )
-            .await?;
-        Ok(response.execution_payload)
+        match fork {
+            Fork::Osaka => {
+                let response: ExecutionPayloadEnvelopeV5 = self
+                    .rpc_request(
+                        ENGINE_GET_PAYLOAD_V5,
+                        json!([payload_id]),
+                        ENGINE_GET_PAYLOAD_TIMEOUT,
+                    )
+                    .await?;
+                Ok(response.execution_payload)
+            }
+            Fork::Prague => {
+                let response: ExecutionPayloadEnvelopeV3 = self
+                    .rpc_request(
+                        ENGINE_GET_PAYLOAD_V4,
+                        json!([payload_id]),
+                        ENGINE_GET_PAYLOAD_TIMEOUT,
+                    )
+                    .await?;
+                Ok(response.execution_payload)
+            }
+        }
     }
 
     pub async fn new_payload(

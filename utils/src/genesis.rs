@@ -208,6 +208,7 @@ pub(crate) fn generate_evm_genesis(
             shanghai_time: Some(0),
             cancun_time: Some(0),
             prague_time: Some(0),
+            osaka_time: Some(0),
             terminal_total_difficulty: Some(U256::ZERO),
             terminal_total_difficulty_passed: true,
             ..Default::default()

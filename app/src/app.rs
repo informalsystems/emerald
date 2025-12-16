@@ -31,6 +31,11 @@ alloy_sol_types::sol!(
 use crate::state::{assemble_value_from_parts, decode_value, extract_block_header, State};
 use crate::sync_handler::{get_decided_value_for_sync, validate_payload};
 
+pub fn get_fork() -> Fork {
+    // TODO: Determine fork based on timestamp or configuration
+    Fork::Osaka
+}
+
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
     // Get the genesis block from the execution engine
     let genesis_block = engine
@@ -340,7 +345,7 @@ pub async fn run(
                                     &Some(latest_block),
                                     &emerald_config.retry_config,
                                     &emerald_config.fee_recipient,
-                                    Fork::Osaka,
+                                    get_fork(),
                                 )
                                 .await?;
 

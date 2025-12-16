@@ -45,6 +45,7 @@ pub const ENGINE_GET_CLIENT_VERSION_V1: &str = "engine_getClientVersionV1";
 pub const ENGINE_GET_CLIENT_VERSION_TIMEOUT: Duration = Duration::from_secs(1);
 
 pub const ENGINE_GET_BLOBS_V1: &str = "engine_getBlobsV1";
+pub const ENGINE_GET_BLOBS_V2: &str = "engine_getBlobsV2";
 pub const ENGINE_GET_BLOBS_TIMEOUT: Duration = Duration::from_secs(1);
 
 // Engine API methods supported by this implementation
@@ -86,6 +87,7 @@ pub struct EngineCapabilities {
     pub get_payload_v5: bool,
     pub get_client_version_v1: bool,
     pub get_blobs_v1: bool,
+    pub get_blobs_v2: bool,
 }
 
 pub enum Fork {
@@ -177,6 +179,7 @@ impl EngineRPC {
             get_payload_v5: capabilities.contains(ENGINE_GET_PAYLOAD_V5),
             get_client_version_v1: capabilities.contains(ENGINE_GET_CLIENT_VERSION_V1),
             get_blobs_v1: capabilities.contains(ENGINE_GET_BLOBS_V1),
+            get_blobs_v2: capabilities.contains(ENGINE_GET_BLOBS_V2),
         })
     }
 

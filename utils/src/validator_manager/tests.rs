@@ -104,8 +104,8 @@ async fn test_anvil_storage_comparison() -> eyre::Result<()> {
             .get_storage_at(contract_address, (*slot).into())
             .await?;
         assert_eq!(
-            actual_value,
-            (*expected_value).into(),
+            actual_value.to_be_bytes::<32>(),
+            (*expected_value),
             "Storage mismatch at slot {slot}",
         );
     }

@@ -10,6 +10,7 @@ use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
 use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
 use malachitebft_eth_cli::config::EmeraldConfig;
 use malachitebft_eth_engine::engine::Engine;
+use malachitebft_eth_engine::engine_rpc::Fork;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::secp256k1::PublicKey;
 use malachitebft_eth_types::{Block, BlockHash, EmeraldContext, Height, Validator, ValidatorSet};
@@ -105,7 +106,7 @@ pub async fn read_validators_from_contract(
     eth_url: &str,
     block_hash: &BlockHash,
 ) -> eyre::Result<ValidatorSet> {
-    let provider = ProviderBuilder::new().on_builtin(eth_url).await?;
+    let provider = ProviderBuilder::new().connect(eth_url).await?;
 
     let validator_manager_contract =
         ValidatorManager::new(GENESIS_VALIDATOR_MANAGER_ACCOUNT, provider);
@@ -117,7 +118,6 @@ pub async fn read_validators_from_contract(
         .await?;
 
     let validators = genesis_validator_set_sol
-        .validators
         .into_iter()
         .map(
             |ValidatorManager::ValidatorInfo {
@@ -334,11 +334,13 @@ pub async fn run(
 
                             let latest_block =
                                 state.latest_block.expect("Head block hash is not set");
+                            // TODO: Determine fork based on timestamp or configuration
                             let execution_payload = engine
                                 .generate_block(
                                     &Some(latest_block),
                                     &emerald_config.retry_config,
                                     &emerald_config.fee_recipient,
+                                    Fork::Osaka,
                                 )
                                 .await?;
 

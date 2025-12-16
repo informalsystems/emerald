@@ -8,7 +8,7 @@ use color_eyre::eyre;
 use malachitebft_eth_types::{Address, BlockHash, RetryConfig, B256};
 use tracing::{debug, warn};
 
-use crate::engine_rpc::EngineRPC;
+use crate::engine_rpc::{EngineRPC, Fork};
 use crate::ethereum_rpc::EthereumRPC;
 use crate::json_structures::{ExecutionBlock, SyncStatus};
 /// RPC client for Engine API.
@@ -124,6 +124,7 @@ impl Engine {
         latest_block: &Option<ExecutionBlock>,
         retry_config: &RetryConfig,
         fee_recipient: &Address,
+        fork: Fork,
     ) -> eyre::Result<ExecutionPayloadV3> {
         debug!("🟠 generate_block on top of {:?}", latest_block);
         let payload_attributes: PayloadAttributes;
@@ -176,7 +177,7 @@ impl Engine {
                 assert!(payload_id.is_some(), "Payload ID should be Some!");
                 let payload_id = payload_id.unwrap();
                 // See how payload is constructed: https://github.com/ethereum/consensus-specs/blob/v1.1.5/specs/merge/validator.md#block-proposal
-                Ok(self.api.get_payload(payload_id).await?)
+                Ok(self.api.get_payload(payload_id, fork).await?)
             }
             status => Err(eyre::eyre!("Invalid payload status: {}", status)),
         }

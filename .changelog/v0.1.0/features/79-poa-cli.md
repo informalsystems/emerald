@@ -1,0 +1,1 @@
+- CLI to manipulate validator set ([#79](https://github.com/informalsystems/emerald/issues/79))

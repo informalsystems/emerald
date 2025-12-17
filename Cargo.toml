@@ -2,7 +2,6 @@
 resolver = "2"
 
 members = [
-  "bin",
   "app",
   "cli",
   "engine",
@@ -49,7 +48,7 @@ redundant_clone               = "deny"
 std_instead_of_core           = "deny"
 
 [workspace.dependencies]
-emerald-app             = { version = "0.0.1", path = "app" }
+emerald                 = { version = "0.0.1", path = "app" }
 malachitebft-eth-cli    = { version = "0.0.1", path = "cli" }
 malachitebft-eth-engine = { version = "0.0.1", path = "engine" }
 malachitebft-eth-types  = { version = "0.0.1", path = "types" }

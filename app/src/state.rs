@@ -1,6 +1,7 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
+use std::collections::VecDeque;
 use std::fmt;
 
 use alloy_rpc_types_engine::ExecutionPayloadV3;
@@ -71,6 +72,9 @@ const BLOCK_SIZE: usize = 10 * 1024 * 1024; // 10 MiB
 /// Size of chunks in which the data is split for streaming
 const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB
 
+/// Maximum number of validator sets to cache for recent heights
+const VALIDATOR_SETS_CACHE_SIZE: usize = 3;
+
 /// Represents the internal state of the application node
 /// Contains information about current height, round, proposals and blocks
 pub struct State {
@@ -90,7 +94,7 @@ pub struct State {
 
     pub latest_block: Option<ExecutionBlock>,
 
-    validator_set: Option<ValidatorSet>,
+    validator_sets: VecDeque<(Height, ValidatorSet)>,
 
     // Cache for tracking recently validated payloads to avoid duplicate validation
     validated_payload_cache: ValidatedPayloadCache,
@@ -119,6 +123,8 @@ pub enum SignatureVerificationError {
     ProposerNotFound,
     /// Indicates that the signature in the `Fin` part is invalid.
     InvalidSignature,
+    /// Validator set not found for the given height
+    ValidatorSetNotFound { _height: Height },
 }
 
 /// Represents errors that can occur during proposal validation.
@@ -128,6 +134,8 @@ pub enum ProposalValidationError {
     WrongProposer { actual: Address, expected: Address },
     /// Signature verification errors
     Signature(SignatureVerificationError),
+    /// Validator set not found for the given height
+    ValidatorSetNotFound { height: Height },
 }
 
 impl fmt::Display for ProposalValidationError {
@@ -138,6 +146,9 @@ impl fmt::Display for ProposalValidationError {
             }
             Self::Signature(err) => {
                 write!(f, "Signature verification failed: {err:?}")
+            }
+            Self::ValidatorSetNotFound { height } => {
+                write!(f, "Validator set not found for height {height}")
             }
         }
     }
@@ -201,7 +212,7 @@ impl State {
             rng: StdRng::seed_from_u64(seed_from_address(&address)),
 
             latest_block: None,
-            validator_set: None,
+            validator_sets: VecDeque::with_capacity(VALIDATOR_SETS_CACHE_SIZE),
 
             validated_payload_cache: ValidatedPayloadCache::new(10),
 
@@ -262,7 +273,9 @@ impl State {
         let round = parts.round;
 
         // Get the expected proposer for this height and round
-        let validator_set = self.get_validator_set(); // TODO: Should pass height as a parameter
+        let validator_set = self
+            .get_validator_set(height)
+            .ok_or(ProposalValidationError::ValidatorSetNotFound { height })?;
         let expected_proposer = self
             .ctx
             .select_proposer(validator_set, height, round)
@@ -312,7 +325,11 @@ impl State {
         };
 
         // Retrieve the proposer from the validator set for the given height
-        let validator_set = self.get_validator_set(); // TODO: Should pass height as a parameter
+        let validator_set = self.get_validator_set(parts.height).ok_or(
+            SignatureVerificationError::ValidatorSetNotFound {
+                _height: parts.height,
+            },
+        )?;
         let proposer = validator_set
             .get_by_address(&parts.proposer)
             .ok_or(SignatureVerificationError::ProposerNotFound)?;
@@ -781,16 +798,29 @@ impl State {
         parts
     }
 
-    /// Returns the set of validators.
-    pub fn get_validator_set(&self) -> &ValidatorSet {
-        self.validator_set
-            .as_ref()
-            .expect("Validator set must be initialized before use")
+    /// Returns the set of validators for the given consensus height.
+    pub fn get_validator_set(&self, height: Height) -> Option<&ValidatorSet> {
+        self.validator_sets
+            .iter()
+            .find(|(h, _)| *h == height)
+            .map(|(_, vs)| vs)
     }
 
-    /// Sets the validator set.
-    pub fn set_validator_set(&mut self, validator_set: ValidatorSet) {
-        self.validator_set = Some(validator_set);
+    /// Sets the validator set for the given consensus height.
+    pub fn set_validator_set(&mut self, height: Height, validator_set: ValidatorSet) {
+        // Check if this height already exists in the cache
+        if let Some(pos) = self.validator_sets.iter().position(|(h, _)| *h == height) {
+            // Update existing entry
+            self.validator_sets[pos] = (height, validator_set);
+        } else {
+            // Add new entry
+            self.validator_sets.push_back((height, validator_set));
+
+            // Ensure cache doesn't exceed max size by removing oldest entry
+            if self.validator_sets.len() > VALIDATOR_SETS_CACHE_SIZE {
+                self.validator_sets.pop_front();
+            }
+        }
     }
 }
 

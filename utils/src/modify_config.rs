@@ -9,39 +9,41 @@ pub fn apply_custom_config(
     custom_config_file_path: &Path,
 ) -> Result<()> {
     // Read and parse the custom config file
-    let custom_config_contents = fs::read_to_string(custom_config_file_path)
-        .context(format!(
-            "Failed to read custom config file: {}",
-            custom_config_file_path.display()
-        ))?;
+    let custom_config_contents = fs::read_to_string(custom_config_file_path).context(format!(
+        "Failed to read custom config file: {}",
+        custom_config_file_path.display()
+    ))?;
 
-    let custom_config: toml::Table = toml::from_str(&custom_config_contents)
-        .context("Failed to parse custom config file")?;
+    let custom_config: toml::Table =
+        toml::from_str(&custom_config_contents).context("Failed to parse custom config file")?;
 
-    println!("Reading custom config from: {}", custom_config_file_path.display());
+    println!(
+        "Reading custom config from: {}",
+        custom_config_file_path.display()
+    );
     println!("Node config home: {}", node_config_home.display());
-    println!("Number of nodes: {}", num_nodes);
+    println!("Number of nodes: {num_nodes}");
     println!();
 
     let mut success_count = 0;
 
     // Process each node
     for node_num in 0..num_nodes {
-        let node_key = format!("node{}", node_num);
+        let node_key = format!("node{node_num}");
 
         // Check if there's a custom config for this node
         if !custom_config.contains_key(&node_key) {
-            println!("Warning: No custom config found for node {}, skipping", node_num);
+            println!("Warning: No custom config found for node {node_num}, skipping");
             continue;
         }
 
-        println!("Processing node {}...", node_num);
+        println!("Processing node {node_num}...");
 
         // Extract the node's custom configuration
         let node_custom_config = match extract_node_config(&custom_config, &node_key) {
             Ok(config) => config,
             Err(e) => {
-                eprintln!("Error extracting config for node {}: {}", node_num, e);
+                eprintln!("Error extracting config for node {node_num}: {e}");
                 continue;
             }
         };
@@ -52,14 +54,14 @@ pub fn apply_custom_config(
                 success_count += 1;
             }
             Err(e) => {
-                eprintln!("Error applying config to node {}: {}", node_num, e);
+                eprintln!("Error applying config to node {node_num}: {e}");
             }
         }
 
         println!();
     }
 
-    println!("Successfully updated {}/{} node configurations", success_count, num_nodes);
+    println!("Successfully updated {success_count}/{num_nodes} node configurations");
 
     Ok(())
 }
@@ -68,9 +70,9 @@ pub fn apply_custom_config(
 fn extract_node_config(custom_config: &toml::Table, node_key: &str) -> Result<toml::Table> {
     let node_section = custom_config
         .get(node_key)
-        .context(format!("Node section '{}' not found", node_key))?
+        .context(format!("Node section '{node_key}' not found"))?
         .as_table()
-        .context(format!("Node section '{}' is not a table", node_key))?;
+        .context(format!("Node section '{node_key}' is not a table"))?;
 
     let mut config = toml::Table::new();
 
@@ -107,28 +109,38 @@ fn apply_config_to_node(
     }
 
     // Read existing config
-    let existing_config_contents = fs::read_to_string(&config_path)
-        .context(format!("Failed to read config file: {}", config_path.display()))?;
+    let existing_config_contents = fs::read_to_string(&config_path).context(format!(
+        "Failed to read config file: {}",
+        config_path.display()
+    ))?;
 
     let mut existing_config: toml::Table = toml::from_str(&existing_config_contents)
         .context("Failed to parse existing config file")?;
 
     // Create backup
     let backup_path = config_path.with_extension("toml.bak");
-    fs::copy(&config_path, &backup_path)
-        .context(format!("Failed to create backup at {}", backup_path.display()))?;
+    fs::copy(&config_path, &backup_path).context(format!(
+        "Failed to create backup at {}",
+        backup_path.display()
+    ))?;
 
     // Merge custom config into existing config
     deep_merge(&mut existing_config, custom_config);
 
     // Write updated config back to file
-    let updated_config_str = toml::to_string_pretty(&existing_config)
-        .context("Failed to serialize updated config")?;
+    let updated_config_str =
+        toml::to_string_pretty(&existing_config).context("Failed to serialize updated config")?;
 
-    fs::write(&config_path, updated_config_str)
-        .context(format!("Failed to write config file: {}", config_path.display()))?;
+    fs::write(&config_path, updated_config_str).context(format!(
+        "Failed to write config file: {}",
+        config_path.display()
+    ))?;
 
-    println!("Updated config for node {} at {}", node_num, config_path.display());
+    println!(
+        "Updated config for node {} at {}",
+        node_num,
+        config_path.display()
+    );
 
     Ok(())
 }
@@ -138,10 +150,9 @@ fn deep_merge(base: &mut toml::Table, update: &toml::Table) {
     for (key, value) in update {
         if let Some(base_value) = base.get_mut(key) {
             // If both are tables, merge recursively
-            if let (Some(base_table), Some(update_table)) = (
-                base_value.as_table_mut(),
-                value.as_table(),
-            ) {
+            if let (Some(base_table), Some(update_table)) =
+                (base_value.as_table_mut(), value.as_table())
+            {
                 deep_merge(base_table, update_table);
                 continue;
             }

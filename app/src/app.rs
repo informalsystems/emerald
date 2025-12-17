@@ -34,7 +34,7 @@ use crate::sync_handler::{get_decided_value_for_sync, validate_payload};
 
 pub fn get_fork() -> Fork {
     // TODO: Determine fork based on timestamp or configuration
-    Fork::Osaka
+    Fork::Prague
 }
 
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {

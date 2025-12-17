@@ -30,7 +30,6 @@ testnet-start: testnet-clean build
 	cargo run --bin emerald -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt
 	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
-
 	@echo 👉 Grafana dashboard is available at http://localhost:4000
 	bash scripts/spawn.bash --nodes 3 --home nodes --no-delay
 

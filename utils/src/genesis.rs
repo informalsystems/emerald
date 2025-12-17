@@ -22,6 +22,11 @@ use crate::validator_manager::{generate_storage_data, Validator};
 /// EIP-4788 Beacon Roots Contract address
 const BEACON_ROOTS_ADDRESS: Address = address!("0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02");
 
+// TODO: This should be removed or parametrized per chain when Emerald starts supporting PoS.
+// This address is the address of the Etherium smart contract that handles staking.
+const ETH_DEPOSITS_CONTRACT_ADDRESS: Address =
+    address!("0x00000000219ab540356cbb839cbe05303d7705fa");
+
 /// EIP-4788 Beacon Roots Contract bytecode
 /// See: https://eips.ethereum.org/EIPS/eip-4788
 const BEACON_ROOTS_CODE: [u8; 97] = hex!("0x3373fffffffffffffffffffffffffffffffffffffffe14604d57602036146024575f5ffd5b5f35801560495762001fff810690815414603c575f5ffd5b62001fff01545f5260205ff35b5f5ffd5b62001fff42064281555f359062001fff015500");
@@ -208,9 +213,12 @@ pub(crate) fn generate_evm_genesis(
             shanghai_time: Some(0),
             cancun_time: Some(0),
             prague_time: Some(0),
-            osaka_time: Some(0),
+            // osaka_time: Some(0),
             terminal_total_difficulty: Some(U256::ZERO),
             terminal_total_difficulty_passed: true,
+            // This was added only because Ethrex requires this to exist
+            // TODO remove until Emerald supports PoS
+            deposit_contract_address: Some(ETH_DEPOSITS_CONTRACT_ADDRESS),
             ..Default::default()
         },
         alloc,

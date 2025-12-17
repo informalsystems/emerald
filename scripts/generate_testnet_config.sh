@@ -15,6 +15,13 @@ Optional arguments:
                           If provided, the number of nodes is inferred from the number of keys
     --fee-recipient        Fee recipient address
 
+    --custom-config-path  Path to .toml file containing IP addresses of the nodes. This IP will be used instead
+                          of localhost for reth and eth authethication. Make sure they match the listening IPs of
+                          your execution client. 
+                          Sample format of file
+                          [node0]
+                          ip = "168.0.4.2"
+
 Note: Either --nodes or --node-keys must be provided
 EOF
     exit 2

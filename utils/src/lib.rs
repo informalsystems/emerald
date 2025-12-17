@@ -6,6 +6,7 @@ use reqwest::Url;
 use spammer::Spammer;
 
 pub mod genesis;
+pub mod modify_config;
 pub mod poa;
 pub mod spammer;
 pub mod tx;
@@ -41,6 +42,7 @@ impl Cli {
             Commands::Spam(spam_cmd) => spam_cmd.run().await,
             Commands::Poa(poa_cmd) => poa_cmd.run().await,
             Commands::SpamContract(spam_contract_cmd) => spam_contract_cmd.run().await,
+            Commands::ModifyConfig(modify_config_cmd) => modify_config_cmd.run(),
         }
     }
 }
@@ -117,6 +119,10 @@ pub enum Commands {
     /// Spam contract transactions
     #[command(arg_required_else_help = true)]
     SpamContract(SpamContractCmd),
+
+    /// Apply custom node configurations from a TOML file
+    #[command(arg_required_else_help = true)]
+    ModifyConfig(ModifyConfigCmd),
 }
 
 #[derive(Parser, Debug, Clone, Default, PartialEq)]
@@ -337,5 +343,30 @@ impl SpamContractCmd {
         Spammer::new_contract(url, *signer_index, config, contract, function, args)?
             .run()
             .await
+    }
+}
+
+#[derive(Parser, Debug, Clone, PartialEq)]
+pub struct ModifyConfigCmd {
+    /// Path to the directory containing node configurations (e.g., 'nodes')
+    #[clap(long, value_hint = ValueHint::DirPath)]
+    node_config_home: std::path::PathBuf,
+
+    /// Number of nodes to configure
+    #[clap(long)]
+    num_nodes: usize,
+
+    /// Path to the custom TOML configuration file (e.g., 'assets/emerald_p2p_config.toml')
+    #[clap(long, value_hint = ValueHint::FilePath)]
+    custom_config_file_path: std::path::PathBuf,
+}
+
+impl ModifyConfigCmd {
+    pub fn run(&self) -> Result<()> {
+        modify_config::apply_custom_config(
+            &self.node_config_home,
+            self.num_nodes,
+            &self.custom_config_file_path,
+        )
     }
 }

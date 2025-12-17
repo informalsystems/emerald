@@ -76,7 +76,7 @@ const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB
 pub struct State {
     #[allow(dead_code)]
     ctx: EmeraldContext,
-    signing_provider: K256Provider,
+    pub signing_provider: K256Provider,
     address: Address,
     pub store: Store,
     stream_nonce: u32,

@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use clap::Args;
 use color_eyre::eyre::{ensure, Context, Result};
 use malachitebft_eth_types::secp256k1::PrivateKey;
+use tracing::info;
 
 /// Extract the validator's secp256k1 public key (without the 0x04 prefix) from a file containing a Secp256k1 private key
 #[derive(Args, Clone, Debug)]
@@ -41,7 +42,7 @@ impl ShowPubkeyCmd {
         );
 
         // Trim the leading 0x04 prefix so the caller receives the 64-byte (x || y) payload.
-        println!("0x{}", hex::encode(&uncompressed[1..]));
+        info!("0x{}", hex::encode(&uncompressed[1..]));
 
         Ok(())
     }

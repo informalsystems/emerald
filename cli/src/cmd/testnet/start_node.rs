@@ -97,7 +97,10 @@ impl TestnetStartNodeCmd {
         debug!("Checking custom-reth installation");
         match reth::check_installation(&self.custom_reth_bin) {
             Ok(version) => {
-                info!("Custom-reth installation verified: {}", version.lines().next().unwrap_or(&version));
+                info!(
+                    "Custom-reth installation verified: {}",
+                    version.lines().next().unwrap_or(&version)
+                );
             }
             Err(e) => {
                 warn!("Custom-reth installation check failed");

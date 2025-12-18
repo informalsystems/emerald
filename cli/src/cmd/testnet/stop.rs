@@ -17,10 +17,7 @@ impl TestnetStopCmd {
         info!("Stopping all testnet nodes");
 
         if !home_dir.exists() {
-            warn!(
-                "Testnet directory does not exist at {}",
-                home_dir.display()
-            );
+            warn!("Testnet directory does not exist at {}", home_dir.display());
             return Ok(());
         }
 

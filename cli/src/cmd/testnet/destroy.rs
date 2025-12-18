@@ -20,10 +20,7 @@ impl TestnetDestroyCmd {
     /// Execute the destroy command
     pub fn run(&self, home_dir: &Path) -> Result<()> {
         if !home_dir.exists() {
-            warn!(
-                "Testnet directory does not exist at {}",
-                home_dir.display()
-            );
+            warn!("Testnet directory does not exist at {}", home_dir.display());
             return Ok(());
         }
 

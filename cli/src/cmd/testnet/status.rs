@@ -83,10 +83,12 @@ impl TestnetStatusCmd {
             }
         }
 
-        info!("Summary:");
-        info!("  Total nodes:    {node_count}");
-        info!("  Emerald running: {running_emerald}/{node_count}");
-        info!("  Reth running:    {running_reth}/{node_count}");
+        info!(
+            total_nodes=?node_count,
+            emerald_running=?running_emerald,
+            reth_running=?running_reth,
+            "Status"
+        );
 
         Ok(())
     }

@@ -148,27 +148,26 @@ impl TestnetStartCmd {
         let emerald_processes = self.spawn_emerald_nodes(home_dir)?;
         info!("All Emerald nodes started");
 
-        info!("Testnet started successfully!");
-        info!("Status:");
-        info!("  Reth processes: {} running", reth_processes.len());
-        info!("  Emerald processes: {} running", emerald_processes.len());
-        info!("Logs:");
         info!(
-            "  Reth: {}/{{0..{}}}/logs/reth.log",
+            "Testnet started successfully!\n\
+               Status:\n\
+               \tReth processes: {} running\n\
+               \tEmerald processes: {} running\n\
+               Logs:\n\
+               \tReth: {}/{{0..{}}}/logs/reth.log\n\
+               \tEmerald: {}/{{0..{}}}/logs/emerald.log\n\
+               Commands:\n\
+               \temerald testnet status           - Check status of all nodes\n\
+               \temerald testnet stop-node <id>   - Stop a specific node\n\
+               \temerald testnet stop             - Stop all nodes\n\
+               \temerald testnet destroy          - Remove all testnet data",
+            reth_processes.len(),
+            emerald_processes.len(),
+            home_dir.display(),
+            self.nodes - 1,
             home_dir.display(),
             self.nodes - 1
         );
-        info!(
-            "  Emerald: {}/{{0..{}}}/logs/emerald.log",
-            home_dir.display(),
-            self.nodes - 1
-        );
-
-        info!("Commands:");
-        info!("    emerald testnet status           - Check status of all nodes");
-        info!("    emerald testnet stop-node <id>   - Stop a specific node");
-        info!("    emerald testnet stop             - Stop all nodes");
-        info!("    emerald testnet destroy          - Remove all testnet data");
 
         Ok(())
     }

@@ -110,12 +110,15 @@ impl RethNode {
 
         let args = self.build_args();
 
-        info!("Starting Reth node {} on ports:", self.node_id);
-        info!("  HTTP: {}", self.ports.http);
-        info!("  AuthRPC: {}", self.ports.authrpc);
-        info!("  Metrics: {}", self.ports.metrics);
-        info!("  P2P: {}", self.ports.p2p);
-        info!("  Logs: {}", log_file_path.display());
+        info!(
+            node_id = %self.node_id,
+            http_port = %self.ports.http,
+            authrpc_port = %self.ports.authrpc,
+            metrics_port = %self.ports.metrics,
+            p2p_port = %self.ports.p2p,
+            log_file = %log_file_path.display(),
+            "Starting Reth node"
+        );
 
         let pid_file = self
             .home_dir

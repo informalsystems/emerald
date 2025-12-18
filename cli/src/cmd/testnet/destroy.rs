@@ -26,10 +26,10 @@ impl TestnetDestroyCmd {
 
         // Confirm with user unless --force is specified
         if !self.force {
-            warn!("This will stop all nodes and permanently delete all testnet data at:");
-            info!("   {}", home_dir.display());
-            info!("");
-            info!("   Are you sure? (y/N): ");
+            println!("This will stop all nodes and permanently delete all testnet data at:");
+            println!("   {}", home_dir.display());
+            println!("");
+            println!("   Are you sure? (y/N): ");
 
             use std::io::{self, Write};
             io::stdout().flush()?;

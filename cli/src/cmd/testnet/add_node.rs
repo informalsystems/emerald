@@ -58,7 +58,6 @@ impl TestnetAddNodeCmd {
                 );
             }
             Err(e) => {
-                warn!("Custom-reth installation check failed");
                 return Err(e.wrap_err(
                     "Custom reth is not available. Make sure custom-reth/ directory exists and contains a valid reth binary."
                 ));
@@ -141,13 +140,10 @@ impl TestnetAddNodeCmd {
         let emerald_process = self.spawn_emerald_node(home_dir, node_id)?;
         info!("Emerald node started (PID: {})", emerald_process.pid);
 
-        info!("Non-validator node {node_id} added successfully!");
-        info!("Logs:");
-        info!("  Reth: {}/{}/logs/reth.log", home_dir.display(), node_id);
         info!(
-            "  Emerald: {}/{}/logs/emerald.log",
-            home_dir.display(),
-            node_id
+            reth_log=%format!("{}/{}/logs/reth.log", home_dir.display(), node_id),
+            emerald_log=%format!("{}/{}/logs/emerald.log", home_dir.display(), node_id),
+            "Non-validator node {node_id} added successfully!"
         );
 
         Ok(())
@@ -422,7 +418,7 @@ fee_recipient = "{}"
                     debug!("Connected to node {id}");
                     connected += 1;
                 } else {
-                    debug!("Failed to connect to node {id} (skipped)");
+                    warn!("Failed to connect to node {id} (skipped)");
                 }
             }
         }

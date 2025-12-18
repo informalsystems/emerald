@@ -149,17 +149,10 @@ impl TestnetStartNodeCmd {
             let emerald_process = self.spawn_emerald_node(home_dir, self.node_id)?;
             info!("Emerald node started (PID: {})", emerald_process.pid);
 
-            info!("Node {} started successfully!", self.node_id);
-            info!("Logs:");
             info!(
-                "  Reth: {}/{}/logs/reth.log",
-                home_dir.display(),
-                self.node_id
-            );
-            info!(
-                "  Emerald: {}/{}/logs/emerald.log",
-                home_dir.display(),
-                self.node_id
+                reth_log=%format!("{}/{}/logs/reth.log", home_dir.display(), self.node_id),
+                emerald_log=%format!("{}/{}/logs/emerald.log", home_dir.display(), self.node_id),
+                "Node {} started successfully!", self.node_id
             );
         }
 

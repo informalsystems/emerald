@@ -6,6 +6,7 @@ use std::process::Command;
 
 use color_eyre::eyre::{eyre, Context as _};
 use color_eyre::Result;
+use tracing::info;
 
 use super::rpc::RpcClient;
 use super::types::{ProcessHandle, RethNode};
@@ -109,12 +110,12 @@ impl RethNode {
 
         let args = self.build_args();
 
-        println!("Starting Reth node {} on ports:", self.node_id);
-        println!("  HTTP: {}", self.ports.http);
-        println!("  AuthRPC: {}", self.ports.authrpc);
-        println!("  Metrics: {}", self.ports.metrics);
-        println!("  P2P: {}", self.ports.p2p);
-        println!("  Logs: {}", log_file_path.display());
+        info!("Starting Reth node {} on ports:", self.node_id);
+        info!("  HTTP: {}", self.ports.http);
+        info!("  AuthRPC: {}", self.ports.authrpc);
+        info!("  Metrics: {}", self.ports.metrics);
+        info!("  P2P: {}", self.ports.p2p);
+        info!("  Logs: {}", log_file_path.display());
 
         let pid_file = self
             .home_dir

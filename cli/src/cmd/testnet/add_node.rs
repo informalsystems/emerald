@@ -12,7 +12,7 @@ use clap::Parser;
 use color_eyre::eyre::{eyre, Context as _};
 use color_eyre::Result;
 use malachitebft_eth_types::Address;
-use tracing::info;
+use tracing::{debug, info, warn};
 
 use super::reth::{self, RethProcess};
 use super::types::RethNode;
@@ -46,16 +46,16 @@ pub struct TestnetAddNodeCmd {
 impl TestnetAddNodeCmd {
     /// Execute the add-node command
     pub fn run(&self, home_dir: &Path) -> Result<()> {
-        println!("📝 Adding non-validator node to testnet...\n");
+        info!("Adding non-validator node to testnet");
 
         // 1. Check if custom-reth is available
-        print!("Checking custom-reth installation... ");
+        debug!("Checking custom-reth installation");
         match reth::check_installation(&self.custom_reth_bin) {
             Ok(version) => {
-                println!("✓ {}", version.lines().next().unwrap_or(&version));
+                info!("Custom-reth installation verified: {}", version.lines().next().unwrap_or(&version));
             }
             Err(e) => {
-                println!("✗");
+                warn!("Custom-reth installation check failed");
                 return Err(e.wrap_err(
                     "Custom reth is not available. Make sure custom-reth/ directory exists and contains a valid reth binary."
                 ));
@@ -64,26 +64,26 @@ impl TestnetAddNodeCmd {
 
         // 2. Determine the next node ID
         let node_id = self.find_next_node_id(home_dir)?;
-        println!("\n📋 Next available node ID: {node_id}");
+        info!("Next available node ID: {node_id}");
 
         // 3. Create node directories
-        println!("\n📁 Creating node directories...");
+        info!("Creating node directories");
         let node_home = home_dir.join(node_id.to_string());
         let config_dir = node_home.join("config");
         let log_dir = node_home.join("logs");
         fs::create_dir_all(&config_dir)?;
         fs::create_dir_all(&log_dir)?;
-        println!("✓ Node directories created");
+        info!("Node directories created");
 
         // 4. Copy genesis file from existing testnet
-        println!("\n📋 Copying genesis file...");
+        info!("Copying genesis file");
         self.copy_genesis(home_dir, node_id)?;
-        println!("✓ Genesis file copied");
+        info!("Genesis file copied");
 
         // 5. Generate Malachite config
-        println!("\n⚙️  Generating Malachite config...");
+        info!("Generating Malachite config");
         self.generate_malachite_config(home_dir, node_id)?;
-        println!("✓ Malachite config generated");
+        info!("Malachite config generated");
 
         let fee_receiver = if let Some(fee_receiver_str) = &self.fee_receiver {
             Address::from(AlloyAddress::from_str(fee_receiver_str)?)
@@ -92,23 +92,23 @@ impl TestnetAddNodeCmd {
         };
 
         // 6. Generate Emerald config
-        println!("\n⚙️  Generating Emerald config...");
+        info!("Generating Emerald config");
         info!("Will use address `{fee_receiver}` as Fee Receiver address");
         self.generate_emerald_config(home_dir, node_id, fee_receiver)?;
-        println!("✓ Emerald config generated");
+        info!("Emerald config generated");
 
         // 7. Generate private validator key
-        println!("\n🔑 Generating private validator key...");
+        info!("Generating private validator key");
         self.generate_private_key(home_dir, node_id)?;
-        println!("✓ Private validator key generated");
+        info!("Private validator key generated");
 
         // 8. Spawn Reth process
-        println!("\n🔗 Starting Reth execution client...");
+        info!("Starting Reth execution client");
         let reth_process = self.spawn_reth_node(home_dir, node_id)?;
-        println!("✓ Reth node started (PID: {})", reth_process.pid);
+        info!("Reth node started (PID: {})", reth_process.pid);
 
         // 9. Wait for Reth node to be ready
-        println!("\n⏳ Waiting for Reth node to initialize...");
+        info!("Waiting for Reth node to initialize");
         let assets_dir = home_dir.join("assets");
         let reth_node = RethNode::new(
             node_id,
@@ -126,22 +126,22 @@ impl TestnetAddNodeCmd {
                 rpc.get_block_number()
             },
         )?;
-        println!("✓ Reth node ready");
+        info!("Reth node ready");
 
         // 10. Connect to existing peers
-        println!("\n🔗 Connecting to existing peers...");
+        info!("Connecting to existing peers");
         self.connect_to_peers(home_dir, node_id)?;
-        println!("✓ Connected to peers");
+        info!("Connected to peers");
 
         // 11. Spawn Emerald process
-        println!("\n💎 Starting Emerald consensus node...");
+        info!("Starting Emerald consensus node");
         let emerald_process = self.spawn_emerald_node(home_dir, node_id)?;
-        println!("✓ Emerald node started (PID: {})", emerald_process.pid);
+        info!("Emerald node started (PID: {})", emerald_process.pid);
 
-        println!("\n✅ Non-validator node {node_id} added successfully!");
-        println!("\n📁 Logs:");
-        println!("  Reth: {}/{}/logs/reth.log", home_dir.display(), node_id);
-        println!(
+        info!("Non-validator node {node_id} added successfully!");
+        info!("Logs:");
+        info!("  Reth: {}/{}/logs/reth.log", home_dir.display(), node_id);
+        info!(
             "  Emerald: {}/{}/logs/emerald.log",
             home_dir.display(),
             node_id
@@ -414,18 +414,18 @@ fee_recipient = "{}"
             );
             // Try to get enode and connect
             if let Ok(enode) = existing_node.get_enode() {
-                print!("  Connecting to node {id}... ");
+                debug!("Connecting to node {id}");
                 if new_node.add_peer(&enode).is_ok() {
-                    println!("✓");
+                    debug!("Connected to node {id}");
                     connected += 1;
                 } else {
-                    println!("✗ (skipped)");
+                    debug!("Failed to connect to node {id} (skipped)");
                 }
             }
         }
 
         if connected == 0 {
-            println!("  ⚠️  No existing peers found to connect to");
+            warn!("No existing peers found to connect to");
         }
 
         Ok(())

@@ -8,7 +8,7 @@ use std::process::Command;
 use clap::Parser;
 use color_eyre::eyre::{eyre, Context as _};
 use color_eyre::Result;
-use tracing::info;
+use tracing::{debug, info, warn};
 
 use super::reth;
 use super::types::RethNode;
@@ -91,16 +91,16 @@ impl TestnetStartNodeCmd {
             return Ok(());
         }
 
-        println!("🚀 Starting node {}...", self.node_id);
+        info!("Starting node {}", self.node_id);
 
         // Check if custom-reth is available
-        print!("Checking custom-reth installation... ");
+        debug!("Checking custom-reth installation");
         match reth::check_installation(&self.custom_reth_bin) {
             Ok(version) => {
-                println!("✓ {}", version.lines().next().unwrap_or(&version));
+                info!("Custom-reth installation verified: {}", version.lines().next().unwrap_or(&version));
             }
             Err(e) => {
-                println!("✗");
+                warn!("Custom-reth installation check failed");
                 return Err(e.wrap_err(
                     "Custom reth is not available. Make sure custom-reth/ directory exists and contains a valid reth binary or custom-reth binary is in your $PATH."
                 ));
@@ -109,7 +109,7 @@ impl TestnetStartNodeCmd {
 
         // Start Reth process
         if reth_status != NodeStatus::Running {
-            println!("\n🔗 Starting Reth execution client...");
+            info!("Starting Reth execution client");
             let assets_dir = home_dir.join("assets");
             let reth_node = RethNode::new(
                 self.node_id,
@@ -118,10 +118,10 @@ impl TestnetStartNodeCmd {
                 &self.reth_config_path,
             );
             let reth_process = reth_node.spawn(&self.custom_reth_bin)?;
-            println!("✓ Reth node started (PID: {})", reth_process.pid);
+            info!("Reth node started (PID: {})", reth_process.pid);
 
             // Wait for Reth to be ready
-            println!("\n⏳ Waiting for Reth node to initialize...");
+            info!("Waiting for Reth node to initialize");
             let rpc = RpcClient::new(reth_node.ports.http);
             retry_with_timeout(
                 "reth node ready",
@@ -132,28 +132,28 @@ impl TestnetStartNodeCmd {
                     rpc.get_block_number()
                 },
             )?;
-            println!("✓ Reth node ready");
+            info!("Reth node ready");
 
             // Connect to existing peers
-            println!("\n🔗 Connecting to existing peers...");
+            info!("Connecting to existing peers");
             self.connect_to_peers(home_dir, self.node_id)?;
-            println!("✓ Connected to peers");
+            info!("Connected to peers");
         }
 
         // Start Emerald process
         if emerald_status != NodeStatus::Running {
-            println!("\n💎 Starting Emerald consensus node...");
+            info!("Starting Emerald consensus node");
             let emerald_process = self.spawn_emerald_node(home_dir, self.node_id)?;
-            println!("✓ Emerald node started (PID: {})", emerald_process.pid);
+            info!("Emerald node started (PID: {})", emerald_process.pid);
 
-            println!("\n✅ Node {} started successfully!", self.node_id);
-            println!("\n📁 Logs:");
-            println!(
+            info!("Node {} started successfully!", self.node_id);
+            info!("Logs:");
+            info!(
                 "  Reth: {}/{}/logs/reth.log",
                 home_dir.display(),
                 self.node_id
             );
-            println!(
+            info!(
                 "  Emerald: {}/{}/logs/emerald.log",
                 home_dir.display(),
                 self.node_id
@@ -195,18 +195,18 @@ impl TestnetStartNodeCmd {
             );
             // Try to get enode and connect
             if let Ok(enode) = peer_node.get_enode() {
-                print!("  Connecting to node {id}... ");
+                debug!("Connecting to node {id}");
                 if node.add_peer(&enode).is_ok() {
-                    println!("✓");
+                    debug!("Connected to node {id}");
                     connected += 1;
                 } else {
-                    println!("✗ (skipped)");
+                    debug!("Failed to connect to node {id} (skipped)");
                 }
             }
         }
 
         if connected == 0 {
-            println!("  ⚠️  No existing peers found to connect to");
+            warn!("No existing peers found to connect to");
         }
 
         Ok(())

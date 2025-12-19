@@ -2598,6 +2598,7 @@ dependencies = [
  "test-log",
  "thiserror 2.0.17",
  "tokio",
+ "toml",
  "tracing",
  "tracing-subscriber 0.3.22",
  "url",

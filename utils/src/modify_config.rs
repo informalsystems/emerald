@@ -27,7 +27,7 @@ pub fn apply_custom_config(node_config_home: &Path, custom_config_file_path: &Pa
         let node_num = node_key.split("node").last().unwrap().to_string();
         println!("Processing node {node_num}...");
         // Extract the node's custom configuration
-        let node_custom_config = match extract_node_config(&custom_config, &node_key) {
+        let node_custom_config = match extract_node_config(&custom_config, node_key) {
             Ok(config) => config,
             Err(e) => {
                 eprintln!("Error extracting config for node {node_key}: {e}");

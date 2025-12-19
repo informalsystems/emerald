@@ -339,7 +339,6 @@ pub async fn run(
 
                             let latest_block =
                                 state.latest_block.expect("Head block hash is not set");
-                            // TODO: Determine fork based on timestamp or configuration
                             let execution_payload = engine
                                 .generate_block(
                                     &Some(latest_block),

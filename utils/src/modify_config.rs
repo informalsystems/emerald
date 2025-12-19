@@ -3,11 +3,7 @@ use std::fs;
 use std::path::Path;
 
 /// Apply custom node configurations from a TOML file to individual node config files
-pub fn apply_custom_config(
-    node_config_home: &Path,
-    num_nodes: usize,
-    custom_config_file_path: &Path,
-) -> Result<()> {
+pub fn apply_custom_config(node_config_home: &Path, custom_config_file_path: &Path) -> Result<()> {
     // Read and parse the custom config file
     let custom_config_contents = fs::read_to_string(custom_config_file_path).context(format!(
         "Failed to read custom config file: {}",
@@ -22,28 +18,19 @@ pub fn apply_custom_config(
         custom_config_file_path.display()
     );
     println!("Node config home: {}", node_config_home.display());
-    println!("Number of nodes: {num_nodes}");
     println!();
 
     let mut success_count = 0;
 
     // Process each node
-    for node_num in 0..num_nodes {
-        let node_key = format!("node{node_num}");
-
-        // Check if there's a custom config for this node
-        if !custom_config.contains_key(&node_key) {
-            println!("Warning: No custom config found for node {node_num}, skipping");
-            continue;
-        }
-
+    for node_key in custom_config.keys() {
+        let node_num = node_key.split("node").last().unwrap().to_string();
         println!("Processing node {node_num}...");
-
         // Extract the node's custom configuration
         let node_custom_config = match extract_node_config(&custom_config, &node_key) {
             Ok(config) => config,
             Err(e) => {
-                eprintln!("Error extracting config for node {node_num}: {e}");
+                eprintln!("Error extracting config for node {node_key}: {e}");
                 continue;
             }
         };
@@ -54,14 +41,17 @@ pub fn apply_custom_config(
                 success_count += 1;
             }
             Err(e) => {
-                eprintln!("Error applying config to node {node_num}: {e}");
+                eprintln!("Error applying config to node {node_key}: {e}");
             }
         }
 
         println!();
     }
 
-    println!("Successfully updated {success_count}/{num_nodes} node configurations");
+    println!(
+        "Successfully updated {success_count}/{} node configurations",
+        custom_config.keys().len()
+    );
 
     Ok(())
 }
@@ -93,11 +83,11 @@ fn extract_node_config(custom_config: &toml::Table, node_key: &str) -> Result<to
 /// Apply custom configuration to a specific node's config.toml file
 fn apply_config_to_node(
     node_config_home: &Path,
-    node_num: usize,
+    node_num: String,
     custom_config: &toml::Table,
 ) -> Result<()> {
     let config_path = node_config_home
-        .join(node_num.to_string())
+        .join(node_num.clone())
         .join("config")
         .join("config.toml");
 

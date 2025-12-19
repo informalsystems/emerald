@@ -352,10 +352,6 @@ pub struct ModifyConfigCmd {
     #[clap(long, value_hint = ValueHint::DirPath)]
     node_config_home: std::path::PathBuf,
 
-    /// Number of nodes to configure
-    #[clap(long)]
-    num_nodes: usize,
-
     /// Path to the custom TOML configuration file (e.g., 'assets/emerald_p2p_config.toml')
     #[clap(long, value_hint = ValueHint::FilePath)]
     custom_config_file_path: std::path::PathBuf,
@@ -363,10 +359,6 @@ pub struct ModifyConfigCmd {
 
 impl ModifyConfigCmd {
     pub fn run(&self) -> Result<()> {
-        modify_config::apply_custom_config(
-            &self.node_config_home,
-            self.num_nodes,
-            &self.custom_config_file_path,
-        )
+        modify_config::apply_custom_config(&self.node_config_home, &self.custom_config_file_path)
     }
 }

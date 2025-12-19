@@ -66,7 +66,7 @@ Within the home folder for each node there will be a `nodes/0/config/config.toml
 To alter this configuration for more than one node, instead of opening and editing multiple files, you can use the following command:
 
 ```bash
-cargo run --package emerald-utils -- modify-config  --node-config-home nodes --num-nodes 4 --custom-config-file-path assets/emerald_p2p_config.toml
+cargo run --package emerald-utils -- modify-config --node-config-home nodes --custom-config-file-path assets/emerald_p2p_config.toml
 ```
 
 replacing the `node-config-home` with the path to your testnet, `custom-config-file-path` with the path to your custom configuration. An example of the custom configuration file:

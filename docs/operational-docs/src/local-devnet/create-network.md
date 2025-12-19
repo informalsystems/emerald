@@ -61,6 +61,40 @@ curl -X POST http://127.0.0.1:8645 \
     - Create `nodes/0/`, `nodes/1/`, etc.
     - Every node gets a `config/priv_validator_key.json`
 
+Within the home folder for each node there will be a `nodes/0/config/config.toml` file with Malachite specific configuration 
+(see [malachitebft-config.toml](../config-examples/malachitebft-config.toml) for more details).  
+To alter this configuration for more than one node, instead of opening and editing multiple files, you can use the following command:
+
+```bash
+cargo run --package emerald-utils -- modify-config --node-config-home nodes --custom-config-file-path assets/emerald_p2p_config.toml
+```
+
+replacing the `node-config-home` with the path to your testnet, `custom-config-file-path` with the path to your custom configuration. An example of the custom configuration file:
+
+```toml
+[node0]
+ip = "127.0.0.1"
+[node0.consensus.p2p]
+listen_addr =  "/ip4/127.0.0.1/tcp/37000"
+persistent_peers = [
+    "/ip4/127.0.0.1/tcp/37001",
+    "/ip4/127.0.0.1/tcp/27002",
+]
+
+
+[node1]
+ip = "127.0.0.1"
+[node1.consensus.p2p]
+listen_addr =  "/ip4/127.0.0.1/tcp/37001"
+persistent_peers = [
+    "/ip4/127.0.0.1/tcp/27000",
+    "/ip4/127.0.0.1/tcp/27002",
+    "/ip4/127.0.0.1/tcp/27003",
+]
+
+```
+The code above replaces the default `consensus.p2p` section of nodes  0 and 1 to use different ports from the default values.  
+
 5. **Public Key Extraction**
   
     ```bash

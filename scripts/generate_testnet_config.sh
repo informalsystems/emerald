@@ -15,6 +15,13 @@ Optional arguments:
                           If provided, the number of nodes is inferred from the number of keys
     --fee-recipient        Fee recipient address
 
+    --custom-config-path  Path to .toml file containing IP addresses of the nodes. This IP will be used instead
+                          of localhost for reth and eth authethication. Make sure they match the listening IPs of
+                          your execution client. 
+                          Sample format of file
+                          [node0]
+                          ip = "168.0.4.2"
+
 Note: Either --nodes or --node-keys must be provided
 EOF
     exit 2
@@ -24,6 +31,7 @@ nodes=""
 testnet_config_dir=""
 node_keys=()
 fee_recipient="0x4242424242424242424242424242424242424242"
+custom_config_path=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -61,6 +69,15 @@ while [[ $# -gt 0 ]]; do
             ;;
         --fee-recipient=*)
             fee_recipient="${1#*=}"
+            shift
+            ;;
+        --custom-config-path)
+            [[ $# -ge 2 ]] || usage
+            custom_config_path="$2"
+            shift 2
+            ;;
+        --custom-config-path=*)
+            custom_config_path="${1#*=}"
             shift
             ;;
         -h|--help)
@@ -128,6 +145,43 @@ get_auth_port() {
     fi
 }
 
+# Function to get node IP from custom config file
+get_node_ip() {
+    local node_id=$1
+    local config_path="$2"
+
+    # If no custom config path is provided, return localhost
+    if [[ -z "$config_path" || ! -f "$config_path" ]]; then
+        echo "localhost"
+        return
+    fi
+
+    # Extract IP for the specific node from TOML file
+    # Look for [nodeN] section followed by ip = "..." line
+    local ip=$(awk -v node="$node_id" '
+        /^\[node[0-9]+\]/ {
+            if ($0 ~ "\\[node" node "\\]") {
+                in_section = 1
+            } else {
+                in_section = 0
+            }
+        }
+        in_section && /^ip[[:space:]]*=/ {
+            gsub(/^ip[[:space:]]*=[[:space:]]*"/, "")
+            gsub(/".*$/, "")
+            print
+            exit
+        }
+    ' "$config_path")
+
+    # If IP was found, return it; otherwise return localhost
+    if [[ -n "$ip" ]]; then
+        echo "$ip"
+    else
+        echo "localhost"
+    fi
+}
+
 mkdir -p "$TESTNET_DIR"
 mkdir -p "$TESTNET_DIR/config"
 
@@ -179,10 +233,11 @@ for ((i = 0; i < nodes; i++)); do
     mkdir -p "$TESTNET_DIR/config/$i"
     ENGINE_PORT=$(get_engine_port $i)
     AUTH_PORT=$(get_auth_port $i)
+    NODE_IP=$(get_node_ip $i "$custom_config_path")
     cat > "$TESTNET_DIR/config/$i/config.toml" <<EOF
 moniker = "test-$i"
-execution_authrpc_address = "http://localhost:$ENGINE_PORT"
-engine_authrpc_address = "http://localhost:$AUTH_PORT"
+execution_authrpc_address = "http://$NODE_IP:$ENGINE_PORT"
+engine_authrpc_address = "http://$NODE_IP:$AUTH_PORT"
 jwt_token_path = "./assets/jwtsecret"
 sync_timeout_ms = 10000
 sync_initial_delay_ms = 100

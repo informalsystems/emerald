@@ -1,6 +1,7 @@
-use color_eyre::eyre::{Context, ContextCompat, Result};
 use std::fs;
 use std::path::Path;
+
+use color_eyre::eyre::{Context, ContextCompat, Result};
 
 /// Apply custom node configurations from a TOML file to individual node config files
 pub fn apply_custom_config(node_config_home: &Path, custom_config_file_path: &Path) -> Result<()> {

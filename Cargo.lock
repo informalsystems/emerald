@@ -5719,7 +5719,8 @@ dependencies = [
 [[package]]
 name = "quint-connect"
 version = "0.1.0"
-source = "git+ssh://git@github.com/informalsystems/quint-connect.git#1c2c9ac533aff7e00110b05d5d0c0fcae78cacdf"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2518a72e1f89b9d2248d695554f22733fe8600ff8899b33c629502f6b0b516a"
 dependencies = [
  "anyhow",
  "colored",
@@ -5730,12 +5731,14 @@ dependencies = [
  "serde_json",
  "similar",
  "tempfile",
+ "version_check",
 ]
 
 [[package]]
 name = "quint-connect-macros"
 version = "0.1.0"
-source = "git+ssh://git@github.com/informalsystems/quint-connect.git#1c2c9ac533aff7e00110b05d5d0c0fcae78cacdf"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a7be4d8093c3153727edc24112a4693e60aa78650f277f79dd415118b4ee27b"
 dependencies = [
  "proc-macro2",
  "quote",

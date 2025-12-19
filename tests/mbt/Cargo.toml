@@ -30,6 +30,8 @@ toml = "0.8"
 serde_json = "1.0"
 hex = "0.4"
 k256 = { workspace = true }
+bimap = "0.6.3"
+tempfile = "3.23.0"
 
 [dev-dependencies]
 test-log = { version = "0.2", features = ["trace"] }

@@ -1,10 +1,14 @@
 use k256::ecdsa::VerifyingKey;
+use malachitebft_app_channel::app::types::core::VotingPower;
 use malachitebft_eth_types::utils::validators::make_validators_with_individual_seeds;
+
+use emerald_mbt::N_NODES;
 
 fn main() {
     // Generate 3 validators with equal voting power (1 each)
     // Using individual seeds: 0, 1, 2
-    let validators = make_validators_with_individual_seeds([1, 1, 1]);
+    let voting_powers = std::array::repeat::<VotingPower, N_NODES>(1);
+    let validators = make_validators_with_individual_seeds(voting_powers);
 
     // Output public keys in uncompressed hex format (0x + 128 hex chars)
     // This matches the format expected by emerald-utils genesis command

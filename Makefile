@@ -110,7 +110,8 @@ mbt-start-reth: build
 
 mbt-test:
 	@echo "Running MBT tests..."
-	./tests/mbt/run-tests.sh
+	./tests/mbt/run-tests.sh sigle_height_consensus
+	./tests/mbt/run-tests.sh node_crash_after_consensus
 
 mbt-clean:
 	rm -rf ./tests/mbt/.reth-data

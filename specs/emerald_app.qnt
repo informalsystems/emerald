@@ -79,8 +79,9 @@ module emerald_app {
     | DecidedAction({ node: Node, proposal: Proposal })
     | ProcessSyncedValueAction({ node: Node, proposal: Proposal })
     | GetDecidedValueAction({ node: Node, proposal: Proposal })
+    | NodeCrash({ node: Node })
 
-  // Local state for each app node (based on state.rs:76-109)
+  // Local state for each app node
   type StateFields = {
     phase: AppPhase,
     // Current consensus state
@@ -383,9 +384,27 @@ module emerald_app {
     }
   }
 
-  // TODO: Model failures: restart (and crash?)
   // TODO: Implement GetHistoryMinHeight (requires modeling certificate pruning).
   // TODO: Implement RestreamProposal.
+
+  // ===== NodeCrash: A node crashes and comes back without any state =====
+
+  pure def node_crash(ctx: LocalContext): Set[Transition] = {
+    val s = ctx.state
+
+    Set({
+      post_state: initialize(s.process_id),
+      effects: Set(
+        choreo::CustomEffect(RecordAction(
+          NodeCrash({
+            node: s.process_id,
+          })
+        ))
+      )
+    })
+  }
+
+  // TODO: Model node restart
 
   // =============================================================================
   // MAIN LISTENER
@@ -409,6 +428,9 @@ module emerald_app {
       // Synchronization protocol
       choreo::cue(ctx, listen_process_synced_value, handle_process_synced_value),
       choreo::cue(ctx, listen_get_decided_value, handle_get_decided_value),
+
+      // Crash and recovery
+      node_crash(ctx)
     ).flatten()
   }
 
@@ -517,4 +539,7 @@ module emerald_app {
 
   action perform(cue_ctx, upon_fn) =
     choreo::perform(cue_ctx, upon_fn, apply_custom_effect)
+
+  action step_with(node: Node, listener: LocalContext => Set[Transition]): bool =
+    choreo::step_with(node, listener, apply_custom_effect)
 }

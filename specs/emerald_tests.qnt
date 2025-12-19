@@ -1,4 +1,4 @@
-module emerald_test {
+module emerald_tests {
   import basicSpells.* from "spells/basicSpells"
   import rareSpells.* from "spells/rareSpells"
   import emerald_app.* from "emerald_app"
@@ -84,4 +84,61 @@ module emerald_test {
       // get_value (2nd)
       .then("node1".with_cue(listen_get_value, ()).perform(handle_get_value))
       .expect(s.system.get("node1").proposals == Set(firstProposal)) // same proposal
+
+  run emeraldNodeCrashAfterConsensusTest =
+    genesisStart
+      // first consensus
+      .then("node1".with_cue(listen_get_value, ()).perform(handle_get_value))
+      .then("node2".with_cue(listen_received_proposal, firstProposal).perform(handle_received_proposal))
+      .then("node3".with_cue(listen_received_proposal, firstProposal).perform(handle_received_proposal))
+      .then("node1".with_cue(listen_decided, firstProposal).perform(handle_decided))
+      .then("node2".with_cue(listen_decided, firstProposal).perform(handle_decided))
+      .then("node3".with_cue(listen_decided, firstProposal).perform(handle_decided))
+      // node crashes
+      .then("node1".step_with(node_crash))
+      .expect(
+        val st = s.system.get("node1")
+        and {
+          st.phase == Uninitialized,
+          st.current_height == 0,
+          st.current_round == 0,
+          st.proposals.size() == 0,
+          st.latest_block_height == 0,
+          st.latest_block_payload == None
+        }
+      )
+      // node restarts but loses its data
+      .then("node1".with_cue(listen_consensus_ready, ()).perform(handle_consensus_ready))
+      .expect(
+        val st = s.system.get("node1")
+        and {
+          st.phase == Ready,
+          st.current_height == 1,
+          st.current_round == 0,
+          st.proposals == Set()
+        }
+      )
+      // start next height
+      .then("node1".with_cue(listen_started_round, ()).perform(handle_started_round))
+      .then("node2".with_cue(listen_started_round, ()).perform(handle_started_round))
+      .then("node3".with_cue(listen_started_round, ()).perform(handle_started_round))
+      .expect(
+        and {
+          NODES.toSet().forall(node =>
+            s.system.get(node).phase == Working
+          ),
+          s.system.get("node1").current_height == 1, // <- node1 came back at hight 1
+          s.system.get("node2").current_height == 2,
+          s.system.get("node3").current_height == 2
+        }
+      )
+      // get_value
+      .then("node1".with_cue(listen_get_value, ()).perform(handle_get_value))
+      .expect(
+        s.system.get("node1").proposals == Set({
+          ...firstProposal,
+          payload: 1
+        })
+      )
+      // TODO: Model recovery via value sync
 }

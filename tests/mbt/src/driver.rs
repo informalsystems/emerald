@@ -13,7 +13,7 @@ use emerald::node::StateComponents;
 use malachitebft_app_channel::app::streaming::StreamMessage;
 use malachitebft_app_channel::AppMsg;
 use malachitebft_eth_types::{
-    Address, BlockHash, EmeraldContext, ProposalPart, ValueId as EmeraldValueId,
+    Address, BlockHash, EmeraldContext, ProposalPart, Value, ValueId as EmeraldValueId,
 };
 use quint_connect::{switch, Driver, Result, Step};
 use tempfile::TempDir;
@@ -24,6 +24,7 @@ pub struct EmeraldDriver {
     pub nodes: BTreeMap<Node, StateComponents>,
     pub addresses: BiMap<Node, Address>,
     pub proposals: BiMap<Proposal, EmeraldValueId>,
+    pub values: BTreeMap<ValueId, Value>,
     pub streams: BTreeMap<ValueId, Vec<StreamMessage<ProposalPart>>>,
     pub blocks: BiMap<Payload, BlockHash>,
     pub runtime: tokio::runtime::Runtime,
@@ -36,6 +37,7 @@ impl Default for EmeraldDriver {
             nodes: BTreeMap::new(),
             addresses: BiMap::new(),
             proposals: BiMap::new(),
+            values: BTreeMap::new(),
             streams: BTreeMap::new(),
             blocks: BiMap::new(),
             runtime: tokio::runtime::Runtime::new().expect("Failed to create tokio runtime"),
@@ -73,6 +75,9 @@ impl Driver for EmeraldDriver {
             },
             DecidedAction(node, proposal) => {
                 self.handle_decided(node, proposal)
+            },
+            NodeCrash(node) => {
+                self.node_crash(node)
             }
         })
     }

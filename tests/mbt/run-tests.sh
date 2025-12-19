@@ -5,7 +5,6 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$SCRIPT_DIR/../.."
 
 # Colors for output
 RED='\033[0;31m'
@@ -15,26 +14,20 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}=== Emerald MBT Test Runner ===${NC}"
-echo ""
 
 # Check if reth is running
 check_reth() {
-    echo -e "${YELLOW}Checking if Reth is running...${NC}"
-
     if curl -s -X POST -H "Content-Type: application/json" \
         --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
         http://localhost:8545 > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ Reth is running${NC}"
         return 0
     else
-        echo -e "${RED}✗ Reth is not running${NC}"
         return 1
     fi
 }
 
 # Function to wait for reth
 wait_for_reth() {
-    echo -e "${YELLOW}Waiting for Reth to start...${NC}"
     local max_attempts=30
     local attempt=0
 
@@ -43,7 +36,7 @@ wait_for_reth() {
             return 0
         fi
         attempt=$((attempt + 1))
-        echo -e "${YELLOW}  Attempt $attempt/$max_attempts...${NC}"
+        echo -e "${YELLOW}Waiting for Reth to start ($attempt/$max_attempts)...${NC}"
         sleep 2
     done
 
@@ -51,28 +44,46 @@ wait_for_reth() {
     return 1
 }
 
+# Track whether we started reth
+STARTED_RETH=false
+RETH_PID=""
+
+# Function to stop reth if we started it
+cleanup_reth() {
+    if [ "$STARTED_RETH" = true ] && [ -n "$RETH_PID" ]; then
+        echo ""
+        echo -e "${YELLOW}Shutting down Reth (PID: $RETH_PID)...${NC}"
+        kill $RETH_PID 2>/dev/null || true
+        # Wait a moment for graceful shutdown
+        sleep 2
+        # Force kill if still running
+        kill -9 $RETH_PID 2>/dev/null || true
+        echo -e "${GREEN}✓ Reth stopped${NC}"
+    fi
+}
+
+# Set up trap to ensure cleanup on exit
+trap cleanup_reth EXIT
+
 # Check prerequisites
 if ! check_reth; then
-    echo ""
-    echo -e "${YELLOW}Reth is not running. You need to start it first.${NC}"
-    echo -e "${YELLOW}In a separate terminal, run:${NC}"
-    echo -e "${BLUE}  cd $SCRIPT_DIR${NC}"
-    echo -e "${BLUE}  ./start-reth.sh${NC}"
-    echo ""
+    echo -e "${YELLOW}Reth is not running. Starting it in the background...${NC}"
 
-    read -p "$(echo -e ${YELLOW}Do you want to wait for Reth to start? [y/N]: ${NC})" -n 1 -r
-    echo ""
+    # Start reth in the background, suppressing output
+    "$SCRIPT_DIR/start-reth.sh" > /dev/null 2>&1 &
+    RETH_PID=$!
+    STARTED_RETH=true
 
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        if ! wait_for_reth; then
-            echo -e "${RED}Cannot proceed without Reth. Exiting.${NC}"
-            exit 1
-        fi
-    else
-        echo -e "${RED}Cannot run tests without Reth. Exiting.${NC}"
-        exit 1
-    fi
+    echo -e "${GREEN}✓ Reth started (PID: $RETH_PID)${NC}"
 fi
+
+# Wait for reth to be ready
+if ! wait_for_reth; then
+    echo -e "${RED}Reth failed to start properly. Exiting.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Reth is running${NC}"
 
 echo ""
 echo -e "${GREEN}=== Running MBT Tests ===${NC}"
@@ -82,5 +93,4 @@ echo ""
 cd "$SCRIPT_DIR"
 cargo test --lib -- --nocapture "$@"
 
-echo ""
 echo -e "${GREEN}=== Tests Complete ===${NC}"

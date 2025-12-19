@@ -52,9 +52,8 @@ impl App {
                     self.emerald_config_file.display()
                 )
             })?;
-        let emerald_config =
-            toml::from_str::<crate::config::EmeraldConfig>(&emerald_config_content)
-                .map_err(|e| eyre::eyre!("Failed to parse emerald config file: {e}"))?;
+        let emerald_config = toml::from_str::<EmeraldConfig>(&emerald_config_content)
+            .map_err(|e| eyre::eyre!("Failed to parse emerald config file: {e}"))?;
         Ok(emerald_config)
     }
 }

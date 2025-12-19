@@ -1,16 +1,17 @@
 use std::path::PathBuf;
 
 use emerald::node::{App, StateComponents};
+use malachitebft_app_channel::app::types::core::VotingPower;
 use malachitebft_eth_cli::config::{Config, ConsensusConfig, ElNodeType, EmeraldConfig, P2pConfig};
 use malachitebft_eth_types::secp256k1::PrivateKey;
 use malachitebft_eth_types::utils::validators::make_validators_with_individual_seeds;
-use malachitebft_eth_types::{Address, Height as EmeraldHeight};
+use malachitebft_eth_types::{Address, Height as EmeraldHeight, Validator};
 use tempfile::TempDir;
 use tokio::time::Duration;
 
 use crate::driver::EmeraldDriver;
 use crate::state::Node;
-use crate::NODES;
+use crate::{NODES, N_NODES};
 
 impl EmeraldDriver {
     pub fn init(&mut self) {
@@ -18,34 +19,60 @@ impl EmeraldDriver {
         self.nodes.clear();
         self.addresses.clear();
         self.proposals.clear();
+        self.values.clear();
         self.streams.clear();
         self.blocks.clear();
 
         let tempdir = TempDir::with_prefix("mbt-emerald-app")
             .expect("Failed to create temporary folder for MBT");
 
-        let validators = make_validators_with_individual_seeds([1, 1, 1]);
-
-        for (i, node) in NODES.iter().enumerate() {
-            let node = node.to_string();
-            let (validator, private_key) = &validators[i];
-            let address = Address::from_public_key(&validator.public_key);
-            self.addresses.insert(node.clone(), address);
-
-            let state = self.init_app_state(&tempdir, &node, i, private_key);
-            self.nodes.insert(node.to_string(), state);
-        }
-
         self.tempdir.replace(tempdir); // drop/delete old dir, keep the new one.
+
+        let validators = Self::validators();
+
+        for (node_idx, node) in NODES.iter().enumerate() {
+            let node = node.to_string();
+            let (validator, private_key) = &validators[node_idx];
+            self.init_node(node_idx, node, validator, private_key);
+        }
+    }
+
+    pub fn node_crash(&mut self, node: Node) {
+        let app = self.nodes.remove(&node).expect("Unknown node");
+        drop(app); // stop emerald node
+
+        let validators = Self::validators();
+        let node_idx = NODES.iter().position(|n| n == &node).expect("Unknown node");
+        let (validator, private_key) = &validators[node_idx];
+        self.init_node(node_idx, node, validator, private_key);
+    }
+
+    fn validators() -> [(Validator, PrivateKey); N_NODES] {
+        let voting_power = std::array::repeat::<VotingPower, N_NODES>(1);
+        make_validators_with_individual_seeds(voting_power)
+    }
+
+    fn init_node(
+        &mut self,
+        i: usize,
+        node: String,
+        validator: &Validator,
+        private_key: &PrivateKey,
+    ) {
+        let address = Address::from_public_key(&validator.public_key);
+        self.addresses.insert(node.clone(), address);
+
+        let state = self.init_app_state(&node, i, private_key);
+        self.nodes.insert(node.to_string(), state);
     }
 
     fn init_app_state(
         &mut self,
-        tempdir: &TempDir,
         node: &String,
         node_idx: usize,
         private_key: &PrivateKey,
     ) -> StateComponents {
+        let tempdir = self.tempdir.as_ref().expect("Temp dir can't be None");
         let app = Self::setup_app(tempdir, node, node_idx, private_key);
         self.runtime
             .block_on(async { app.build_state().await })
@@ -90,6 +117,9 @@ impl EmeraldDriver {
         private_key: &PrivateKey,
     ) -> (PathBuf, PathBuf, PathBuf, PathBuf) {
         let home_dir = tempdir.path().join(node);
+        if home_dir.exists() {
+            std::fs::remove_dir_all(&home_dir).expect("Failed to cleanup emerald home directory");
+        }
         std::fs::create_dir_all(&home_dir).expect("Failed to create emerald home directory");
 
         let genesis_file = home_dir.join("genesis.json");

@@ -28,8 +28,10 @@ impl EmeraldDriver {
             process_app_message(app, msg).await;
 
             let proposal = reply_rx.await.expect("Failed to handle GetValue");
-            let value_id = proposal.value.id();
+            self.values
+                .insert(expected_proposal.id(), proposal.value.clone());
 
+            let value_id = proposal.value.id();
             let bytes = app
                 .state
                 .get_block_data(proposal.height, proposal.round, value_id)

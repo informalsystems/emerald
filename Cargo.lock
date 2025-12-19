@@ -5718,9 +5718,9 @@ dependencies = [
 
 [[package]]
 name = "quint-connect"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2518a72e1f89b9d2248d695554f22733fe8600ff8899b33c629502f6b0b516a"
+checksum = "6a66d8666ae428df917037dc064921a48ac74ff5758033aa388c1cd3e24af551"
 dependencies = [
  "anyhow",
  "colored",
@@ -5736,9 +5736,9 @@ dependencies = [
 
 [[package]]
 name = "quint-connect-macros"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a7be4d8093c3153727edc24112a4693e60aa78650f277f79dd415118b4ee27b"
+checksum = "dfca0f8a49678da6e1a671b5aab8e284a8b548096e6921c0640986a7b451eaff"
 dependencies = [
  "proc-macro2",
  "quote",

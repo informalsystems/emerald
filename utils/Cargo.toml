@@ -33,7 +33,7 @@ malachitebft-eth-types = { workspace = true }
 alloy-consensus        = { workspace = true }
 alloy-contract         = { workspace = true }
 alloy-provider         = "1.1.3"
-alloy-genesis          = "1.1.3"
+alloy-genesis          = "1.1.1"
 alloy-network          = "1.1.3"
 alloy-primitives       = { workspace = true }
 alloy-rlp              = "0.3"

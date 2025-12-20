@@ -42,8 +42,8 @@ pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -
     let genesis_validator_set =
         read_validators_from_contract(engine.eth.url().as_ref(), &genesis_block.block_hash).await?;
     debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
-    state.set_validator_set(genesis_validator_set);
     state.current_height = Height::default();
+    state.set_validator_set(state.current_height, genesis_validator_set);
     Ok(())
 }
 
@@ -87,7 +87,7 @@ pub async fn initialize_state_from_existing_block(
             )
             .await?;
             debug!("🌈 Got block validator set: {:?}", block_validator_set);
-            state.set_validator_set(block_validator_set);
+            state.set_validator_set(start_height, block_validator_set);
             Ok(())
         }
         PayloadStatusEnum::Invalid { validation_error } => Err(eyre::eyre!(validation_error)),
@@ -179,7 +179,13 @@ pub async fn run(
                 // We can simply respond by telling the engine to start consensus
                 // at the current height, which is initially 1
                 if reply
-                    .send((start_height, state.get_validator_set().clone()))
+                    .send((
+                        start_height,
+                        state
+                            .get_validator_set(start_height)
+                            .ok_or_eyre("Validator set not found for start height {start_height}")?
+                            .clone(),
+                    ))
                     .is_err()
                 {
                     error!("Failed to send ConsensusReady reply");
@@ -578,13 +584,18 @@ pub async fn run(
                     read_validators_from_contract(engine.eth.url().as_ref(), &latest_valid_hash)
                         .await?;
                 debug!("🌈 Got validator set: {:?}", new_validator_set);
-                state.set_validator_set(new_validator_set);
+                state.set_validator_set(state.current_height, new_validator_set);
 
                 // And then we instruct consensus to start the next height
                 if reply
                     .send(Next::Start(
                         state.current_height,
-                        state.get_validator_set().clone(),
+                        state
+                            .get_validator_set(state.current_height)
+                            .ok_or_eyre(
+                                "Validator set not found for current height {state.current_height}",
+                            )?
+                            .clone(),
                     ))
                     .is_err()
                 {

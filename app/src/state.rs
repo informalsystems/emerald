@@ -90,7 +90,7 @@ pub struct State {
 
     pub latest_block: Option<ExecutionBlock>,
 
-    validator_set: Option<ValidatorSet>,
+    validator_set: Option<(Height, ValidatorSet)>,
 
     // Cache for tracking recently validated payloads to avoid duplicate validation
     validated_payload_cache: ValidatedPayloadCache,
@@ -119,6 +119,8 @@ pub enum SignatureVerificationError {
     ProposerNotFound,
     /// Indicates that the signature in the `Fin` part is invalid.
     InvalidSignature,
+    /// Validator set not found for the given height
+    ValidatorSetNotFound { _height: Height },
 }
 
 /// Represents errors that can occur during proposal validation.
@@ -128,6 +130,8 @@ pub enum ProposalValidationError {
     WrongProposer { actual: Address, expected: Address },
     /// Signature verification errors
     Signature(SignatureVerificationError),
+    /// Validator set not found for the given height
+    ValidatorSetNotFound { height: Height },
 }
 
 impl fmt::Display for ProposalValidationError {
@@ -138,6 +142,9 @@ impl fmt::Display for ProposalValidationError {
             }
             Self::Signature(err) => {
                 write!(f, "Signature verification failed: {err:?}")
+            }
+            Self::ValidatorSetNotFound { height } => {
+                write!(f, "Validator set not found for height {height}")
             }
         }
     }
@@ -262,7 +269,9 @@ impl State {
         let round = parts.round;
 
         // Get the expected proposer for this height and round
-        let validator_set = self.get_validator_set(); // TODO: Should pass height as a parameter
+        let validator_set = self
+            .get_validator_set(height)
+            .ok_or(ProposalValidationError::ValidatorSetNotFound { height })?;
         let expected_proposer = self
             .ctx
             .select_proposer(validator_set, height, round)
@@ -312,7 +321,11 @@ impl State {
         };
 
         // Retrieve the proposer from the validator set for the given height
-        let validator_set = self.get_validator_set(); // TODO: Should pass height as a parameter
+        let validator_set = self.get_validator_set(parts.height).ok_or(
+            SignatureVerificationError::ValidatorSetNotFound {
+                _height: parts.height,
+            },
+        )?;
         let proposer = validator_set
             .get_by_address(&parts.proposer)
             .ok_or(SignatureVerificationError::ProposerNotFound)?;
@@ -781,16 +794,17 @@ impl State {
         parts
     }
 
-    /// Returns the set of validators.
-    pub fn get_validator_set(&self) -> &ValidatorSet {
+    /// Returns the set of validators for the given consensus height.
+    /// Returns None if the height doesn't match the stored validator set height.
+    pub fn get_validator_set(&self, height: Height) -> Option<&ValidatorSet> {
         self.validator_set
             .as_ref()
-            .expect("Validator set must be initialized before use")
+            .and_then(|(h, vs)| if *h == height { Some(vs) } else { None })
     }
 
-    /// Sets the validator set.
-    pub fn set_validator_set(&mut self, validator_set: ValidatorSet) {
-        self.validator_set = Some(validator_set);
+    /// Sets the validator set for the given consensus height.
+    pub fn set_validator_set(&mut self, height: Height, validator_set: ValidatorSet) {
+        self.validator_set = Some((height, validator_set));
     }
 }
 

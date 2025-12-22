@@ -50,12 +50,12 @@ alloy-dyn-abi          = { workspace = true }
 jsonrpsee-core        = { version = "0.25.0" }
 jsonrpsee-http-client = { version = "0.25.0" }
 
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.2" }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 url             = { workspace = true }
 toml            = "0.8"
 
 [dev-dependencies]
-reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.2" }
+reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 alloy-eips            = { workspace = true }
 alloy-provider        = "1.1.3"
 alloy-signer-local    = "1.1.3"

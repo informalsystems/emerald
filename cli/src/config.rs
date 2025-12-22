@@ -39,6 +39,7 @@ pub struct EmeraldConfig {
     pub jwt_token_path: String,
 
     /// Path of the EVM genesis file
+    #[serde(default = "default_eth_gensesis_path")]
     pub eth_genesis_path: String,
 
     /// Retry configuration for execution client sync operations
@@ -82,6 +83,10 @@ fn max_retain_block_default() -> u64 {
 }
 fn prune_at_interval_default() -> u64 {
     10
+}
+
+fn default_eth_gensesis_path() -> String {
+    "./assets/genesis.json".to_string()
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

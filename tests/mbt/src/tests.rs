@@ -1,4 +1,5 @@
 use quint_connect::quint_test;
+use quint_connect::quint_run;
 
 use crate::driver::EmeraldDriver;
 
@@ -20,5 +21,14 @@ fn sigle_height_consensus() -> impl Driver {
 )]
 #[should_panic = "Payload ID should be Some!"]
 fn node_crash_after_consensus() -> impl Driver {
+    EmeraldDriver::default()
+}
+
+// FIXME: this breaks due to the same scenario as node_crash_after_consensus.
+#[quint_run(
+    spec = "../../specs/emerald_tests.qnt",
+)]
+#[should_panic = "Payload ID should be Some!"]
+fn simulation() -> impl Driver {
     EmeraldDriver::default()
 }

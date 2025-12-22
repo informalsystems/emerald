@@ -1,3 +1,7 @@
+// -*- mode: Bluespec; -*-
+
+// Quint runs for specific scenarios of emerald.
+
 module emerald_tests {
   import basicSpells.* from "spells/basicSpells"
   import rareSpells.* from "spells/rareSpells"

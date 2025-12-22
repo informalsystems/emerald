@@ -2522,6 +2522,7 @@ version = "0.0.1"
 dependencies = [
  "alloy-consensus",
  "alloy-contract",
+ "alloy-genesis",
  "alloy-primitives",
  "alloy-provider",
  "alloy-rpc-types-engine",

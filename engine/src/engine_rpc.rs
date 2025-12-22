@@ -1,17 +1,19 @@
-use core::time::Duration;
-use std::collections::HashSet;
-use std::path::Path;
-
 use alloy_rpc_types_engine::{
     ExecutionPayloadEnvelopeV3, ExecutionPayloadEnvelopeV5, ExecutionPayloadV3, ForkchoiceState,
     ForkchoiceUpdated, PayloadAttributes, PayloadId as AlloyPayloadId, PayloadStatus,
 };
+
 use color_eyre::eyre;
+use core::time::Duration;
+use eyre::eyre;
 use malachitebft_eth_types::{BlockHash, B256};
 use reqwest::header::CONTENT_TYPE;
 use reqwest::{Client, Url};
 use serde::de::DeserializeOwned;
 use serde_json::json;
+use std::collections::HashSet;
+use std::fmt;
+use std::path::Path;
 
 use crate::auth::Auth;
 use crate::json_structures::*;
@@ -90,9 +92,21 @@ pub struct EngineCapabilities {
     pub get_blobs_v2: bool,
 }
 
+#[derive(Debug)]
 pub enum Fork {
     Osaka,
     Prague,
+    Unsupported,
+}
+
+impl fmt::Display for Fork {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Fork::Osaka => write!(f, "Osaka"),
+            Fork::Prague => write!(f, "Prague"),
+            Fork::Unsupported => write!(f, "Unsupported fork"),
+        }
+    }
 }
 
 // RPC client for connecting to Engine RPC endpoint with JWT authentication.
@@ -230,6 +244,9 @@ impl EngineRPC {
                     )
                     .await?;
                 Ok(response.execution_payload)
+            }
+            Fork::Unsupported => {
+                return Err(eyre!("Unsupported fork"));
             }
         }
     }

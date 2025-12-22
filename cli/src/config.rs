@@ -38,6 +38,9 @@ pub struct EmeraldConfig {
     /// Path of the JWT token file
     pub jwt_token_path: String,
 
+    /// Path of the EVM genesis file
+    pub eth_genesis_path: String,
+
     /// Retry configuration for execution client sync operations
     #[serde(default)]
     pub retry_config: RetryConfig,

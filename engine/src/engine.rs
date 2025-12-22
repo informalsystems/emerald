@@ -6,7 +6,7 @@ use alloy_rpc_types_engine::{
 };
 use color_eyre::eyre;
 use malachitebft_eth_types::{Address, BlockHash, RetryConfig, B256};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::engine_rpc::{EngineRPC, Fork};
 use crate::ethereum_rpc::EthereumRPC;
@@ -24,7 +24,7 @@ impl Engine {
     }
 
     pub async fn check_capabilities(&self) -> eyre::Result<()> {
-        let cap = self.api.exchange_capabilities().await?;
+        let cap: crate::engine_rpc::EngineCapabilities = self.api.exchange_capabilities().await?;
         if !cap.forkchoice_updated_v3
             || !cap.get_payload_v3
             || !cap.new_payload_v3
@@ -126,6 +126,8 @@ impl Engine {
         fee_recipient: &Address,
         fork: Fork,
     ) -> eyre::Result<ExecutionPayloadV3> {
+        info!("🟠 current fork is {:?}", fork);
+
         debug!("🟠 generate_block on top of {:?}", latest_block);
         let payload_attributes: PayloadAttributes;
         let block_hash: BlockHash;

@@ -10,7 +10,6 @@ use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
 use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
 use malachitebft_eth_cli::config::EmeraldConfig;
 use malachitebft_eth_engine::engine::Engine;
-use malachitebft_eth_engine::engine_rpc::Fork;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::secp256k1::PublicKey;
 use malachitebft_eth_types::{Block, BlockHash, EmeraldContext, Height, Validator, ValidatorSet};
@@ -30,11 +29,6 @@ alloy_sol_types::sol!(
 
 use crate::state::{assemble_value_from_parts, decode_value, extract_block_header, State};
 use crate::sync_handler::{get_decided_value_for_sync, validate_payload};
-
-pub fn get_fork() -> Fork {
-    // TODO: Determine fork based on timestamp or configuration
-    Fork::Osaka
-}
 
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
     // Get the genesis block from the execution engine
@@ -339,12 +333,13 @@ pub async fn run(
 
                             let latest_block =
                                 state.latest_block.expect("Head block hash is not set");
+
                             let execution_payload = engine
                                 .generate_block(
                                     &Some(latest_block),
                                     &emerald_config.retry_config,
                                     &emerald_config.fee_recipient,
-                                    get_fork(),
+                                    state.get_fork(latest_block.timestamp),
                                 )
                                 .await?;
 

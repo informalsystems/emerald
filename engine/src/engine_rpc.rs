@@ -102,9 +102,9 @@ pub enum Fork {
 impl fmt::Display for Fork {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Fork::Osaka => write!(f, "Osaka"),
-            Fork::Prague => write!(f, "Prague"),
-            Fork::Unsupported => write!(f, "Unsupported fork"),
+            Self::Osaka => write!(f, "Osaka"),
+            Self::Prague => write!(f, "Prague"),
+            Self::Unsupported => write!(f, "Unsupported fork"),
         }
     }
 }
@@ -245,9 +245,7 @@ impl EngineRPC {
                     .await?;
                 Ok(response.execution_payload)
             }
-            Fork::Unsupported => {
-                return Err(eyre!("Unsupported fork"));
-            }
+            Fork::Unsupported => Err(eyre!("Unsupported fork")),
         }
     }
 

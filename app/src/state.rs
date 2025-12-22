@@ -225,7 +225,7 @@ impl State {
             prune_at_block_interval: prune_at_interval,
             min_block_time,
             last_block_time: Instant::now(),
-            eth_chain_config: eth_chain_config,
+            eth_chain_config,
         }
     }
 

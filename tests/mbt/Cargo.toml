@@ -32,6 +32,7 @@ hex = "0.4"
 k256 = { workspace = true }
 bimap = "0.6.3"
 tempfile = "3.23.0"
+ureq = { version = "2", features = ["json"] }
 
 [dev-dependencies]
 test-log = { version = "0.2", features = ["trace"] }

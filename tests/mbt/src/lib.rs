@@ -2,6 +2,9 @@ mod driver;
 mod state;
 
 #[cfg(test)]
+mod reth_manager;
+
+#[cfg(test)]
 mod tests;
 
 // Must match spec's node identifiers.

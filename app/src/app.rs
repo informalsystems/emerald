@@ -162,7 +162,7 @@ pub async fn process_consensus_message(
             let mut start_height: Height = Height::default();
             match start_height_from_store {
                 Some(s) => {
-                    initialize_state_from_existing_block(state, &engine, s, &emerald_config)
+                    initialize_state_from_existing_block(state, engine, s, emerald_config)
                         .await?;
                     start_height = state.current_height.increment();
                     debug!(
@@ -173,7 +173,7 @@ pub async fn process_consensus_message(
                 None => {
                     info!("Starting from genesis");
                     // Get the genesis block from the execution engine
-                    initialize_state_from_genesis(state, &engine).await?;
+                    initialize_state_from_genesis(state, engine).await?;
                 }
             }
             // We can simply respond by telling the engine to start consensus
@@ -223,7 +223,7 @@ pub async fn process_consensus_message(
                                 &data,
                                 parts.height,
                                 parts.round,
-                                &engine,
+                                engine,
                                 &emerald_config.retry_config,
                             )
                             .await?;
@@ -388,7 +388,7 @@ pub async fn process_consensus_message(
             // parsing or validation fails. Keep the outer `Option` and send it
             // back to the caller (consensus) regardless.
             let proposed_value = state
-                .received_proposal_part(from, part, &engine, &emerald_config.retry_config)
+                .received_proposal_part(from, part, engine, &emerald_config.retry_config)
                 .await?;
 
             if let Some(proposed_value) = proposed_value.clone() {
@@ -623,7 +623,7 @@ pub async fn process_consensus_message(
             // Validate the synced block
             let validity = validate_payload(
                 state.validated_cache_mut(),
-                &engine,
+                engine,
                 &execution_payload,
                 &versioned_hashes,
                 &emerald_config.retry_config,
@@ -699,7 +699,7 @@ pub async fn process_consensus_message(
                 .contains(&height)
             {
                 let earliest_unpruned = state.get_earliest_unpruned_height().await;
-                get_decided_value_for_sync(&state.store, &engine, height, earliest_unpruned).await?
+                get_decided_value_for_sync(&state.store, engine, height, earliest_unpruned).await?
             } else {
                 info!(%height, current_height = %state.current_height, "Requested height is >= current height or < earliest_height_available.");
                 None

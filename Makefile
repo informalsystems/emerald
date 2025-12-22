@@ -102,16 +102,10 @@ spam-contract:
 
 # Model-Based Testing (MBT)
 
-mbt-start-reth: build
-	@echo "Starting custom-reth for MBT testing..."
-	@echo "Note: This will run in the foreground. Use Ctrl+C to stop."
-	@echo "To run tests, open another terminal and run: make mbt-test"
-	./tests/mbt/start-reth.sh
-
 mbt-test:
 	@echo "Running MBT tests..."
-	./tests/mbt/run-tests.sh sigle_height_consensus
-	./tests/mbt/run-tests.sh node_crash_after_consensus
+	@echo "Note: RETH will be automatically started and stopped for each test"
+	cd tests/mbt && cargo test --lib -- --nocapture --test-threads=1
 
 mbt-clean:
 	rm -rf ./tests/mbt/.reth-data

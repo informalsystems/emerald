@@ -17,7 +17,7 @@ echo -e "${BLUE}=== Emerald MBT Test Runner ===${NC}"
 
 # Check if reth is running
 check_reth() {
-    if curl -s -X POST -H "Content-Type: application/json" \
+    if curl -s --max-time 1 -X POST -H "Content-Type: application/json" \
         --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
         http://localhost:8545 > /dev/null 2>&1; then
         return 0

@@ -1,0 +1,13 @@
+name: Documentation Request
+description: Suggest a change to Emerald docs
+title: "[Docs]: "
+labels: ["type: docs-req", "status: waiting-triage"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the change
+      description: |
+        Please describe the documentation you want to change or add.
+    validations:
+      required: true

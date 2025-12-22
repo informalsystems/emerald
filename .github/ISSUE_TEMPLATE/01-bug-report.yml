@@ -48,7 +48,6 @@ body:
       label: Steps to reproduce
       description: |
         Please provide any steps you think might be relevant to reproduce the bug.
-      placeholder: Steps to reproduce
     validations:
       required: true
 

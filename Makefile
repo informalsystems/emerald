@@ -102,10 +102,12 @@ spam-contract:
 
 # Model-Based Testing (MBT)
 
+TEST ?=
+
 mbt-test:
 	@echo "Running MBT tests..."
 	@echo "Note: RETH will be automatically started and stopped for each test"
-	cd tests/mbt && cargo test --lib -- --nocapture --test-threads=1
+	cd tests/mbt && cargo test --lib -- --nocapture --test-threads=1 $(TEST)
 
 mbt-clean:
 	rm -rf ./tests/mbt/.reth-data

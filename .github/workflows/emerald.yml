@@ -67,7 +67,13 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Run emerald
         run: |
-          make testnet-start
+          ./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet --fee-recipient 0x0000000000000000000000000000000000000042
+          cargo run --bin emerald -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
+          ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt
+          cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
+          docker compose up -d reth0 reth1 reth2 reth3 prometheus grafana otterscan
+          ./scripts/add_peers.sh --nodes 4
+          bash scripts/spawn.bash --nodes 4 --home nodes --no-delay --no-wait
         if: steps.filter.outputs.code == 'true'
 
       - name: Upload test logs

@@ -18,7 +18,7 @@ Thanks for your interest in contributing to Emerald. We welcome issues, discussi
 
 ## Submitting Changes
 
-**Note:** Ideally, a pull request should address an issue that clearly motivate the changes introduced by the pull request.
+**Note:** Ideally, a pull request should address an issue that clearly motivates the changes introduced by the pull request.
 
 - Open a pull request with a clear description of the change.
 - Reference related issues where applicable.

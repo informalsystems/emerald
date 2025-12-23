@@ -43,6 +43,7 @@ jobs:
               - '**/Cargo.toml'
               - '**/Cargo.lock'
               - '**/.sh'
+              - '*/workflows/test.yml'
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:

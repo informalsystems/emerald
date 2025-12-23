@@ -68,7 +68,7 @@ alloy-dyn-abi          = { version = "1.4.1", default-features = false, features
 humantime          = "2.2.0"
 humantime-serde    = "1.1.1"
 async-trait        = "0.1.88"
-axum               = "0.7"
+axum               = "0.8"
 bytes              = { version = "1", default-features = false }
 bytesize           = "1.3"
 clap               = "4.5"

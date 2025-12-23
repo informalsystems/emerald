@@ -8,7 +8,7 @@
 
 ---
 
-# Architecture
+# Core Concepts
 
 
 - [Architecture](./architecture/index.md)
@@ -18,9 +18,10 @@
 
 ---
 
-# Guides
+# Run & Deploy
 
 - [Deploy Local Testnet](local-devnet/index.md)
+  - [Setup](local-devnet/setup.md)
   - [Creating a Testnet](local-devnet/create-network.md)
   - [Managing Validators](local-devnet/membership-changes.md)
   - [Network Configuration](local-devnet/network-config.md)
@@ -28,17 +29,17 @@
   - [Monitoring](local-devnet/monitoring.md)
   - [Troubleshooting](local-devnet/troubleshooting.md)
   - [Common Workflows](local-devnet/workflows.md)
-  - [CLI (Work in Progress)]()
+  - [CLI (Work in Progress)](local-devnet/command-line.md)
 - [Launch Production Network](production-network/index.md)
   - [Network Overview](production-network/network-overview.md)
   - [Installation](production-network/installation.md)
   - [Creating Network Genesis](production-network/genesis.md)
   - [Running Reth](production-network/running-reth.md)
   - [Running Emerald](production-network/running-emerald.md)
+- [Configuration Examples](./config-examples.md)
 
 ---
 
-# References 
+# Performance
 
-- [Configuration Examples](./config-examples.md)
-
+- [Performance Evaluation](./performance_evaluation/index.md)

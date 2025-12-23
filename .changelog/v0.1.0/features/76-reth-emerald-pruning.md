@@ -1,0 +1,1 @@
+- Config flags to enalbe reth pruning and emerald pruning support ([#76](https://github.com/informalsystems/emerald/issues/76))

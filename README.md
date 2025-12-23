@@ -14,13 +14,17 @@
 Emerald is a modular framework for building decentralized networks of trust. 
 Designed with simplicity at its core, it enables users to deploy reliable, easy to operate, high performance, EVM-compatible networks.
 
+> [!IMPORTANT]
+> Emerald is under active development and should be used at your own risk. 
+> The software has not been externally audited, and its security and stability are not guaranteed.
+
 ## Why Emerald 
 
 Society runs on networks of trust: shared expectations and reputations that let us coordinate and innovate at scale.
 
 Blockchains strengthen these networks with transparent rules and auditable operations. Bitcoin enabled global value transfer. Ethereum made trust programmable. But their large-scale governance makes it hard for institutions to define specific trust rules.
 
-Emerald empowers institutions to build production-ready networks with tailored governance and compliance logic while retaining the reliability and interoperability of decentralized systems.
+Emerald empowers institutions to build networks of trust with tailored governance and compliance logic while retaining the reliability and interoperability of decentralized systems.
 
 ## Architecture
 
@@ -56,11 +60,16 @@ For instructions on how to deploy a local Emerald testnet, please refer to the [
 
 ### Launching a Production Network
 
-For instructions on how to launch an Emerald production-grade network, please refer to the [Launch Production Network](https://emerald-docs.informalsystems.io/production-network/index.html) section of the docs.
+For instructions on how to launch an Emerald network in production, please refer to the [Launch Production Network](https://emerald-docs.informalsystems.io/production-network/index.html) section of the docs.
 
 ## Performance Evaluation
 
-> TODO: some performance number and link to how to run benchmarks
+Emerald delivers high performance with sub-second block times, providing the low-latency confirmations needed for demanding institutional applications. 
+In benchmarking, Emerald reaches approximately 9,200 TPS peak and 8,300 TPS sustained. 
+Its consensus engine, Malachite, can achieve up to 71.7k TPS without an execution client, 
+demonstrating both the strength of the underlying consensus layer and the clear potential to further optimize Emerald. 
+
+For more details, please refer to the [Performance Evaluation](https://emerald-docs.informalsystems.io/performance_evaluation/index.html) section of the docs.
 
 ## Contributing
 

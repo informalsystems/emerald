@@ -1,0 +1,1 @@
+- Reth validation is adapted to accept multiple blocks with the same timestamp ([#109](https://github.com/informalsystems/emerald/issues/109))

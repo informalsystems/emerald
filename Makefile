@@ -5,6 +5,7 @@ all: build
 build:
 	forge build
 	cargo build
+	cd custom-reth && cargo build
 
 release:
 	forge build
@@ -13,10 +14,6 @@ release:
 test:
 	cargo test
 	forge test -vvv
-
-# clean:
-# 	cargo clean
-# 	forge clean
 
 # Docs
 

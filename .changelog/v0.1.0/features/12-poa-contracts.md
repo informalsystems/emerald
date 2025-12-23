@@ -1,0 +1,1 @@
+- Contract for validator management. ([#12](https://github.com/informalsystems/emerald/issues/12))

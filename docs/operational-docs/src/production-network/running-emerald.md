@@ -1,8 +1,8 @@
 # Running Emerald (Consensus Engine)
 
-**Note**: This section applies to **all network participants** (both the coordinator and all validators). Each validator must run their own Emerald node with the private key they generated earlier.
-
-Emerald is the consensus client, built on Malachite BFT. It coordinates with Reth via the Engine API to produce blocks and achieve consensus across the validator network.
+> [!NOTE]
+> This section applies to **all network participants** (both the coordinator and all validators). 
+> Each validator must run their own Emerald node with the private key they generated earlier.
 
 ## Prerequisites
 
@@ -42,10 +42,13 @@ jwt_token_path = "/path/to/jwt.hex"
 el_node_type = "archive"
 sync_timeout_ms = 1000000
 sync_initial_delay_ms = 100
+fee_recipient = "0x4242424242424242424242424242424242424242"
 ...
 ```
 
-**Important**: The `jwt_token_path` must point to the same JWT token used by Reth.
+> [!IMPORTANT]
+> The `jwt_token_path` must point to the same JWT token used by Reth.
+> The `fee_recipient` must point to a valid address as this address will receive fees.
 
 This is where you define how Emerald connects to Reth. Make sure to fill in the Reth http and authrpc address.
 

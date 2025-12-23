@@ -1,4 +1,5 @@
 use color_eyre::eyre::{eyre, Result};
+use emerald::node::App;
 use malachitebft_app_channel::app::node::Node;
 use malachitebft_eth_cli::args::{Args, Commands};
 use malachitebft_eth_cli::cmd::init::InitCmd;
@@ -7,16 +8,6 @@ use malachitebft_eth_cli::cmd::testnet::TestnetCmd;
 use malachitebft_eth_cli::{config, logging, runtime};
 use malachitebft_eth_types::Height;
 use tracing::{info, trace};
-
-mod app;
-mod metrics;
-mod node;
-mod state;
-mod store;
-mod streaming;
-mod sync_handler;
-
-use node::App;
 
 /// Main entry point for the application
 ///

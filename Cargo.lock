@@ -2311,6 +2311,7 @@ dependencies = [
  "test-log",
  "thiserror 2.0.12",
  "tokio",
+ "toml",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -4475,6 +4476,7 @@ dependencies = [
 name = "malachitebft-eth-cli"
 version = "0.0.1"
 dependencies = [
+ "alloy-primitives 0.8.26",
  "axum",
  "base64 0.22.1",
  "bytesize",
@@ -4489,8 +4491,10 @@ dependencies = [
  "informalsystems-malachitebft-core-types",
  "informalsystems-malachitebft-metrics",
  "itertools 0.14.0",
+ "malachitebft-eth-engine",
  "malachitebft-eth-types",
  "rand 0.8.5",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror 2.0.12",

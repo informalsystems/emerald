@@ -6,6 +6,7 @@ use reqwest::Url;
 use spammer::Spammer;
 
 pub mod genesis;
+pub mod modify_config;
 pub mod poa;
 pub mod spammer;
 pub mod tx;
@@ -41,6 +42,7 @@ impl Cli {
             Commands::Spam(spam_cmd) => spam_cmd.run().await,
             Commands::Poa(poa_cmd) => poa_cmd.run().await,
             Commands::SpamContract(spam_contract_cmd) => spam_contract_cmd.run().await,
+            Commands::ModifyConfig(modify_config_cmd) => modify_config_cmd.run(),
         }
     }
 }
@@ -117,6 +119,10 @@ pub enum Commands {
     /// Spam contract transactions
     #[command(arg_required_else_help = true)]
     SpamContract(SpamContractCmd),
+
+    /// Apply custom node configurations from a TOML file
+    #[command(arg_required_else_help = true)]
+    ModifyConfig(ModifyConfigCmd),
 }
 
 #[derive(Parser, Debug, Clone, Default, PartialEq)]
@@ -130,6 +136,9 @@ pub struct SpamCmd {
     /// Rate of transactions per second
     #[clap(short, long, default_value = "1000")]
     rate: u64,
+    /// Interval in ms for sending batches of transactions
+    #[clap(short, long, default_value = "200")]
+    interval: u64,
     /// Time to run the spammer for in seconds
     #[clap(short, long, default_value = "0")]
     time: u64,
@@ -150,6 +159,7 @@ impl SpamCmd {
             rpc_url,
             num_txs,
             rate,
+            interval,
             time,
             blobs,
             signer_index,
@@ -157,17 +167,15 @@ impl SpamCmd {
         } = self;
 
         let url: Url = rpc_url.parse()?;
-        Spammer::new(
-            url,
-            *signer_index,
-            *num_txs,
-            *time,
-            *rate,
-            *blobs,
-            *chain_id,
-        )?
-        .run()
-        .await
+        let config = spammer::SpammerConfig {
+            max_num_txs: *num_txs,
+            max_time: *time,
+            max_rate: *rate,
+            batch_interval: *interval,
+            blobs: *blobs,
+            chain_id: *chain_id,
+        };
+        Spammer::new(url, *signer_index, config)?.run().await
     }
 }
 
@@ -296,6 +304,9 @@ pub struct SpamContractCmd {
     /// Rate of transactions per second
     #[clap(short, long, default_value_t = 1000)]
     rate: u64,
+    /// Interval in ms for sending batches of transactions
+    #[clap(short, long, default_value = "200")]
+    interval: u64,
     /// Time to run the spammer for in seconds
     #[clap(short, long, default_value_t = 0)]
     time: u64,
@@ -315,23 +326,39 @@ impl SpamContractCmd {
             rpc_url,
             num_txs,
             rate,
+            interval,
             time,
             signer_index,
             chain_id,
         } = self;
         let url = format!("http://{rpc_url}").parse()?;
-        Spammer::new_contract(
-            url,
-            *signer_index,
-            *num_txs,
-            *time,
-            *rate,
-            contract,
-            function,
-            args,
-            *chain_id,
-        )?
-        .run()
-        .await
+        let config = spammer::SpammerConfig {
+            max_num_txs: *num_txs,
+            max_time: *time,
+            max_rate: *rate,
+            batch_interval: *interval,
+            blobs: false,
+            chain_id: *chain_id,
+        };
+        Spammer::new_contract(url, *signer_index, config, contract, function, args)?
+            .run()
+            .await
+    }
+}
+
+#[derive(Parser, Debug, Clone, PartialEq)]
+pub struct ModifyConfigCmd {
+    /// Path to the directory containing node configurations (e.g., 'nodes')
+    #[clap(long, value_hint = ValueHint::DirPath)]
+    node_config_home: std::path::PathBuf,
+
+    /// Path to the custom TOML configuration file (e.g., 'assets/emerald_p2p_config.toml')
+    #[clap(long, value_hint = ValueHint::FilePath)]
+    custom_config_file_path: std::path::PathBuf,
+}
+
+impl ModifyConfigCmd {
+    pub fn run(&self) -> Result<()> {
+        modify_config::apply_custom_config(&self.node_config_home, &self.custom_config_file_path)
     }
 }

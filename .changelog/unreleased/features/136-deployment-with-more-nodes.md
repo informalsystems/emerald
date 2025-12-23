@@ -1,0 +1,1 @@
+- Scripts can now generate setup for more than 4 nodes ([#136](https://github.com/informalsystems/emerald/pull/136))

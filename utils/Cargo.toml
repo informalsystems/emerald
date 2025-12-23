@@ -52,6 +52,7 @@ jsonrpsee-http-client = { version = "0.25.0" }
 
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.2.0" }
 url             = { workspace = true }
+toml            = "0.8"
 
 [dev-dependencies]
 reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", tag = "v1.2.0" }

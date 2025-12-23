@@ -69,10 +69,7 @@ async fn replay_heights_to_engine(
             .store
             .get_certificate_and_header(height)
             .await?
-            .ok_or_eyre(format!(
-                "Missing certificate or header for height {}",
-                height
-            ))?;
+            .ok_or_eyre(format!("Missing certificate or header for height {height}"))?;
 
         // Deserialize the execution payload
         let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&header_bytes).map_err(|e| {

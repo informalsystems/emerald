@@ -3,6 +3,7 @@
 
 use std::fmt;
 
+use alloy_genesis::ChainConfig;
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use caches::lru::AdaptiveCache;
@@ -13,12 +14,13 @@ use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Context, Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
 use malachitebft_eth_engine::engine::Engine;
+use malachitebft_eth_engine::engine_rpc::Fork;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::secp256k1::K256Provider;
 use malachitebft_eth_types::{
-    Address, Block, BlockHash, EmeraldContext, Genesis, Height, ProposalData, ProposalFin,
-    ProposalInit, ProposalPart, RetryConfig, ValidatorSet, Value, ValueId,
+    Address, Block, BlockHash, BlockTimestamp, EmeraldContext, Genesis, Height, ProposalData,
+    ProposalFin, ProposalInit, ProposalPart, RetryConfig, ValidatorSet, Value, ValueId,
 };
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -106,6 +108,8 @@ pub struct State {
     pub min_block_time: Duration,
 
     pub last_block_time: Instant,
+
+    pub eth_chain_config: ChainConfig,
 }
 
 /// Represents errors that can occur during the verification of a proposal's signature.
@@ -188,6 +192,7 @@ impl State {
         max_retain_blocks: u64,
         prune_at_interval: u64,
         min_block_time: Duration,
+        eth_chain_config: ChainConfig,
     ) -> Self {
         // Calculate start_time by subtracting elapsed_seconds from now.
         // It represents the start time of measuring metrics, not the actual node start time.
@@ -220,7 +225,26 @@ impl State {
             prune_at_block_interval: prune_at_interval,
             min_block_time,
             last_block_time: Instant::now(),
+            eth_chain_config,
         }
+    }
+
+    pub fn get_fork(&self, block_timestamp: BlockTimestamp) -> Fork {
+        let is_osaka = self
+            .eth_chain_config
+            .osaka_time
+            .is_some_and(|time| time <= block_timestamp);
+        if is_osaka {
+            return Fork::Osaka;
+        }
+        let is_prague = self
+            .eth_chain_config
+            .prague_time
+            .is_some_and(|time| time <= block_timestamp);
+        if is_prague {
+            return Fork::Prague;
+        }
+        Fork::Unsupported
     }
 
     pub fn validated_cache_mut(&mut self) -> &mut ValidatedPayloadCache {

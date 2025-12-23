@@ -118,8 +118,11 @@ async fn replay_heights_to_engine(
                 ));
             }
             PayloadStatusEnum::Accepted => {
-                // ACCEPTED is valid for new_payload - it means the block was buffered
-                debug!("📥 Block at height {} accepted (buffered)", height);
+                // ACCEPTED is no instant finality and there is a possibility of a fork.
+                return Err(eyre::eyre!(
+                    "Block replay failed at height {}: execution client returned ACCEPTED status, which is not supported during replay",
+                    height
+                ));
             }
             PayloadStatusEnum::Syncing => {
                 return Err(eyre::eyre!(
@@ -211,13 +214,20 @@ pub async fn initialize_state_from_existing_block(
             //     requisite data for the validation is missing
             debug!("Payload is valid");
             debug!("latest block {:?}", state.latest_block);
+
+            // Read the validator set at the stored block - this is the validator set
+            // that will be active for the NEXT height (where consensus will start)
             let block_validator_set = read_validators_from_contract(
                 engine.eth.url().as_ref(),
                 &latest_block_candidate_from_store.block_hash,
             )
             .await?;
-            debug!("🌈 Got block validator set: {:?}", block_validator_set);
-            state.set_validator_set(start_height, block_validator_set);
+
+            // Consensus will start at the next height, so we set the validator set for that height
+            let next_height = start_height.increment();
+            debug!("🌈 Got validator set: {:?} for height {}", block_validator_set, next_height);
+            state.set_validator_set(next_height, block_validator_set);
+
             Ok(())
         }
         PayloadStatusEnum::Invalid { validation_error } => Err(eyre::eyre!(validation_error)),
@@ -312,7 +322,9 @@ pub async fn run(
                         start_height,
                         state
                             .get_validator_set(start_height)
-                            .ok_or_eyre("Validator set not found for start height {start_height}")?
+                            .ok_or_eyre(format!(
+                                "Validator set not found for start height {start_height}"
+                            ))?
                             .clone(),
                     ))
                     .is_err()

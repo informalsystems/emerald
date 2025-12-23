@@ -11,6 +11,7 @@
   - Recommended to setup a user `emerald` and use a home folder like `/home/emerald/.emerald` and in there a config folder for all files.
 - Reth node must be running with Engine API enabled
 - JWT secret file (same as used by Reth)
+- `emerald.toml` file has to containt the path to the genesis file used by Reth that contains the chain configuration (`eth-genesis.json` in our example).
 
 ## Configuration Files
 
@@ -43,6 +44,7 @@ el_node_type = "archive"
 sync_timeout_ms = 1000000
 sync_initial_delay_ms = 100
 fee_recipient = "0x4242424242424242424242424242424242424242"
+eth_genesis_path="<PATH_TO_RETH_GENESIS>"
 ...
 ```
 

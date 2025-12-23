@@ -73,7 +73,7 @@ For more details, please refer to the [Performance Evaluation](https://emerald-d
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a PR. For large changes, we recommend discussing them in an issue first.
+Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on how to get started. 
 
 ## Acknowledgements
 

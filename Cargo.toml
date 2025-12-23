@@ -79,7 +79,7 @@ directories        = "5.0.1"
 hex                = { version = "0.4.3", features = [ "serde" ] }
 itertools          = "0.14"
 itf                = "0.2.3"
-prost              = "0.13"
+prost              = "0.14"
 prost-build        = "0.13"
 prost-types        = "0.13"
 rand               = { version = "0.8.5", features = [ "std_rng" ] }

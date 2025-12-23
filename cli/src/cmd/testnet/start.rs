@@ -15,7 +15,7 @@ use malachitebft_config::LoggingConfig;
 use malachitebft_core_types::{Context, SigningScheme};
 use malachitebft_eth_types::Address;
 use serde_json::{json, Value};
-use tracing::info;
+use tracing::{debug, info, warn};
 
 use super::reth::{self, RethProcess};
 use super::types::RethNode;
@@ -77,16 +77,19 @@ impl TestnetStartCmd {
             ));
         }
 
-        println!("🚀 Initializing testnet with {} nodes...\n", self.nodes);
+        info!("Initializing testnet with {} nodes", self.nodes);
 
         // 1. Check if custom-reth is available
-        print!("Checking custom-reth installation... ");
+        debug!("Checking custom-reth installation");
         match reth::check_installation(&self.custom_reth_bin) {
             Ok(version) => {
-                println!("✓ {}", version.lines().next().unwrap_or(&version));
+                info!(
+                    "Custom-reth installation verified: {}",
+                    version.lines().next().unwrap_or(&version)
+                );
             }
             Err(e) => {
-                println!("✗");
+                warn!("Custom-reth installation check failed");
                 return Err(e.wrap_err(
                     "Custom reth is not available. Make sure custom-reth/ directory exists and contains a valid reth binary."
                 ));
@@ -94,14 +97,14 @@ impl TestnetStartCmd {
         }
 
         // 2. Generate testnet configuration
-        println!("\n📝 Generating testnet configuration...");
+        info!("Generating testnet configuration");
         self.generate_testnet_config(node, home_dir, logging)?;
-        println!("✓ Configuration generated");
+        info!("Configuration generated");
 
         // 2b. Set up assets directory
-        println!("\n📦 Setting up assets directory...");
+        info!("Setting up assets directory");
         self.setup_assets_directory(home_dir)?;
-        println!("✓ Assets directory set up");
+        info!("Assets directory set up");
 
         let fee_receiver = if let Some(fee_receiver_str) = &self.fee_receiver {
             Address::from(AlloyAddress::from_str(fee_receiver_str)?)
@@ -110,62 +113,61 @@ impl TestnetStartCmd {
         };
 
         // 2c. Generate Emerald configs
-        println!("\n⚙️  Generating Emerald configs...");
+        info!("Generating Emerald configs");
         info!("Will use address `{fee_receiver}` as Fee Receiver address");
         self.generate_emerald_configs(home_dir, fee_receiver)?;
-        println!("✓ Emerald configs generated");
+        info!("Emerald configs generated");
 
         // 3. Extract validator public keys
-        println!("\n🔑 Extracting validator public keys...");
+        info!("Extracting validator public keys");
         self.extract_public_keys(home_dir)?;
-        println!("✓ Public keys extracted");
+        info!("Public keys extracted");
 
         // 4. Generate genesis file
-        println!("\n⚙️  Generating genesis file...");
+        info!("Generating genesis file");
         self.generate_genesis(home_dir)?;
-        println!("✓ Genesis file created");
+        info!("Genesis file created");
 
         // 5. Spawn Reth processes
-        println!("\n🔗 Starting Reth execution clients...");
+        info!("Starting Reth execution clients");
         let reth_processes = self.spawn_reth_nodes(home_dir)?;
-        println!("✓ All Reth nodes started");
+        info!("All Reth nodes started");
 
         // 6. Wait for Reth nodes to be ready
-        println!("\n⏳ Waiting for Reth nodes to initialize...");
+        info!("Waiting for Reth nodes to initialize");
         self.wait_for_reth_nodes(home_dir)?;
-        println!("✓ All Reth nodes ready");
+        info!("All Reth nodes ready");
 
         // 7. Connect Reth peers
-        println!("\n🔗 Connecting Reth peers...");
+        info!("Connecting Reth peers");
         self.connect_reth_peers(home_dir)?;
-        println!("✓ Reth peers connected");
+        info!("Reth peers connected");
 
         // 8. Spawn Emerald processes
-        println!("\n💎 Starting Emerald consensus nodes...");
+        info!("Starting Emerald consensus nodes");
         let emerald_processes = self.spawn_emerald_nodes(home_dir)?;
-        println!("✓ All Emerald nodes started");
+        info!("All Emerald nodes started");
 
-        println!("\n✅ Testnet started successfully!");
-        println!("\n📊 Status:");
-        println!("  Reth processes: {} running", reth_processes.len());
-        println!("  Emerald processes: {} running", emerald_processes.len());
-        println!("\n📁 Logs:");
-        println!(
-            "  Reth: {}/{{0..{}}}/logs/reth.log",
+        info!(
+            "Testnet started successfully!\n\
+               Status:\n\
+               \tReth processes: {} running\n\
+               \tEmerald processes: {} running\n\
+               Logs:\n\
+               \tReth: {}/{{0..{}}}/logs/reth.log\n\
+               \tEmerald: {}/{{0..{}}}/logs/emerald.log\n\
+               Commands:\n\
+               \temerald testnet status           - Check status of all nodes\n\
+               \temerald testnet stop-node <id>   - Stop a specific node\n\
+               \temerald testnet stop             - Stop all nodes\n\
+               \temerald testnet destroy          - Remove all testnet data",
+            reth_processes.len(),
+            emerald_processes.len(),
+            home_dir.display(),
+            self.nodes - 1,
             home_dir.display(),
             self.nodes - 1
         );
-        println!(
-            "  Emerald: {}/{{0..{}}}/logs/emerald.log",
-            home_dir.display(),
-            self.nodes - 1
-        );
-
-        println!("\n💡 Commands:");
-        println!("    emerald testnet status           - Check status of all nodes");
-        println!("    emerald testnet stop-node <id>   - Stop a specific node");
-        println!("    emerald testnet stop             - Stop all nodes");
-        println!("    emerald testnet destroy          - Remove all testnet data");
 
         Ok(())
     }
@@ -354,7 +356,7 @@ fee_recipient = "{}"
                 PathBuf::from("emerald-utils")
             }
         };
-        println!(
+        info!(
             "  Using emerald-utils from: {}",
             emerald_utils_bin.display()
         );
@@ -436,9 +438,9 @@ fee_recipient = "{}"
                 assets_dir.clone(),
                 &self.reth_config_path,
             );
-            print!("  Starting Reth node {i}... ");
+            debug!("Starting Reth node {i}");
             let process = reth_node.spawn(&self.custom_reth_bin)?;
-            println!("✓ (PID: {})", process.pid);
+            info!("Started Reth node {i} (PID: {})", process.pid);
             processes.push(process);
 
             // Small delay between spawns
@@ -458,7 +460,7 @@ fee_recipient = "{}"
                 assets_dir.clone(),
                 &self.reth_config_path,
             );
-            print!("  Waiting for Reth node {i} to be ready... ");
+            debug!("Waiting for Reth node {i} to be ready");
             let rpc = RpcClient::new(reth_node.ports.http);
             retry_with_timeout(
                 "reth node ready",
@@ -469,7 +471,7 @@ fee_recipient = "{}"
                     rpc.get_block_number()
                 },
             )?;
-            println!("✓");
+            info!("Reth node {i} is ready");
         }
 
         Ok(())
@@ -487,9 +489,9 @@ fee_recipient = "{}"
                 assets_dir.clone(),
                 &self.reth_config_path,
             );
-            print!("  Getting enode for Reth node {i}... ");
+            debug!("Getting enode for Reth node {i}");
             let enode = reth_node.get_enode()?;
-            println!("✓");
+            debug!("Got enode for Reth node {i}");
             enodes.push(enode);
         }
 
@@ -503,9 +505,9 @@ fee_recipient = "{}"
             );
             for (j, enode) in enodes.iter().enumerate() {
                 if i != j {
-                    print!("  Connecting node {i} -> {j}... ");
+                    debug!("Connecting node {i} -> {j}");
                     reth_node.add_peer(enode)?;
-                    println!("✓");
+                    debug!("Connected node {i} -> {j}");
                 }
             }
         }
@@ -517,9 +519,9 @@ fee_recipient = "{}"
         let mut processes = Vec::new();
 
         for i in 0..self.nodes {
-            print!("  Starting Emerald node {i}... ");
+            debug!("Starting Emerald node {i}");
             let process = self.spawn_emerald_node(i, home_dir)?;
-            println!("✓ (PID: {})", process.pid);
+            info!("Started Emerald node {i} (PID: {})", process.pid);
             processes.push(process);
 
             // Small delay between spawns

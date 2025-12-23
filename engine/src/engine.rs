@@ -291,6 +291,15 @@ impl Engine {
         }
     }
 
+    /// Get the latest block number from the execution client.
+    /// Returns None if the client has no blocks (genesis case).
+    pub async fn get_latest_block_number(&self) -> eyre::Result<Option<u64>> {
+        debug!("🟠 get_latest_block_number");
+
+        let block = self.eth.get_block_by_number("latest").await?;
+        Ok(block.map(|b| b.block_number))
+    }
+
     /// Returns the duration since the unix epoch.
     fn _timestamp_now(&self) -> u64 {
         SystemTime::now()

@@ -91,7 +91,7 @@ async fn test_anvil_storage_comparison() -> eyre::Result<()> {
         contract_address
     );
 
-    let provider = ProviderBuilder::new().on_http(rpc_url.clone());
+    let provider = ProviderBuilder::new().connect_http(rpc_url.clone());
 
     // Basic storage check - just verify non-empty storage exists
     let zero_slot = provider
@@ -104,8 +104,8 @@ async fn test_anvil_storage_comparison() -> eyre::Result<()> {
             .get_storage_at(contract_address, (*slot).into())
             .await?;
         assert_eq!(
-            actual_value,
-            (*expected_value).into(),
+            actual_value.to_be_bytes::<32>(),
+            (*expected_value),
             "Storage mismatch at slot {slot}",
         );
     }
@@ -130,7 +130,7 @@ async fn deploy_and_register_validators(
 
     let deployer_provider = ProviderBuilder::new()
         .wallet(deployer_wallet)
-        .on_http(rpc_endpoint.clone());
+        .connect_http(rpc_endpoint.clone());
 
     // Deploy the contract using the generated bindings
     let deployed_contract = ValidatorManager::deploy(deployer_provider.clone()).await?;
@@ -142,7 +142,7 @@ async fn deploy_and_register_validators(
     );
 
     // check bytecode exists at address
-    let provider = ProviderBuilder::new().on_http(rpc_endpoint.clone());
+    let provider = ProviderBuilder::new().connect_http(rpc_endpoint.clone());
     let code = provider.get_code_at(contract_address).await?;
 
     // assert bytecode matches

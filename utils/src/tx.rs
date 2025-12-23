@@ -117,7 +117,7 @@ pub(crate) async fn make_signed_contract_call_tx(
 #[cfg(test)]
 mod tests {
     use alloy_network::eip2718::Encodable2718;
-    use alloy_primitives::PrimitiveSignature as Signature;
+    use alloy_primitives::Signature;
     use alloy_rlp::Decodable;
 
     use super::*;

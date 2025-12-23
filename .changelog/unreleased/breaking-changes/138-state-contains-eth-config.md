@@ -1,0 +1,1 @@
+- App state contains info on the chain configuraton loaded from genesis. Requires path to eth genesis file in config.([#138](https://github.com/informalsystems/emerald/pull/138))

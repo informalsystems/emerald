@@ -102,15 +102,15 @@ pub fn parse_validator_identifier(identifier: &str) -> Result<Address> {
 
 // list validators
 pub async fn list_validators(rpc_url: &Url, contract_address: &Address) -> Result<()> {
-    let provider = ProviderBuilder::new().on_http(rpc_url.clone());
+    let provider = ProviderBuilder::new().connect_http(rpc_url.clone());
 
     let contract = ValidatorManager::new(*contract_address, &provider);
 
-    let poa_owner_address = contract.owner().call().await?._0;
+    let poa_owner_address = contract.owner().call().await?.0;
     println!("POA Owner Address: 0x{poa_owner_address:x}");
     println!();
 
-    let validators = contract.getValidators().call().await?.validators;
+    let validators = contract.getValidators().call().await?;
 
     println!("Total validators: {}", validators.len());
     println!();
@@ -179,7 +179,7 @@ pub async fn add_validator(
 
     let provider = ProviderBuilder::new()
         .wallet(wallet)
-        .on_http(rpc_url.clone());
+        .connect_http(rpc_url.clone());
 
     // Create contract instance
     let contract = ValidatorManager::new(*contract_address, &provider);
@@ -223,7 +223,7 @@ pub async fn remove_validator(
 
     let provider = ProviderBuilder::new()
         .wallet(wallet)
-        .on_http(rpc_url.clone());
+        .connect_http(rpc_url.clone());
 
     // Create contract instance
     let contract = ValidatorManager::new(*contract_address, &provider);
@@ -273,7 +273,7 @@ pub async fn update_validator_power(
 
     let provider = ProviderBuilder::new()
         .wallet(wallet)
-        .on_http(rpc_url.clone());
+        .connect_http(rpc_url.clone());
 
     // Create contract instance
     let contract = ValidatorManager::new(*contract_address, &provider);

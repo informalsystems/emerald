@@ -47,6 +47,106 @@ pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -
     Ok(())
 }
 
+/// Replay blocks from Emerald's store to the execution client (Reth).
+/// This is needed when Reth is behind Emerald's stored height after a crash.
+async fn replay_heights_to_engine(
+    state: &State,
+    engine: &Engine,
+    start_height: Height,
+    end_height: Height,
+    emerald_config: &EmeraldConfig,
+) -> eyre::Result<()> {
+    info!(
+        "🔄 Replaying heights {} to {} to execution client",
+        start_height, end_height
+    );
+
+    for height in start_height.as_u64()..=end_height.as_u64() {
+        let height = Height::new(height);
+
+        // Get the certificate and header from store
+        let (_certificate, header_bytes) = state
+            .store
+            .get_certificate_and_header(height)
+            .await?
+            .ok_or_eyre(format!("Missing certificate or header for height {height}"))?;
+
+        // Deserialize the execution payload
+        let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&header_bytes).map_err(|e| {
+            eyre!(
+                "Failed to deserialize execution payload at height {}: {:?}",
+                height,
+                e
+            )
+        })?;
+
+        debug!(
+            "🔄 Replaying block at height {} with hash {:?}",
+            height, execution_payload.payload_inner.payload_inner.block_hash
+        );
+
+        // Extract versioned hashes from blob transactions
+        let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
+            eyre!(
+                "Failed to convert execution payload to block at height {}: {}",
+                height,
+                e
+            )
+        })?;
+        let versioned_hashes: Vec<BlockHash> =
+            block.body.blob_versioned_hashes_iter().copied().collect();
+
+        // Submit the block to Reth
+        let payload_status = engine
+            .notify_new_block_with_retry(
+                execution_payload.clone(),
+                versioned_hashes,
+                &emerald_config.retry_config,
+            )
+            .await?;
+
+        // Verify the block was accepted
+        match payload_status.status {
+            PayloadStatusEnum::Valid => {
+                debug!("✅ Block at height {} replayed successfully", height);
+            }
+            PayloadStatusEnum::Invalid { validation_error } => {
+                return Err(eyre::eyre!(
+                    "Block replay failed at height {}: {}",
+                    height,
+                    validation_error
+                ));
+            }
+            PayloadStatusEnum::Accepted => {
+                // ACCEPTED is no instant finality and there is a possibility of a fork.
+                return Err(eyre::eyre!(
+                    "Block replay failed at height {}: execution client returned ACCEPTED status, which is not supported during replay",
+                    height
+                ));
+            }
+            PayloadStatusEnum::Syncing => {
+                return Err(eyre::eyre!(
+                    "Block replay failed at height {}: execution client still syncing",
+                    height
+                ));
+            }
+        }
+
+        // Update forkchoice to this block
+        engine
+            .set_latest_forkchoice_state(
+                execution_payload.payload_inner.payload_inner.block_hash,
+                &emerald_config.retry_config,
+            )
+            .await?;
+
+        debug!("🎯 Forkchoice updated to height {}", height);
+    }
+
+    info!("✅ Successfully replayed all heights to execution client");
+    Ok(())
+}
+
 pub async fn initialize_state_from_existing_block(
     state: &mut State,
     engine: &Engine,
@@ -60,6 +160,39 @@ pub async fn initialize_state_from_existing_block(
         .get_latest_block_candidate(start_height)
         .await
         .ok_or_eyre("we have not atomically stored the last block, database corrupted")?;
+
+    // Check if Reth is behind Emerald's stored height
+    let reth_latest_height = engine.get_latest_block_number().await?;
+
+    match reth_latest_height {
+        Some(reth_height) if reth_height < start_height.as_u64() => {
+            // Reth is behind - we need to replay blocks
+            warn!(
+                "⚠️  Execution client is at height {} but Emerald has blocks up to height {}. Starting height replay.",
+                reth_height, start_height
+            );
+
+            // Replay from Reth's next height to Emerald's stored height
+            let replay_start = Height::new(reth_height + 1);
+            replay_heights_to_engine(state, engine, replay_start, start_height, emerald_config)
+                .await?;
+
+            info!("✅ Height replay completed successfully");
+        }
+        Some(reth_height) => {
+            debug!(
+                "Execution client at height {} is aligned with or ahead of Emerald's stored height {}",
+                reth_height, start_height
+            );
+        }
+        None => {
+            // No blocks in Reth yet (genesis case) - this shouldn't happen here
+            // but handle it gracefully
+            warn!("⚠️  Execution client has no blocks, replaying from genesis");
+            replay_heights_to_engine(state, engine, Height::new(1), start_height, emerald_config)
+                .await?;
+        }
+    }
 
     let payload_status = engine
         .send_forkchoice_updated(
@@ -81,13 +214,20 @@ pub async fn initialize_state_from_existing_block(
             //     requisite data for the validation is missing
             debug!("Payload is valid");
             debug!("latest block {:?}", state.latest_block);
+
+            // Read the validator set at the stored block - this is the validator set
+            // that will be active for the NEXT height (where consensus will start)
             let block_validator_set = read_validators_from_contract(
                 engine.eth.url().as_ref(),
                 &latest_block_candidate_from_store.block_hash,
             )
             .await?;
-            debug!("🌈 Got block validator set: {:?}", block_validator_set);
-            state.set_validator_set(start_height, block_validator_set);
+
+            // Consensus will start at the next height, so we set the validator set for that height
+            let next_height = start_height.increment();
+            debug!("🌈 Got validator set: {:?} for height {}", block_validator_set, next_height);
+            state.set_validator_set(next_height, block_validator_set);
+
             Ok(())
         }
         PayloadStatusEnum::Invalid { validation_error } => Err(eyre::eyre!(validation_error)),
@@ -182,7 +322,9 @@ pub async fn run(
                         start_height,
                         state
                             .get_validator_set(start_height)
-                            .ok_or_eyre("Validator set not found for start height {start_height}")?
+                            .ok_or_eyre(format!(
+                                "Validator set not found for start height {start_height}"
+                            ))?
                             .clone(),
                     ))
                     .is_err()

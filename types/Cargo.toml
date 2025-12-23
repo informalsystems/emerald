@@ -31,8 +31,8 @@ serde_json      = { workspace = true }
 signature       = { workspace = true }
 
 alloy-consensus  = { workspace = true }
-alloy-primitives = { version = "0.8.21", default-features = false, features = [ "serde" ] }
-k256             = "0.13"
+alloy-primitives = { workspace = true, default-features = false, features = [ "serde" ] }
+k256             = { workspace = true }
 
 [build-dependencies]
 prost-build = { workspace = true }

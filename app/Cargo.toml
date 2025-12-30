@@ -25,7 +25,7 @@ alloy-sol-types        = { workspace = true, features = [ "json" ] }
 alloy-consensus        = { workspace = true }
 alloy-rpc-types-eth    = { workspace = true }
 alloy-rpc-types-engine = { workspace = true }
-ethereum_ssz           = "0.9"
+ethereum_ssz           = "0.10"
 
 libp2p-identity = { version = "0.2", features = [ "secp256k1" ] }
 k256            = { workspace = true }

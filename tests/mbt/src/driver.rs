@@ -23,12 +23,15 @@ use crate::reth::{self, RethHandle};
 use crate::state::{Node, Payload, Proposal, SpecState, ValueId};
 
 pub struct EmeraldDriver {
+    // SUT: the concrete emerald state componenets.
     pub nodes: BTreeMap<Node, StateComponents>,
     pub addresses: BiMap<Node, Address>,
+    // Historical variables tracked during trace replay.
     pub proposals: BiMap<Proposal, EmeraldValueId>,
     pub values: BTreeMap<ValueId, Value>,
     pub streams: BTreeMap<ValueId, Vec<StreamMessage<ProposalPart>>>,
     pub blocks: BiMap<Payload, BlockHash>,
+    // Necessary runtime and handles to interact with Reth and Emerald.
     pub runtime: tokio::runtime::Runtime,
     pub tempdir: Option<TempDir>,
     // TODO: have a reth instace per emerald node.

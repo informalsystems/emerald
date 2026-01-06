@@ -111,5 +111,6 @@ mbt-test:
 
 mbt-clean:
 	rm -rf ./tests/mbt/.reth-data
+	rm -f ./assets/genesis.json
 	rm -f ./assets/emerald_genesis.json
 	rm -f ./assets/validator_public_keys.txt

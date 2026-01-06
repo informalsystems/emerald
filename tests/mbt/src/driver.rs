@@ -19,7 +19,7 @@ use malachitebft_eth_types::{
 use quint_connect::{switch, Driver, Result, Step};
 use tempfile::TempDir;
 
-use crate::reth::RethManager;
+use crate::reth::{self, RethHandle};
 use crate::state::{Node, Payload, Proposal, SpecState, ValueId};
 
 pub struct EmeraldDriver {
@@ -31,12 +31,13 @@ pub struct EmeraldDriver {
     pub blocks: BiMap<Payload, BlockHash>,
     pub runtime: tokio::runtime::Runtime,
     pub tempdir: Option<TempDir>,
-    _reth: RethManager,
+    // TODO: have a reth instace per emerald node.
+    _reth: RethHandle,
 }
 
 impl Default for EmeraldDriver {
     fn default() -> Self {
-        let reth = RethManager::start().expect("Failed to start RETH");
+        let reth = reth::start().expect("Failed to start RETH");
 
         Self {
             nodes: BTreeMap::new(),

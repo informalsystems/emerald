@@ -136,8 +136,9 @@ impl EmeraldDriver {
             .expect("Failed to get current directory")
             .join("../../assets/emerald_genesis.json");
 
-        let genesis_json = std::fs::read_to_string(&shared_genesis_path)
-            .expect("Failed to read shared genesis file. The RethManager should have created this.");
+        let genesis_json = std::fs::read_to_string(&shared_genesis_path).expect(
+            "Failed to read shared genesis file. The reth module should have created this.",
+        );
         std::fs::write(&genesis_file, genesis_json).expect("Failed to write genesis file");
 
         // Create test emerald config
@@ -156,7 +157,7 @@ impl EmeraldDriver {
     }
 
     fn create_test_emerald_config(moniker: &Node) -> EmeraldConfig {
-        // Use the JWT secret from the assets directory. This is created by RethManager.
+        // Use the JWT secret from the assets directory. This is created by reth module.
         let jwt_path = std::env::current_dir()
             .expect("Failed to get current directory")
             .join("../../assets/jwtsecret")

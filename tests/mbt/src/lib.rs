@@ -1,5 +1,5 @@
 mod driver;
-mod reth_manager;
+mod reth;
 mod state;
 
 #[cfg(test)]

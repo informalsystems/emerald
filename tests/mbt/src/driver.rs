@@ -19,9 +19,8 @@ use malachitebft_eth_types::{
 use quint_connect::{switch, Driver, Result, Step};
 use tempfile::TempDir;
 
+use crate::reth::RethManager;
 use crate::state::{Node, Payload, Proposal, SpecState, ValueId};
-
-use crate::reth_manager::RethManager;
 
 pub struct EmeraldDriver {
     pub nodes: BTreeMap<Node, StateComponents>,

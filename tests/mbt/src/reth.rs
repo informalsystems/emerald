@@ -57,8 +57,10 @@ impl RethManager {
                 .output()?;
 
             if !output.status.success() {
-                anyhow::bail!("Failed to generate validator keys: {}",
-                    String::from_utf8_lossy(&output.stderr));
+                anyhow::bail!(
+                    "Failed to generate validator keys: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
             }
 
             std::fs::write(&pubkeys_file, output.stdout)?;
@@ -172,11 +174,17 @@ impl RethManager {
                 return Ok(());
             }
 
-            println!("Waiting for RETH to start ({}/{})", attempt, MAX_STARTUP_ATTEMPTS);
+            println!(
+                "Waiting for RETH to start ({}/{})",
+                attempt, MAX_STARTUP_ATTEMPTS
+            );
             thread::sleep(STARTUP_CHECK_INTERVAL);
         }
 
-        anyhow::bail!("RETH failed to start after {} attempts", MAX_STARTUP_ATTEMPTS)
+        anyhow::bail!(
+            "RETH failed to start after {} attempts",
+            MAX_STARTUP_ATTEMPTS
+        )
     }
 
     /// Stop the RETH process

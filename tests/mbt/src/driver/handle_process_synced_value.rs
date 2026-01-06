@@ -14,15 +14,13 @@ impl EmeraldDriver {
         let value = self
             .values
             .get(&proposal.id())
-            .expect("Unknown proposal value")
-            .clone();
+            .expect("Unknown proposal value");
 
         // Get the proposer's address
         let proposer_address = self
             .addresses
             .get_by_left(&proposal.proposer)
-            .expect("Unknown proposer")
-            .clone();
+            .expect("Unknown proposer");
 
         // Get the block data from the proposer's node (not the syncing node)
         // We need to do this before getting a mutable borrow on the target node
@@ -48,7 +46,6 @@ impl EmeraldDriver {
         let app = self.nodes.get_mut(&node).expect("Node should exist");
 
         self.runtime.block_on(async {
-
             // Encode the value (combining consensus data and block data)
             let value_with_extensions = {
                 let mut v = value.clone();
@@ -65,7 +62,7 @@ impl EmeraldDriver {
             let msg = AppMsg::ProcessSyncedValue {
                 height: EmeraldHeight::new(proposal.height),
                 round: EmeraldRound::new(proposal.round),
-                proposer: proposer_address,
+                proposer: *proposer_address,
                 value_bytes,
                 reply: reply_tx,
             };

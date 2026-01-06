@@ -21,7 +21,6 @@ use tempfile::TempDir;
 
 use crate::state::{Node, Payload, Proposal, SpecState, ValueId};
 
-#[cfg(test)]
 use crate::reth_manager::RethManager;
 
 pub struct EmeraldDriver {
@@ -33,16 +32,12 @@ pub struct EmeraldDriver {
     pub blocks: BiMap<Payload, BlockHash>,
     pub runtime: tokio::runtime::Runtime,
     pub tempdir: Option<TempDir>,
-    #[cfg(test)]
-    reth: Option<RethManager>,
+    _reth: RethManager,
 }
 
 impl Default for EmeraldDriver {
     fn default() -> Self {
-        #[cfg(test)]
-        let reth = Some(RethManager::start().expect("Failed to start RETH"));
-        #[cfg(not(test))]
-        let _reth = ();
+        let reth = RethManager::start().expect("Failed to start RETH");
 
         Self {
             nodes: BTreeMap::new(),
@@ -53,8 +48,7 @@ impl Default for EmeraldDriver {
             blocks: BiMap::new(),
             runtime: tokio::runtime::Runtime::new().expect("Failed to create tokio runtime"),
             tempdir: None,
-            #[cfg(test)]
-            reth,
+            _reth: reth,
         }
     }
 }

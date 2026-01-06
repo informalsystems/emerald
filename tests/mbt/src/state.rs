@@ -13,7 +13,7 @@ pub type Node = String;
 pub type Height = u64;
 pub type Round = u32;
 pub type Payload = u64;
-pub type ValueId = (Height, Round);
+pub type ValueId = (Height, Round, Payload);
 
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Deserialize)]
 pub struct Proposal {
@@ -25,7 +25,7 @@ pub struct Proposal {
 
 impl Proposal {
     pub fn id(&self) -> ValueId {
-        (self.height, self.round)
+        (self.height, self.round, self.payload)
     }
 }
 

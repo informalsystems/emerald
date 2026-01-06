@@ -78,7 +78,7 @@ module emerald_app {
     | ReceivedProposalAction({ node: Node, proposal: Proposal })
     | DecidedAction({ node: Node, proposal: Proposal })
     | ProcessSyncedValueAction({ node: Node, proposal: Proposal })
-    | GetDecidedValueAction({ node: Node, proposal: Proposal })
+    | GetDecidedValueAction({ node: Node, height: Height, proposal: Option[Proposal] })
     | NodeCrash({ node: Node })
 
   // Local state for each app node
@@ -357,19 +357,31 @@ module emerald_app {
 
   // ===== GetDecidedValue: Provide decided value for sync =====
 
-  pure def listen_get_decided_value(ctx: LocalContext): Set[Proposal] = {
+  pure def listen_get_decided_value(ctx: LocalContext): Set[Height] = {
     val s = ctx.state
 
     if (s.phase == Working)
-      ctx.extensions.decided_proposals.filter(p =>
-        s.latest_block_height >= p.height
-      )
+      val max_decided_height =
+        ctx.extensions
+          .decided_proposals
+          .fold(1, (h, p) => max(h, p.height))
+      1.to(max_decided_height)
     else
       Set()
   }
 
-  pure def handle_get_decided_value(ctx: LocalContext, proposal: Proposal): Transition = {
+  pure def handle_get_decided_value(ctx: LocalContext, height: Height): Transition = {
     val s = ctx.state
+
+    val known_decided =
+      match get_decision(ctx, height) {
+        | None => None
+        | Some(p) =>
+            if (s.latest_block_height >= p.height)
+              Some(p)
+            else
+              None
+      }
 
     {
       post_state: s,
@@ -377,7 +389,8 @@ module emerald_app {
         choreo::CustomEffect(RecordAction(
           GetDecidedValueAction({
             node: s.process_id,
-            proposal: proposal
+            height: height,
+            proposal: known_decided
           })
         ))
       )

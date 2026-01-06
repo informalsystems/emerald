@@ -1,5 +1,6 @@
 mod consensus_ready;
 mod handle_decided;
+mod handle_get_decided;
 mod handle_get_value;
 mod handle_process_synced_value;
 mod handle_received_proposal;
@@ -88,6 +89,9 @@ impl Driver for EmeraldDriver {
             },
             DecidedAction(node, proposal) => {
                 self.handle_decided(node, proposal)
+            },
+            GetDecidedValueAction(node, height, proposal?) => {
+                self.handle_get_decided(node, height, proposal)
             },
             NodeCrash(node) => {
                 self.node_crash(node)

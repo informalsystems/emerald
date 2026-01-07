@@ -7,7 +7,7 @@ use crate::driver::EmeraldDriver;
     spec = "../../specs/emerald_tests.qnt",
     test = "emeraldSingleHeightConsensusTest"
 )]
-fn sigle_height_consensus() -> impl Driver {
+fn single_height_consensus() -> impl Driver {
     EmeraldDriver::default()
 }
 

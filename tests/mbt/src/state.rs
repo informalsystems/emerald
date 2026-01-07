@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use emerald::state::assemble_value_from_parts;
 use emerald::State;
 use itf::de::{self, As};
+use malachitebft_app_channel::app::types::core::Round as EmeraldRound;
 use malachitebft_eth_types::Height as EmeraldHeight;
 use quint_connect::{Result, State as QuintState};
 use serde::Deserialize;
@@ -66,7 +67,7 @@ impl QuintState<EmeraldDriver> for SpecState {
     }
 }
 
-fn get_latest_block_info(driver: &EmeraldDriver, state: &State) -> (u64, Option<u64>) {
+fn get_latest_block_info(driver: &EmeraldDriver, state: &State) -> (Height, Option<Payload>) {
     let (latest_block_height, latest_block_payload) = match &state.latest_block {
         None => (0, None),                                   // genesis
         Some(block) if block.block_number == 0 => (0, None), // genesis
@@ -81,55 +82,63 @@ fn get_latest_block_info(driver: &EmeraldDriver, state: &State) -> (u64, Option<
 
 async fn get_proposals(driver: &EmeraldDriver, state: &State) -> BTreeSet<Proposal> {
     let mut proposals = BTreeSet::new();
+    let mut max_height = 1;
+    let mut max_round = 0;
 
-    // Get decided proposals
-    for height in 1..state.current_height.as_u64() {
+    for (proposal, _) in &driver.proposals {
+        max_height = max_height.max(proposal.height);
+        max_round = max_round.max(proposal.round);
+    }
+
+    for height in 1..=max_height {
+        let height = EmeraldHeight::new(height);
+
         if let Some(decided) = state
             .store
-            .get_decided_value(EmeraldHeight::new(height))
+            .get_decided_value(height)
             .await
             .expect("Failed to get decided value")
         {
             let proposal = driver
                 .proposals
                 .get_by_right(&decided.value.id())
-                .expect("Unknown proposed value")
-                .clone();
-            proposals.insert(proposal);
+                .expect("Unknown proposed value");
+            proposals.insert(proposal.clone());
         }
-    }
 
-    // Get pending proposals
-    let pending_parts = state
-        .store
-        .get_pending_proposal_parts(state.current_height, state.current_round)
-        .await
-        .expect("Failed to read pending proposal parst");
+        for round in 0..=max_round {
+            let round = EmeraldRound::new(round);
 
-    for parts in pending_parts {
-        let (proposed_value, _) = assemble_value_from_parts(parts);
-        let proposal = driver
-            .proposals
-            .get_by_right(&proposed_value.value.id())
-            .expect("Unknown proposed value")
-            .clone();
-        proposals.insert(proposal);
-    }
+            let undecided_proposals = state
+                .store
+                .get_undecided_proposals(height, round)
+                .await
+                .expect("Failed to read undecided proposals");
 
-    // Get undecided proposals
-    let undecided_proposals = state
-        .store
-        .get_undecided_proposals(state.current_height, state.current_round)
-        .await
-        .expect("Failed to read undecided proposals");
+            for proposed_value in undecided_proposals {
+                let proposal = driver
+                    .proposals
+                    .get_by_right(&proposed_value.value.id())
+                    .expect("Unknown proposed value");
+                proposals.insert(proposal.clone());
+            }
 
-    for proposed_value in undecided_proposals {
-        let proposal = driver
-            .proposals
-            .get_by_right(&proposed_value.value.id())
-            .expect("Unknown proposed value")
-            .clone();
-        proposals.insert(proposal);
+            let pending_parts = state
+                .store
+                .get_pending_proposal_parts(height, round)
+                .await
+                .expect("Failed to read pending proposal parst");
+
+            for parts in pending_parts {
+                let (proposed_value, _) = assemble_value_from_parts(parts);
+                let proposal = driver
+                    .proposals
+                    .get_by_right(&proposed_value.value.id())
+                    .expect("Unknown proposed value")
+                    .clone();
+                proposals.insert(proposal);
+            }
+        }
     }
 
     proposals

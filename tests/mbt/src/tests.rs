@@ -25,7 +25,7 @@ fn node_crash_after_consensus() -> impl Driver {
 }
 
 // FIXME: this breaks due to the same scenario as node_crash_after_consensus.
-#[quint_run(spec = "../../specs/emerald_app.qnt")]
+#[quint_run(spec = "../../specs/emerald_app.qnt", max_steps = 128)]
 #[should_panic = "Payload ID should be Some!"]
 fn simulation() -> impl Driver {
     EmeraldDriver::default()

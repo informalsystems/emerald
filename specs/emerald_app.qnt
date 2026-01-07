@@ -330,20 +330,29 @@ module emerald_app {
   }
 
   // ===== ProcessSyncedValue: Process synced block when catching up =====
-  // 
-  // NOTE: from the perspecitve of the model, syncing is just another way of
-  // learning about proposals. The following actions simply reimplement the
-  // {listen,handle}_received_propoals functions but record the appropriate
-  // action for MBT.
 
-  pure def listen_process_synced_value(ctx: LocalContext): Set[Proposal] = 
-    listen_received_proposal(ctx)
+  pure def listen_process_synced_value(ctx: LocalContext): Set[Proposal] = {
+    val s = ctx.state
+
+    if (s.phase == Working)
+      ctx.extensions.decided_proposals.filterMap(p => {
+        if (p.height >= s.current_height and not(p.in(s.proposals)))
+          Some(p)
+        else
+          None
+      })
+    else
+      Set()
+  }
 
   pure def handle_process_synced_value(ctx: LocalContext, proposal: Proposal): Transition = {
     val s = ctx.state
 
     {
-      ...handle_received_proposal(ctx, proposal),
+      post_state: {
+        ...s,
+        proposals: s.proposals.setAdd(proposal)
+      },
       effects: Set(
         choreo::CustomEffect(RecordAction(
           ProcessSyncedValueAction({

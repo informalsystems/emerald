@@ -65,35 +65,42 @@ struct StreamState {
     fin_received: bool,
 }
 
+enum StreamProgress {
+    Incomplete(StreamState),
+    Done(ProposalParts),
+}
+
 impl StreamState {
     fn is_done(&self) -> bool {
         self.init_info.is_some() && self.fin_received && self.buffer.len() == self.total_messages
     }
 
-    fn insert(&mut self, msg: StreamMessage<ProposalPart>) -> Option<ProposalParts> {
-        if msg.is_first() {
-            self.init_info = msg.content.as_data().and_then(|p| p.as_init()).cloned();
+    fn insert(mut self, msg: StreamMessage<ProposalPart>) -> StreamProgress {
+        if self.seen_sequences.insert(msg.sequence) {
+            if msg.is_first() {
+                self.init_info = msg.content.as_data().and_then(|p| p.as_init()).cloned();
+            }
+
+            if msg.is_fin() {
+                self.fin_received = true;
+                self.total_messages = msg.sequence as usize + 1;
+            }
+
+            self.buffer.push(msg);
+
+            if self.is_done() {
+                let init_info = self.init_info.take().expect("init_info must be Some(..)");
+
+                return StreamProgress::Done(ProposalParts {
+                    height: init_info.height,
+                    round: init_info.round,
+                    proposer: init_info.proposer,
+                    parts: self.buffer.drain(),
+                });
+            }
         }
 
-        if msg.is_fin() {
-            self.fin_received = true;
-            self.total_messages = msg.sequence as usize + 1;
-        }
-
-        self.buffer.push(msg);
-
-        if self.is_done() {
-            let init_info = self.init_info.take()?;
-
-            Some(ProposalParts {
-                height: init_info.height,
-                round: init_info.round,
-                proposer: init_info.proposer,
-                parts: self.buffer.drain(),
-            })
-        } else {
-            None
-        }
+        StreamProgress::Incomplete(self)
     }
 }
 
@@ -134,20 +141,15 @@ impl PartStreamsMap {
 
         let state = self
             .streams
-            .entry((peer_id, stream_id.clone()))
-            .or_default();
+            .remove(&(peer_id, stream_id.clone()))
+            .unwrap_or_default();
 
-        if !state.seen_sequences.insert(msg.sequence) {
-            // We have already seen a message with this sequence number.
-            return None;
+        match state.insert(msg) {
+            StreamProgress::Done(parts) => Some(parts),
+            StreamProgress::Incomplete(state) => {
+                self.streams.insert((peer_id, stream_id), state);
+                None
+            }
         }
-
-        let result = state.insert(msg);
-
-        if state.is_done() {
-            self.streams.remove(&(peer_id, stream_id));
-        }
-
-        result
     }
 }

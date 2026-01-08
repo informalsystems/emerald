@@ -1,6 +1,8 @@
 mod driver;
+mod hist;
 mod reth;
 mod state;
+mod sut;
 
 #[cfg(test)]
 mod tests;

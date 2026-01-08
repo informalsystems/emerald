@@ -85,8 +85,7 @@ fn generate_validator_keys(pubkeys_file: &Path) -> Result<()> {
     for (validator, _private_key) in &validators {
         let pub_key = &validator.public_key;
         let compressed_bytes = pub_key.to_vec();
-        let verifying_key = VerifyingKey::from_sec1_bytes(&compressed_bytes)
-            .expect("PublicKey to_vec() should always return valid SEC1 bytes");
+        let verifying_key = VerifyingKey::from_sec1_bytes(&compressed_bytes)?;
 
         let uncompressed_point = verifying_key.to_encoded_point(false);
         let uncompressed_bytes = uncompressed_point.as_bytes();

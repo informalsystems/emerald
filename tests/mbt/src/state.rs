@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use anyhow::bail;
 use emerald::state::assemble_value_from_parts;
 use emerald::State;
 use itf::de::{self, As};
@@ -46,11 +47,14 @@ pub struct SpecState(pub BTreeMap<Node, NodeState>);
 impl QuintState<EmeraldDriver> for SpecState {
     fn from_driver(driver: &EmeraldDriver) -> Result<Self> {
         let mut system = BTreeMap::new();
+        let Some(rt) = &driver.runtime else {
+            bail!("Uninitialized runtime");
+        };
 
-        for (node, components) in &driver.nodes {
-            let state = &components.state;
-            let proposals = driver.runtime.block_on(get_proposals(driver, state));
-            let (latest_block_height, latest_block_payload) = get_latest_block_info(driver, state);
+        for (node, app) in &driver.sut {
+            let state = &app.components.state;
+            let proposals = rt.block_on(get_proposals(driver, state))?;
+            let (latest_block_height, latest_block_payload) = get_latest_block_info(driver, state)?;
 
             let spec_state = NodeState {
                 current_height: state.current_height.as_u64(),
@@ -67,25 +71,26 @@ impl QuintState<EmeraldDriver> for SpecState {
     }
 }
 
-fn get_latest_block_info(driver: &EmeraldDriver, state: &State) -> (Height, Option<Payload>) {
-    let (latest_block_height, latest_block_payload) = match &state.latest_block {
-        None => (0, None),                                   // genesis
-        Some(block) if block.block_number == 0 => (0, None), // genesis
+fn get_latest_block_info(
+    driver: &EmeraldDriver,
+    state: &State,
+) -> Result<(Height, Option<Payload>)> {
+    match &state.latest_block {
+        None => Ok((0, None)),                                   // genesis
+        Some(block) if block.block_number == 0 => Ok((0, None)), // genesis
         Some(block) => {
-            let payload = driver.blocks.get_by_right(&block.block_hash);
-            assert!(payload.is_some(), "unknown block hash");
-            (block.block_number, payload.cloned())
+            let payload = driver.history.get_payload(&block.block_hash)?;
+            Ok((block.block_number, Some(payload)))
         }
-    };
-    (latest_block_height, latest_block_payload)
+    }
 }
 
-async fn get_proposals(driver: &EmeraldDriver, state: &State) -> BTreeSet<Proposal> {
+async fn get_proposals(driver: &EmeraldDriver, state: &State) -> Result<BTreeSet<Proposal>> {
     let mut proposals = BTreeSet::new();
     let mut max_height = 1;
     let mut max_round = 0;
 
-    for (proposal, _) in &driver.proposals {
+    for (proposal, _) in &driver.history.proposals {
         max_height = max_height.max(proposal.height);
         max_round = max_round.max(proposal.round);
     }
@@ -93,53 +98,35 @@ async fn get_proposals(driver: &EmeraldDriver, state: &State) -> BTreeSet<Propos
     for height in 1..=max_height {
         let height = EmeraldHeight::new(height);
 
-        if let Some(decided) = state
-            .store
-            .get_decided_value(height)
-            .await
-            .expect("Failed to get decided value")
-        {
-            let proposal = driver
-                .proposals
-                .get_by_right(&decided.value.id())
-                .expect("Unknown proposed value");
-            proposals.insert(proposal.clone());
+        if let Some(decided) = state.store.get_decided_value(height).await? {
+            let value_id = decided.value.id();
+            let proposal = driver.history.get_proposal(&value_id)?;
+            proposals.insert(proposal);
         }
 
         for round in 0..=max_round {
             let round = EmeraldRound::new(round);
-
-            let undecided_proposals = state
-                .store
-                .get_undecided_proposals(height, round)
-                .await
-                .expect("Failed to read undecided proposals");
+            let undecided_proposals = state.store.get_undecided_proposals(height, round).await?;
 
             for proposed_value in undecided_proposals {
-                let proposal = driver
-                    .proposals
-                    .get_by_right(&proposed_value.value.id())
-                    .expect("Unknown proposed value");
+                let value_id = proposed_value.value.id();
+                let proposal = driver.history.get_proposal(&value_id)?;
                 proposals.insert(proposal.clone());
             }
 
             let pending_parts = state
                 .store
                 .get_pending_proposal_parts(height, round)
-                .await
-                .expect("Failed to read pending proposal parst");
+                .await?;
 
             for parts in pending_parts {
                 let (proposed_value, _) = assemble_value_from_parts(parts);
-                let proposal = driver
-                    .proposals
-                    .get_by_right(&proposed_value.value.id())
-                    .expect("Unknown proposed value")
-                    .clone();
+                let value_id = proposed_value.value.id();
+                let proposal = driver.history.get_proposal(&value_id)?;
                 proposals.insert(proposal);
             }
         }
     }
 
-    proposals
+    Ok(proposals)
 }

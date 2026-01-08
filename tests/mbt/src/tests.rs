@@ -1,5 +1,4 @@
-use quint_connect::quint_run;
-use quint_connect::quint_test;
+use quint_connect::{quint_run, quint_test};
 
 use crate::driver::EmeraldDriver;
 

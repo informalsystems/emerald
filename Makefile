@@ -1,4 +1,4 @@
-.PHONY: all build release test docs docs-serve testnet-start sync testnet-node-stop testnet-node-restart testnet-stop testnet-clean clean-volumes clean-prometheus spam spam-contract mbt-start-reth mbt-test mbt-clean
+.PHONY: all build release test docs docs-serve testnet-config testnet-reth-restart testnet-start sync testnet-node-stop testnet-node-restart testnet-stop testnet-clean clean-volumes clean-prometheus spam spam-contract mbt-start-reth mbt-test mbt-clean
 
 all: build
 
@@ -25,27 +25,30 @@ docs-serve:
 
 # Testnet (local deployment)
 
-testnet-start: testnet-clean build
-	./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet
-	cargo run --bin emerald -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
-	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt
-	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
-	docker compose up -d reth0 reth1 reth2 reth3 prometheus grafana otterscan
-	./scripts/add_peers.sh --nodes 4
-	@echo 👉 Grafana dashboard is available at http://localhost:4000
-	bash scripts/spawn.bash --nodes 4 --home nodes --no-delay
+RETH_NODES ?= reth0 reth1 reth2 reth3
 
-sync: testnet-clean build
-	./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet
+testnet-config: testnet-clean build
+	./scripts/generate_testnet_config.sh --nodes $(words $(RETH_NODES)) --testnet-config-dir .testnet
 	cargo run --bin emerald -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt
 	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
-	docker compose up -d
-	./scripts/add_peers.sh --nodes 4
+
+testnet-reth-restart:
+	docker compose down -v $(RETH_NODES)
+	docker compose up -d $(RETH_NODES)
+	./scripts/add_peers.sh --nodes $(words $(RETH_NODES))
+
+testnet-start: testnet-config testnet-reth-restart
+	docker compose up -d prometheus grafana otterscan
+	@echo 👉 Grafana dashboard is available at http://localhost:4000
+	bash scripts/spawn.bash --nodes $(words $(RETH_NODES)) --home nodes --no-delay
+
+sync: testnet-config testnet-reth-restart
+	docker compose up -d prometheus grafana otterscan
 	@echo 👉 Grafana dashboard is available at http://localhost:4000
 	cp monitoring/prometheus-syncing.yml monitoring/prometheus.yml
 	docker compose restart prometheus
-	bash scripts/spawn.bash --nodes 4 --home nodes
+	bash scripts/spawn.bash --nodes $(words $(RETH_NODES)) --home nodes
 
 NODE ?= 0# default node 0
 
@@ -104,13 +107,10 @@ spam-contract:
 
 TEST ?=
 
-mbt-test:
+mbt-test: RETH_NODES=reth0 reth1 reth2
+mbt-test: testnet-config
 	@echo "Running MBT tests..."
 	@echo "Note: RETH will be automatically started and stopped for each test"
 	cd tests/mbt && cargo test --lib -- --nocapture --test-threads=1 $(TEST)
 
-mbt-clean:
-	rm -rf ./tests/mbt/.reth-data
-	rm -f ./assets/genesis.json
-	rm -f ./assets/emerald_genesis.json
-	rm -f ./assets/validator_public_keys.txt
+mbt-clean: testnet-clean

@@ -429,7 +429,7 @@ module emerald_app {
   // TODO: Model node restart
 
   // =============================================================================
-  // MAIN LISTENER
+  // MAIN LISTENERS
   // =============================================================================
 
   pure def main_listener(ctx: LocalContext): Set[Transition] = {
@@ -450,11 +450,12 @@ module emerald_app {
       // Synchronization protocol
       choreo::cue(ctx, listen_process_synced_value, handle_process_synced_value),
       choreo::cue(ctx, listen_get_decided_value, handle_get_decided_value),
-
-      // Crash and recovery
-      node_crash(ctx)
     ).flatten()
   }
+
+  pure def main_listener_with_crashes(ctx: LocalContext): Set[Transition] =
+    main_listener(ctx)
+      .union(node_crash(ctx))
 
   // =============================================================================
   // CUSTOM EFFECT PROCESSOR
@@ -519,10 +520,11 @@ module emerald_app {
     })
 
   // =============================================================================
-  // STEP FUNCTION
+  // STEP FUNCTIONS
   // =============================================================================
 
   action step = choreo::step(main_listener, apply_custom_effect)
+  action step_with_crashes = choreo::step(main_listener_with_crashes, apply_custom_effect)
 
   // =============================================================================
   // PROPERTIES AND INVARIANTS

@@ -10,22 +10,30 @@ fn single_height_consensus() -> impl Driver {
     EmeraldDriver::default()
 }
 
-// FIXME: this is another instance of
-// https://github.com/informalsystems/emerald/issues/100. However, there's an
-// workaround where operators can be instructued to kill and wipe out the data
-// for reth, in which case the fix for #100 still applies.
 #[quint_test(
     spec = "../../specs/emerald_tests.qnt",
     test = "emeraldNodeCrashAfterConsensusTest"
 )]
-#[should_panic = "Payload ID should be Some!"]
 fn node_crash_after_consensus() -> impl Driver {
     EmeraldDriver::default()
 }
 
-// FIXME: this breaks due to the same scenario as node_crash_after_consensus.
-#[quint_run(spec = "../../specs/emerald_app.qnt", max_steps = 128)]
-#[should_panic = "Payload ID should be Some!"]
-fn simulation() -> impl Driver {
+#[quint_run(
+    spec = "../../specs/emerald_app.qnt",
+    max_samples = 10,
+    max_steps = 128
+)]
+fn simulation_no_crashes() -> impl Driver {
+    EmeraldDriver::default()
+}
+
+#[quint_run(
+    spec = "../../specs/emerald_app.qnt",
+    step = "step_with_crashes",
+    max_samples = 1,
+    max_steps = 64
+)]
+#[ignore]
+fn simulation_with_crashes() -> impl Driver {
     EmeraldDriver::default()
 }

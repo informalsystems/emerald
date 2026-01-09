@@ -19,6 +19,8 @@ EOF
     exit 2
 }
 
+ROOT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )/../" &> /dev/null && pwd )
+
 nodes=""
 testnet_config_dir=""
 node_keys=()
@@ -163,7 +165,7 @@ for ((i = 0; i < nodes; i++)); do
 moniker = "test-$i"
 execution_authrpc_address = "http://localhost:$ENGINE_PORT"
 engine_authrpc_address = "http://localhost:$AUTH_PORT"
-jwt_token_path = "./assets/jwtsecret"
+jwt_token_path = "$ROOT_DIR/assets/jwtsecret"
 sync_timeout_ms = 10000
 sync_initial_delay_ms = 100
 retry_config.initial_delay = "100ms"

@@ -12,11 +12,13 @@ use emerald::app::process_consensus_message;
 use emerald::node::StateComponents;
 use malachitebft_app_channel::AppMsg;
 use malachitebft_eth_types::{Address, EmeraldContext};
+use tempfile::TempDir;
 use tokio::sync::oneshot::Receiver;
 
 pub struct Sut {
     pub address: Address,
     pub components: StateComponents,
+    pub home_dir: TempDir,
 }
 
 impl Sut {

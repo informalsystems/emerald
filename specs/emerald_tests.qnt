@@ -5,7 +5,7 @@
 module emerald_tests {
   import basicSpells.* from "spells/basicSpells"
   import rareSpells.* from "spells/rareSpells"
-  import emerald_app.* from "emerald_app"
+  import emerald.* from "emerald"
 
   pure val firstProposal = {
     proposer: "node1",
@@ -35,9 +35,9 @@ module emerald_tests {
          )
       )
       // started_round
-      .then("node1".with_cue(listen_started_round, ()).perform(handle_started_round))
-      .then("node2".with_cue(listen_started_round, ()).perform(handle_started_round))
-      .then("node3".with_cue(listen_started_round, ()).perform(handle_started_round))
+      .then("node1".with_cue(listen_started_round, (1, 0)).perform(handle_started_round))
+      .then("node2".with_cue(listen_started_round, (1, 0)).perform(handle_started_round))
+      .then("node3".with_cue(listen_started_round, (1, 0)).perform(handle_started_round))
       .expect(
         and {
           "node1" == proposer_for(1, 0),
@@ -123,9 +123,9 @@ module emerald_tests {
         }
       )
       // start next height
-      .then("node1".with_cue(listen_started_round, ()).perform(handle_started_round))
-      .then("node2".with_cue(listen_started_round, ()).perform(handle_started_round))
-      .then("node3".with_cue(listen_started_round, ()).perform(handle_started_round))
+      .then("node1".with_cue(listen_started_round, (1, 0)).perform(handle_started_round))
+      .then("node2".with_cue(listen_started_round, (2, 0)).perform(handle_started_round))
+      .then("node3".with_cue(listen_started_round, (2, 0)).perform(handle_started_round))
       .expect(
         and {
           NODES.toSet().forall(node =>

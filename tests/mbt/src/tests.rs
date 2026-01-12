@@ -19,21 +19,22 @@ fn node_crash_after_consensus() -> impl Driver {
 }
 
 #[quint_run(
-    spec = "../../specs/emerald_app.qnt",
-    max_samples = 10,
+    spec = "../../specs/emerald_mbt.qnt",
+    step = "step_no_failures",
+    max_samples = 20,
     max_steps = 128
 )]
-fn simulation_no_crashes() -> impl Driver {
+fn simulation_no_failures() -> impl Driver {
     EmeraldDriver::default()
 }
 
 #[quint_run(
-    spec = "../../specs/emerald_app.qnt",
-    step = "step_with_crashes",
-    max_samples = 1,
+    spec = "../../specs/emerald_mbt.qnt",
+    max_samples = 10,
+    // TODO: increase # of steps
+    // max_steps = 128
     max_steps = 64
 )]
-#[ignore]
-fn simulation_with_crashes() -> impl Driver {
+fn simulation_with_failures() -> impl Driver {
     EmeraldDriver::default()
 }

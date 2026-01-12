@@ -3,7 +3,7 @@ use std::future::Future;
 use anyhow::{bail, Result};
 
 use crate::driver::EmeraldDriver;
-use crate::hist::History;
+use crate::history::History;
 use crate::state::Node;
 use crate::sut::Sut;
 

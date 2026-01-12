@@ -16,23 +16,27 @@ pub fn recreate_all() -> Result<()> {
         nodes.push_str(&i.to_string());
         nodes.push(' ');
     }
-    recreate_nodes(&nodes)
+    run_reth_make_cmd(&nodes, "testnet-reth-recreate")
 }
 
 pub fn recreate(node_idx: usize) -> Result<()> {
-    recreate_nodes(&format!("reth{}", node_idx))
+    run_reth_make_cmd(&format!("reth{}", node_idx), "testnet-reth-recreate")
 }
 
-fn recreate_nodes(nodes: &str) -> Result<()> {
+pub fn restart(node_idx: usize) -> Result<()> {
+    run_reth_make_cmd(&format!("reth{}", node_idx), "testnet-reth-restart")
+}
+
+fn run_reth_make_cmd(nodes: &str, cmd: &str) -> Result<()> {
     let res = Command::new("make")
         .env("RETH_NODES", nodes)
-        .arg("testnet-reth-restart")
+        .arg(cmd)
         .current_dir("../..")
         .output()?;
 
     if !res.status.success() {
         bail!(
-            "Failed to (re)start reth: {}",
+            "Failed to run make command: {}",
             String::from_utf8_lossy(&res.stderr)
         );
     }

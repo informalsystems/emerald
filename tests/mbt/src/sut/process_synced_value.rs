@@ -6,7 +6,7 @@ use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::Height as EmeraldHeight;
 
 use super::Sut;
-use crate::hist::History;
+use crate::history::History;
 use crate::state::Proposal;
 
 impl Sut {

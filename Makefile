@@ -1,4 +1,4 @@
-.PHONY: all build release test docs docs-serve testnet-config testnet-reth-restart testnet-start sync testnet-node-stop testnet-node-restart testnet-stop testnet-clean clean-volumes clean-prometheus spam spam-contract mbt-start-reth mbt-test mbt-clean
+.PHONY: all build release test docs docs-serve testnet-config testnet-reth-recreate testnet-reth-restart testnet-start sync testnet-node-stop testnet-node-restart testnet-stop testnet-clean clean-volumes clean-prometheus spam spam-contract mbt-start-reth mbt-test mbt-clean
 
 all: build
 
@@ -33,17 +33,20 @@ testnet-config: testnet-clean build
 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt
 	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
 
-testnet-reth-restart:
+testnet-reth-recreate:
 	docker compose down -v $(RETH_NODES)
 	docker compose up -d $(RETH_NODES)
 	./scripts/add_peers.sh --nodes $(words $(RETH_NODES))
 
-testnet-start: testnet-config testnet-reth-restart
+testnet-reth-restart:
+	docker compose restart $(RETH_NODES)
+
+testnet-start: testnet-config testnet-reth-recreate
 	docker compose up -d prometheus grafana otterscan
 	@echo 👉 Grafana dashboard is available at http://localhost:4000
 	bash scripts/spawn.bash --nodes $(words $(RETH_NODES)) --home nodes --no-delay
 
-sync: testnet-config testnet-reth-restart
+sync: testnet-config testnet-reth-recreate
 	docker compose up -d prometheus grafana otterscan
 	@echo 👉 Grafana dashboard is available at http://localhost:4000
 	cp monitoring/prometheus-syncing.yml monitoring/prometheus.yml

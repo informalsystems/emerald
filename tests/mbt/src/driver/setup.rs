@@ -6,9 +6,9 @@ use malachitebft_eth_cli::config;
 use malachitebft_eth_types::{Address, Height as EmeraldHeight};
 use tempfile::TempDir;
 
-use crate::driver::rt::Runtime;
+use crate::driver::runtime::Runtime;
 use crate::driver::EmeraldDriver;
-use crate::state::Node;
+use crate::state::{FailureMode, Node};
 use crate::sut::Sut;
 use crate::{reth, NODES};
 
@@ -27,9 +27,11 @@ impl EmeraldDriver {
         Ok(())
     }
 
-    pub fn node_crash(&mut self, node: Node) -> Result<()> {
-        if let Some(sut) = self.sut.remove(&node) {
-            drop(sut); // stop emerald node
+    pub fn failure(&mut self, node: Node, mode: FailureMode) -> Result<()> {
+        if let FailureMode::ConsensusTimeout = mode {
+            // Noop wrt. MBT. The model will follow up with the propoer
+            // consensus input later.
+            return Ok(());
         }
 
         let node_idx = NODES
@@ -37,9 +39,18 @@ impl EmeraldDriver {
             .position(|n| n == &node)
             .ok_or(anyhow!("Unknown node: {}", node))?;
 
-        reth::recreate(node_idx)?;
-        self.init_node(node_idx, node)?;
+        if let Some(sut) = self.sut.remove(&node) {
+            drop(sut); // stop emerald node
+        }
 
+        match mode {
+            FailureMode::NodeCrash => reth::recreate(node_idx)?,
+            FailureMode::NodeRestart => reth::restart(node_idx)?,
+            FailureMode::ConsensusTimeout => unreachable!(),
+            FailureMode::ProcessRestart => (),
+        }
+
+        self.init_node(node_idx, node)?;
         Ok(())
     }
 

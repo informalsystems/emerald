@@ -1,13 +1,13 @@
-mod init;
-mod perform;
-mod rt;
+mod runtime;
+mod setup;
+mod utils;
 
 use std::collections::BTreeMap;
 
 use quint_connect::{switch, Driver, Result, Step};
 
-use crate::driver::rt::Runtime;
-use crate::hist::History;
+use crate::driver::runtime::Runtime;
+use crate::history::History;
 use crate::state::{Node, SpecState};
 use crate::sut::{self, Sut};
 
@@ -23,8 +23,8 @@ impl Driver for EmeraldDriver {
 
     fn config() -> quint_connect::Config {
         quint_connect::Config {
-            state: &["emerald_app::choreo::s", "system"],
-            nondet: &["emerald_app::choreo::s", "extensions", "action_taken"],
+            state: &["emerald::choreo::s", "system"],
+            nondet: &["emerald::choreo::s", "extensions", "action_taken"],
         }
     }
 
@@ -55,8 +55,8 @@ impl Driver for EmeraldDriver {
             GetDecidedValueAction(node, height, proposal?) => {
                 self.perform(node, |app, hist| app.get_decided(hist, height, proposal))?
             },
-            NodeCrash(node) => {
-                self.node_crash(node)?
+            Failure(node, mode) => {
+                self.failure(node, mode)?
             }
         })
     }

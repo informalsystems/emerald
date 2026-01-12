@@ -17,7 +17,7 @@ PORT_INCREMENT=10000
 for _ in {0..NODES_COUNT-1}; do
     echo "Waiting for Reth node on port ${PORT} to be ready..."
     until cast rpc --rpc-url "127.0.0.1:${PORT}" net_listening > /dev/null 2>&1; do
-        sleep 1
+        sleep .1 # 100ms
     done
     PORT=$((PORT + PORT_INCREMENT))
 done

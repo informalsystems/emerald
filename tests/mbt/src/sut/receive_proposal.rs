@@ -3,7 +3,7 @@ use informalsystems_malachitebft_core_consensus::PeerId;
 use malachitebft_app_channel::AppMsg;
 
 use super::Sut;
-use crate::hist::History;
+use crate::history::History;
 use crate::state::Proposal;
 
 impl Sut {

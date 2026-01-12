@@ -5,7 +5,7 @@ use malachitebft_eth_types::Height as EmeraldHeight;
 use tokio::time::Duration;
 
 use super::Sut;
-use crate::hist::History;
+use crate::history::History;
 use crate::state::{Height, Proposal, Round};
 
 impl Sut {

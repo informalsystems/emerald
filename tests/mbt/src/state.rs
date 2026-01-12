@@ -42,6 +42,15 @@ pub struct NodeState {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
+#[serde(tag = "tag")]
+pub enum FailureMode {
+    NodeCrash,
+    NodeRestart,
+    ProcessRestart,
+    ConsensusTimeout,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 pub struct SpecState(pub BTreeMap<Node, NodeState>);
 
 impl QuintState<EmeraldDriver> for SpecState {
@@ -99,8 +108,10 @@ async fn get_proposals(driver: &EmeraldDriver, state: &State) -> Result<BTreeSet
         let height = EmeraldHeight::new(height);
 
         if let Some(decided) = state.store.get_decided_value(height).await? {
-            let value_id = decided.value.id();
-            let proposal = driver.history.get_proposal(&value_id)?;
+            let height = decided.certificate.height;
+            let round = decided.certificate.round;
+            let value_id = decided.certificate.value_id;
+            let proposal = driver.history.get_proposal(height, round, value_id)?;
             proposals.insert(proposal);
         }
 
@@ -109,8 +120,10 @@ async fn get_proposals(driver: &EmeraldDriver, state: &State) -> Result<BTreeSet
             let undecided_proposals = state.store.get_undecided_proposals(height, round).await?;
 
             for proposed_value in undecided_proposals {
+                let height = proposed_value.height;
+                let round = proposed_value.round;
                 let value_id = proposed_value.value.id();
-                let proposal = driver.history.get_proposal(&value_id)?;
+                let proposal = driver.history.get_proposal(height, round, value_id)?;
                 proposals.insert(proposal.clone());
             }
 
@@ -121,8 +134,10 @@ async fn get_proposals(driver: &EmeraldDriver, state: &State) -> Result<BTreeSet
 
             for parts in pending_parts {
                 let (proposed_value, _) = assemble_value_from_parts(parts);
+                let height = proposed_value.height;
+                let round = proposed_value.round;
                 let value_id = proposed_value.value.id();
-                let proposal = driver.history.get_proposal(&value_id)?;
+                let proposal = driver.history.get_proposal(height, round, value_id)?;
                 proposals.insert(proposal);
             }
         }

@@ -1,5 +1,5 @@
 mod driver;
-mod hist;
+mod history;
 mod reth;
 mod state;
 mod sut;

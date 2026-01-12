@@ -8,7 +8,7 @@ use malachitebft_app_channel::AppMsg;
 use malachitebft_eth_types::{EmeraldContext, Height as EmeraldHeight, Vote};
 
 use super::Sut;
-use crate::hist::History;
+use crate::history::History;
 use crate::state::{Node, Proposal};
 
 impl Sut {

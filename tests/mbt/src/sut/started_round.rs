@@ -5,7 +5,7 @@ use malachitebft_app_channel::AppMsg;
 use malachitebft_eth_types::Height as EmeraldHeight;
 
 use super::Sut;
-use crate::hist::History;
+use crate::history::History;
 use crate::state::{Height, Node, Round};
 
 impl Sut {

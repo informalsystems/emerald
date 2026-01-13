@@ -255,7 +255,7 @@ module emerald {
             proposal: proposal,
           })
         ))
-      ),
+      )
     }
   }
 
@@ -356,12 +356,18 @@ module emerald {
     val s = ctx.state
 
     if (s.phase == Working)
-      ctx.extensions.decided_proposals.filterMap(p => {
-        if (p.height >= s.current_height and not(p.in(s.proposals)))
-          Some(p)
-        else
-          None
-      })
+      val candidate =
+        ctx.extensions.decided_proposals
+          .filter(p => not(p.in(s.proposals)))
+          .fold(None, (acc, b) => match acc {
+            | Some(a) => if (a.height < b.height) Some(a) else Some(b)
+            | None    => Some(b)
+          })
+
+      match candidate {
+        | Some(p) => Set(p)
+        | None    => Set()
+      }
     else
       Set()
   }

@@ -304,13 +304,18 @@ module emerald {
       match get_global_decision(ctx, s.current_height) {
         | Some(p) =>
             // Replicates a decision
-            if (p.in(s.proposals) and p.height > s.latest_block_height)
+            if (and {
+              p.in(s.proposals),
+              p.height > s.latest_block_height,
+              p.height == s.current_height,
+              p.round == s.current_round
+            })
               Set(p)
             else
               Set()
 
         | None =>
-            // Mimics consensus by having the porposer decide
+            // Mimics consensus by having the proposer decide
             match get_local_proposal(s, s.current_height, s.current_round) {
               | Some(p) => if (p.proposer == s.process_id) Set(p) else Set()
               | None    => Set()

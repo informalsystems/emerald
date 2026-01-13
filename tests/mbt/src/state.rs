@@ -35,9 +35,9 @@ impl Proposal {
 pub struct NodeState {
     pub current_height: Height,
     pub current_round: Round,
-    pub latest_block_height: Height,
+    pub last_decided_height: Height,
     #[serde(with = "As::<de::Option::<_>>")]
-    pub latest_block_payload: Option<Payload>,
+    pub last_decided_payload: Option<Payload>,
     pub proposals: BTreeSet<Proposal>,
 }
 
@@ -63,13 +63,13 @@ impl QuintState<EmeraldDriver> for SpecState {
         for (node, app) in &driver.sut {
             let state = &app.components.state;
             let proposals = rt.block_on(get_proposals(driver, state))?;
-            let (latest_block_height, latest_block_payload) = get_latest_block_info(driver, state)?;
+            let (last_decided_height, last_decided_payload) = get_latest_block_info(driver, state)?;
 
             let spec_state = NodeState {
                 current_height: state.current_height.as_u64(),
                 current_round: state.current_round.as_u32().unwrap_or(0),
-                latest_block_height,
-                latest_block_payload,
+                last_decided_height,
+                last_decided_payload,
                 proposals,
             };
 

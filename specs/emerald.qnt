@@ -92,8 +92,8 @@ module emerald {
     current_height: Height,
     current_round: Round,
     // Latest committed block
-    latest_block_height: Height,
-    latest_block_payload: Option[Payload],
+    last_decided_height: Height,
+    last_decided_payload: Option[Payload],
     // Node's known proposals
     proposals: Set[Proposal],
   }
@@ -167,7 +167,7 @@ module emerald {
       post_state: {
         ...s,
         phase: Ready,
-        current_height: s.latest_block_height + 1,
+        current_height: s.last_decided_height + 1,
         current_round: 0
       },
       effects: Set(
@@ -180,7 +180,6 @@ module emerald {
 
   // ===== StartedRound: Enter new round =====
 
-  // TODO: model timeouts that move to next height without deciding on a proposal
   pure def listen_started_round(ctx: LocalContext): Set[(Height, Round)] = {
     val s = ctx.state
 
@@ -306,7 +305,7 @@ module emerald {
             // Replicates a decision
             if (and {
               p.in(s.proposals),
-              p.height > s.latest_block_height,
+              p.height > s.last_decided_height,
               p.height == s.current_height,
               p.round == s.current_round
             })
@@ -336,8 +335,8 @@ module emerald {
         current_height: decided.height + 1,
         current_round: 0,
         // Record decision
-        latest_block_height: decided.height,
-        latest_block_payload: Some(decided.payload),
+        last_decided_height: decided.height,
+        last_decided_payload: Some(decided.payload),
       },
       effects: Set(
         choreo::CustomEffect(RecordDecision(decided)),
@@ -408,7 +407,7 @@ module emerald {
       match get_global_decision(ctx, height) {
         | None => None
         | Some(p) =>
-            if (s.latest_block_height >= p.height)
+            if (s.last_decided_height >= p.height)
               Some(p)
             else
               None
@@ -499,7 +498,7 @@ module emerald {
 
   pure def listen_timeout(ctx: LocalContext): Set[()] = {
     val s = ctx.state
-    if (s.latest_block_height < s.current_height) Set(()) else Set()
+    if (s.last_decided_height < s.current_height) Set(()) else Set()
   }
 
   pure def consensus_timeout(ctx: LocalContext, _params: ()): Transition = {
@@ -617,8 +616,8 @@ module emerald {
       current_round: 0,
       proposals: Set(),
       // genesis height and payload
-      latest_block_height: 0,
-      latest_block_payload: None
+      last_decided_height: 0,
+      last_decided_payload: None
     }
   }
 
@@ -654,8 +653,8 @@ module emerald {
         val ctx2 = choreo::convert_context(choreo::s, n2)
 
         val min_decided_height = min(
-          ctx1.state.latest_block_height,
-          ctx2.state.latest_block_height
+          ctx1.state.last_decided_height,
+          ctx2.state.last_decided_height
         )
 
         1.to(min_decided_height).forall(height =>

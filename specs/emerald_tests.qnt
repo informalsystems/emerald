@@ -28,8 +28,8 @@ module emerald_tests {
              st.phase == Ready,
              st.current_height == 1,
              st.current_round == 0,
-             st.latest_block_height == 0,
-             st.latest_block_payload == None,
+             st.last_decided_height == 0,
+             st.last_decided_payload == None,
              st.proposals.size() == 0
            }
          )
@@ -71,8 +71,8 @@ module emerald_tests {
         NODES.toSet().forall(node =>
           val st = s.system.get(node)
           and {
-            st.latest_block_height == 1,
-            st.latest_block_payload == Some(0),
+            st.last_decided_height == 1,
+            st.last_decided_payload == Some(0),
             st.current_height == 2,
             st.current_round == 0
           }
@@ -107,8 +107,8 @@ module emerald_tests {
           st.current_height == 0,
           st.current_round == 0,
           st.proposals.size() == 0,
-          st.latest_block_height == 0,
-          st.latest_block_payload == None
+          st.last_decided_height == 0,
+          st.last_decided_payload == None
         }
       )
       // node restarts but loses its data

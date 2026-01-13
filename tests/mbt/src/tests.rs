@@ -21,7 +21,7 @@ fn node_crash_after_consensus() -> impl Driver {
 #[quint_run(
     spec = "../../specs/emerald_mbt.qnt",
     step = "step_no_failures",
-    max_samples = 20,
+    max_samples = 32,
     max_steps = 128
 )]
 fn simulation_no_failures() -> impl Driver {
@@ -30,10 +30,8 @@ fn simulation_no_failures() -> impl Driver {
 
 #[quint_run(
     spec = "../../specs/emerald_mbt.qnt",
-    max_samples = 10,
-    // TODO: increase # of steps
-    // max_steps = 128
-    max_steps = 64
+    max_samples = 32,
+    max_steps = 128
 )]
 fn simulation_with_failures() -> impl Driver {
     EmeraldDriver::default()

@@ -5,7 +5,7 @@
 module emerald_tests {
   import basicSpells.* from "spells/basicSpells"
   import rareSpells.* from "spells/rareSpells"
-  import emerald.* from "emerald"
+  import emerald(NODES = List("node1", "node2", "node3")).* from "emerald"
 
   pure val firstProposal = {
     proposer: "node1",

@@ -6,7 +6,14 @@
 
 module emerald_mbt {
   import basicSpells.* from "spells/basicSpells"
-  import emerald as em from "emerald"
+  import emerald(NODES = List("node1", "node2", "node3")) as em from "emerald"
+
+  // No failures
+  pure def no_failures_filter(ctx: em::LocalContext, t: em::Transition): bool =
+    match em::get_action_taken(t) {
+      | Failure(args) => false
+      | _             => true
+    }
 
   // One failure per (node, height) pair
   pure def one_failure_filter(ctx: em::LocalContext, t: em::Transition): bool = {
@@ -31,14 +38,8 @@ module emerald_mbt {
     }
   }
 
-  // No failures
-  pure def no_failures_filter(ctx: em::LocalContext, t: em::Transition): bool =
-    match em::get_action_taken(t) {
-      | Failure(args) => false
-      | _             => true
-    }
-
   action init = em::init
   action step = em::step_with_filter(one_failure_filter)
   action step_no_failures = em::step_with_filter(no_failures_filter)
+  action step_with_failures = em::step_with_filter(one_failure_filter)
 }

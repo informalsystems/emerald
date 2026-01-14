@@ -1,49 +1,57 @@
 // -*- mode: Bluespec; -*-
 
-// Emerald Blockchain Application - Choreo Specification
+// =============================================================================
+// Emerald Specification
+// =============================================================================
 //
-// This specification models the Emerald blockchain application layer that
-// integrates MalachiteBFT consensus with an Ethereum execution engine.
+// This specification models the Emerald application layer, which sits on top of
+// the Malachite consensus engine and manages the lifecycle of blockchain blocks
+// across multiple distributed nodes.
 //
-// Based on: app/src/app.rs
+// We model Malachite consensus inputs and how Emerald reacts to them. The
+// network, storage, and blockchain systems are considered a implementation
+// details and it's not modeled here.
 //
-// High-level modeling approach:
-// - Models multiple app nodes receiving messages from consensus
-// - Focuses on state transitions and block lifecycle
-// - Abstracts away: streaming details, storage implementation, metrics
+// For model-based testing (MBT), actions and relevant data are tracked as part
+// of global state so they can be made available to Quint Connect for testing.
 
 module emerald {
   import basicSpells.* from "spells/basicSpells"
   import rareSpells.* from "spells/rareSpells"
+  import choreo(processes = NODES.toSet()) as choreo from "choreo"
 
   // =============================================================================
   // PROTOCOL CONFIGURATION
   // =============================================================================
 
-  pure val NODES = List("node1", "node2", "node3")
-
-  import choreo(processes = NODES.toSet()) as choreo from "choreo"
+  // The Emerald nodes to test. E.g.: List("node1", "node2", "node3")
+  const NODES: List[Node]
 
   // =============================================================================
   // PROTOCOL-SPECIFIC TYPES
   // =============================================================================
 
-  // Height in the blockchain
+  // A consensus height
   type Height = int
 
-  // Round number within a height
+  // A consensus round withing a given height
   type Round = int
 
-  // Execution payload
+  // A block's payload
   type Payload = int
 
-  // App current node's phase
+  // The application's current phase.
+  //
+  // These phases model different stages in the application startup process.
+  // Emerald nodes start "Uninitialized", then move to "Ready" once Malachite
+  // starts (ConsensusReady), and from "Ready" to "Working" after Malachite
+  // informs Emerald of a new round starting (StartedRound).
   type AppPhase =
     | Uninitialized // Before ConsensusReady
     | Ready         // Between ConsensusReady and StartedRound
     | Working       // After StartedRound
 
-  // A consensus proposal record
+  // A consensus proposal
   type Proposal = {
     height: Height,
     round: Round,
@@ -56,16 +64,29 @@ module emerald {
   // =============================================================================
 
   type Node = str
-  type Event = Timeout({ height: Height, round: Round })
+
+  // Note: this specification does not model message exchanges between nodes as
+  // those are Malachaite's responsibility.
   type Message = ()
 
-  // Global state recording
+  type Event =
+    // Consensus timeouts are modeled as events, which in return trigger the
+    // start of new rounds. (see listen_started_round).
+    | Timeout({ height: Height, round: Round })
+
   type CustomEffects =
+    // Records the existence of a new proposal.
     | RecordProposal(Proposal)
+    // Records the commit of a given proposal.
     | RecordDecision(Proposal)
+    // Records which action was taken by the model for MBT.
     | RecordAction(ActionTaken)
 
-  // Record information made available for Quint Connect (MBT).
+  // Actions taken by the model for MBT.
+  //
+  // Variants must either have no arguments or a single object as an argument.
+  // Object fields become available in the test code using the Quint Connect
+  // library.
   type ActionTaken =
     | InitAction
     | ConsensusReadyAction({ node: Node })
@@ -77,27 +98,35 @@ module emerald {
     | GetDecidedValueAction({ node: Node, height: Height, proposal: Option[Proposal] })
     | Failure({ node: Node, mode: FailureMode })
 
-  // Different forms of node failure the service can experience
+  // Different forms of node failure the service can experience.
+  //
+  // Note that NodeRestart and ProcessRestart are the same failure wrt. the
+  // model but, MBT distinguishes them by restarting the process or the node
+  // when testing.
   type FailureMode =
+    // The whole node (all processes) has crash and lost its data.
     | NodeCrash
+    // The whole node (all processes) has restarted without data loss.
     | NodeRestart
+    // The Emerald process has restarted without data loss.
     | ProcessRestart
+    // Consensus has timed out.
     | ConsensusTimeout
 
-  // Local state for each node
+  // Local state for each Emerald node
   type StateFields = {
     phase: AppPhase,
-    // Current consensus state
+    // Consensus state
     current_height: Height,
     current_round: Round,
-    // Latest committed block
+    // Last committed block
     last_decided_height: Height,
     last_decided_payload: Option[Payload],
     // Node's known proposals
     proposals: Set[Proposal],
   }
 
-  // Global state for inter-node communication and MBT values
+  // Global state for inter-node communication and MBT
   type Extensions = {
     // Track undecided proposals
     pending_proposals: Set[Proposal],
@@ -105,13 +134,8 @@ module emerald {
     decided_proposals: Set[Proposal],
     // Track the action taken for MBT
     action_taken: ActionTaken,
-    // Track the set of node falures
-    failures: Set[{
-      node: Node,
-      height: Height,
-      round: Round,
-      mode: FailureMode
-    }]
+    // Track the set of failures that occurred
+    failures: Set[{node: Node, height: Height, round: Round, mode: FailureMode}]
   }
 
   // =============================================================================
@@ -127,18 +151,27 @@ module emerald {
   // HELPER FUNCTIONS
   // =============================================================================
 
+  // Return the proposer for the given height and round
   pure def proposer_for(height: Height, round: Round): Node =
     NODES[(height - 1 + round) % NODES.length()]
 
+  // Returns the next block payload.
+  //
+  // For simplicity, we generate payloads as sequential numbers based on how
+  // many pending proposals there are, thus ensuring a unique payload per
+  // proposal recorded.
   pure def next_payload(ctx: LocalContext): Payload =
     ctx.extensions.pending_proposals.size()
 
+  // Get a proposal from the local state for the given height and round, if any.
   pure def get_local_proposal(s: LocalState, height: Height, round: Round): Option[Proposal] =
     s.proposals.find(p => p.height == height and p.round == round)
 
+  // Get a decided proposal on the global scope for the given height, if any.
   pure def get_global_decision(ctx: LocalContext, height: Height): Option[Proposal] =
     ctx.extensions.decided_proposals.find(p => p.height == height)
 
+  // Given a state transition, return which action was taken by it.
   pure def get_action_taken(t: Transition): ActionTaken =
     t.effects
       .filterMap(eff => match eff {
@@ -155,6 +188,10 @@ module emerald {
   // =============================================================================
 
   // ===== ConsensusReady: Initialize the system =====
+  // 
+  // Assumption: When starting the process, Malachite will call Emerald with the
+  // ConsensusReady message once it's done initializing. In response, Emerald
+  // will start at the last decided height + 1.
 
   pure def listen_consensus_ready(ctx: LocalContext): Set[()] =
     if (ctx.state.phase == Uninitialized) Set(()) else Set()
@@ -178,6 +215,10 @@ module emerald {
   }
 
   // ===== StartedRound: Enter new round =====
+  //
+  // Assumption: After ConsensusReady, or upon a timeout, Malachite will call
+  // StartedRound informing Emerald of a new round starting. In response,
+  // Emerald will track the current height and round.
 
   pure def listen_started_round(ctx: LocalContext): Set[(Height, Round)] = {
     val s = ctx.state
@@ -223,6 +264,11 @@ module emerald {
   }
 
   // ===== GetValue: Build and propose new value =====
+  //
+  // Assumption: After starting a round, Malachite will call GetValue on the
+  // Emerald node that is the proposer for the current height and round. In
+  // response, Emerald will either propose a new value or return an already
+  // proposed value.
 
   pure def listen_get_value(ctx: LocalContext): Set[()] = {
     val s = ctx.state
@@ -233,7 +279,6 @@ module emerald {
   pure def handle_get_value(ctx: LocalContext, _params: ()): Transition = {
     val s = ctx.state
 
-    // Check if we already have a proposal for this height/round
     val proposal =
       match get_local_proposal(s, s.current_height, s.current_round) {
         | Some(proposal) => proposal
@@ -265,6 +310,10 @@ module emerald {
   }
 
   // ===== ReceivedProposal: Receive a proposal =====
+  //
+  // Assumption: Malachite will call ReceivedProposal on the Emerald node
+  // informing of a new proposal being received for a height >= current_height.
+  // In response, Emerald will store the new proposal in its local state.
 
   pure def listen_received_proposal(ctx: LocalContext): Set[Proposal] = {
     val s = ctx.state
@@ -300,14 +349,27 @@ module emerald {
   }
 
   // ===== Decided: Commit decided value =====
+  //
+  // Assumption: Eventually the proposer decides on the proposal. Malachite
+  // calls Decided on an Emerald node to inform of a decision. In response,
+  // Emerald tracks decision and moves to the next height.
 
   pure def listen_decided(ctx: LocalContext): Set[Proposal] = {
     val s = ctx.state
 
     if (s.phase == Working)
       match get_global_decision(ctx, s.current_height) {
+        // There isn't a decision for the current height. Let's mimic Malachite
+        // consensus and have the proposer decide on a proposal for the current
+        // height and round.
+        | None =>
+            match get_local_proposal(s, s.current_height, s.current_round) {
+              | Some(p) => if (p.proposer == s.process_id) Set(p) else Set()
+              | None    => Set()
+            }
+        // A decision has been made for the current height. Let's replicate the
+        // decision as long as the Emerald node is at the same height and round.
         | Some(p) =>
-            // Replicates a decision
             if (and {
               p.in(s.proposals),
               p.height > s.last_decided_height,
@@ -317,13 +379,6 @@ module emerald {
               Set(p)
             else
               Set()
-
-        | None =>
-            // Mimics consensus by having the proposer decide
-            match get_local_proposal(s, s.current_height, s.current_round) {
-              | Some(p) => if (p.proposer == s.process_id) Set(p) else Set()
-              | None    => Set()
-            }
       }
     else
       Set()
@@ -335,11 +390,12 @@ module emerald {
     {
       post_state: {
         ...s,
-        // Start next height
+        // Start next height by moving back to the ready phase, which enables
+        // the handle_started_round transition.
         phase: Ready,
         current_height: decided.height + 1,
         current_round: 0,
-        // Record decision
+        // Records the last decided block
         last_decided_height: decided.height,
         last_decided_payload: Some(decided.payload),
       },
@@ -356,6 +412,13 @@ module emerald {
   }
 
   // ===== ProcessSyncedValue: Process synced block when catching up =====
+  //
+  // Assumption: Malachite may call ProcessSyncedValue on an Emerald node with
+  // decided proposals in height order. In response, Emerald tracks the newly
+  // received proposals.
+  //
+  // Note that a later call to Decided is made by Malachite to confirm the
+  // received decided proposals.
 
   pure def listen_process_synced_value(ctx: LocalContext): Set[Proposal] = {
     val s = ctx.state
@@ -397,6 +460,9 @@ module emerald {
   }
 
   // ===== GetDecidedValue: Provide decided value for sync =====
+  //
+  // Assumption: Malachite may call an Emerald node asking for a decision at a
+  // given height. In response, Emerald returns the decided value, if any.
 
   pure def listen_get_decided_value(ctx: LocalContext): Set[Height] = {
     val s = ctx.state
@@ -438,10 +504,15 @@ module emerald {
     }
   }
 
-  // TODO: Implement GetHistoryMinHeight
-  // TODO: Implement RestreamProposal
+  // TODO: Implement missing Malachite inputs
+  // + GetHistoryMinHeight
+  // + RestreamProposal
 
   // ===== NodeCrash: A node crashes and comes back without any state =====
+  //
+  // Assumption: A whole node can crash at any point and lose all its data. When
+  // restarted, it catches up with others ReceivedProposal or
+  // ProcessSyncedValue.
 
   pure def node_crash(ctx: LocalContext): Set[Transition] = {
     val s = ctx.state
@@ -460,6 +531,10 @@ module emerald {
   }
 
   // ===== NodeRestart: A node restarts but preserves its state =====
+  //
+  // Assumption: A node can restart without data loss. When restarted, it comes
+  // back at height and round zero, then ConsensusReady and StartedRound will
+  // move them back to they height they were before restarting.
 
   pure def node_restart(ctx: LocalContext): Set[Transition] = {
     val s = ctx.state
@@ -483,6 +558,11 @@ module emerald {
   }
 
   // ===== ProcessRestart: A process restart restarts but preserves its state =====
+  // 
+  // Assumption: The Emerald process can restart without data loss. When
+  // restarted, it comes back at height and round zero, then ConsensusReady and
+  // StartedRound will move them back to they height they were before
+  // restarting.
 
   pure def process_restart(ctx: LocalContext): Set[Transition] = {
     val s = ctx.state
@@ -506,6 +586,10 @@ module emerald {
   }
 
   // ===== ConsensusTimeout: A process timed out on consensus =====
+  //
+  // Assumption: Malachite may timeout while waiting for consensus on an
+  // undecided height. Then, it calls StartedRound on the Emerald node to inform
+  // of a new round starting.
 
   pure def listen_timeout(ctx: LocalContext): Set[()] = {
     val s = ctx.state
@@ -544,7 +628,7 @@ module emerald {
       // Round progression
       choreo::cue(ctx, listen_started_round, handle_started_round),
 
-      // Block building and proposal
+      // Proposal building and broadcast
       choreo::cue(ctx, listen_get_value, handle_get_value),
       choreo::cue(ctx, listen_received_proposal, handle_received_proposal),
 
@@ -555,7 +639,7 @@ module emerald {
       choreo::cue(ctx, listen_process_synced_value, handle_process_synced_value),
       choreo::cue(ctx, listen_get_decided_value, handle_get_decided_value),
 
-      // Node and process failures
+      // Failures
       node_crash(ctx),
       node_restart(ctx),
       process_restart(ctx),
@@ -620,18 +704,16 @@ module emerald {
   // INITIALIZATION
   // =============================================================================
 
-  pure def initialize(node: Node): LocalState = {
+  pure def initialize(node: Node): LocalState = 
     {
       process_id: node,
       phase: Uninitialized,
       current_height: 0,
       current_round: 0,
       proposals: Set(),
-      // genesis height and payload
       last_decided_height: 0,
       last_decided_payload: None
     }
-  }
 
   action init =
     val nodes = NODES.toSet()
@@ -653,21 +735,25 @@ module emerald {
 
   action step = choreo::step(main_listener, apply_custom_effect)
 
+  action step_with_filter(f: (LocalContext, Transition) => bool): bool =
+    choreo::step(ctx => main_listener(ctx).filter(t => f(ctx, t)), apply_custom_effect)
+
   // =============================================================================
   // PROPERTIES AND INVARIANTS
   // =============================================================================
 
   // Safety: All nodes agree on decided blocks
-  val block_agreement =
+  val agreement =
     NODES.toSet().forall(n1 => {
       NODES.toSet().forall(n2 => {
         val ctx1 = choreo::convert_context(choreo::s, n1)
         val ctx2 = choreo::convert_context(choreo::s, n2)
 
-        val min_decided_height = min(
-          ctx1.state.last_decided_height,
-          ctx2.state.last_decided_height
-        )
+        val min_decided_height =
+          min(
+            ctx1.state.last_decided_height,
+            ctx2.state.last_decided_height
+          )
 
         1.to(min_decided_height).forall(height =>
           val decided = get_global_decision(ctx1, height).unwrap()
@@ -693,8 +779,5 @@ module emerald {
 
   action step_with(node: Node, listener: LocalContext => Set[Transition]): bool =
     choreo::step_with(node, listener, apply_custom_effect)
-
-  action step_with_filter(f: (LocalContext, Transition) => bool): bool =
-    choreo::step(ctx => main_listener(ctx).filter(t => f(ctx, t)), apply_custom_effect)
 
 }

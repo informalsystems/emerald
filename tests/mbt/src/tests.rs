@@ -30,6 +30,7 @@ fn simulation_no_failures() -> impl Driver {
 
 #[quint_run(
     spec = "../../specs/emerald_mbt.qnt",
+    step = "step_with_failures",
     max_samples = 32,
     max_steps = 128
 )]

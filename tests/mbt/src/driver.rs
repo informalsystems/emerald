@@ -34,26 +34,40 @@ impl Driver for EmeraldDriver {
                 self.init()?
             },
             ConsensusReadyAction(node) => {
-                self.perform(node, |app, _| app.consensus_ready())?
+                self.perform(node, |app, _|
+                    app.consensus_ready()
+                )?
             },
             StartedRoundAction(node, height, round, proposer) => {
-                self.perform(node, |app, hist| app.started_round(hist, height, round, proposer))?
+                self.perform(node, |app, hist|
+                    app.started_round(hist, height, round, proposer)
+                )?
             },
             GetValueAction(node, height, round, proposal) => {
-                self.perform(node, |app, hist| app.get_value(hist, height, round, proposal))?
+                self.perform(node, |app, hist|
+                    app.get_value(hist, height, round, proposal)
+                )?
             },
             ReceivedProposalAction(node, proposal) => {
-                self.perform(node, |app, hist| app.receive_proposal(hist, proposal))?
+                self.perform(node, |app, hist|
+                    app.receive_proposal(hist, proposal)
+                )?
             },
             ProcessSyncedValueAction(node, proposal) => {
-                self.perform(node, |app, hist| app.process_synced_value(hist, proposal))?
+                self.perform(node, |app, hist|
+                    app.process_synced_value(hist, proposal)
+                )?
             },
             DecidedAction(node, proposal) => {
                 let votes = sut::mock_votes(&self.sut, &self.history, &proposal)?;
-                self.perform(node, |app, hist| app.decided(hist, proposal, votes))?
+                self.perform(node, |app, hist|
+                    app.decided(hist, proposal, votes)
+                )?
             },
             GetDecidedValueAction(node, height, proposal?) => {
-                self.perform(node, |app, hist| app.get_decided(hist, height, proposal))?
+                self.perform(node, |app, hist|
+                    app.get_decided(hist, height, proposal)
+                )?
             },
             Failure(node, mode) => {
                 self.failure(node, mode)?

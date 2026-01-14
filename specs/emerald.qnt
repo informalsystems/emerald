@@ -42,7 +42,6 @@ module emerald {
     | Uninitialized // Before ConsensusReady
     | Ready         // Between ConsensusReady and StartedRound
     | Working       // After StartedRound
-    | Timedout      // After ConsensusTimeout
 
   // A consensus proposal record
   type Proposal = {
@@ -57,7 +56,7 @@ module emerald {
   // =============================================================================
 
   type Node = str
-  type Event = ()
+  type Event = Timeout({ height: Height, round: Round })
   type Message = ()
 
   // Global state recording
@@ -183,11 +182,17 @@ module emerald {
   pure def listen_started_round(ctx: LocalContext): Set[(Height, Round)] = {
     val s = ctx.state
 
-    match s.phase {
-      | Ready    => Set((s.current_height, s.current_round))
-      | Timedout => Set((s.current_height, s.current_round + 1))
-      | _        => Set()
-    }
+    val timeout =
+      ctx.events.find(e => match e {
+        | Timeout(t) => and {
+            t.height == s.current_height,
+            t.round == s.current_round,
+          }
+      })
+
+    if (timeout != None)       Set((s.current_height, s.current_round + 1))
+    else if (s.phase == Ready) Set((s.current_height, s.current_round))
+    else                       Set()
   }
 
   pure def handle_started_round(ctx: LocalContext, params: (Height, Round)): Transition = {
@@ -511,11 +516,12 @@ module emerald {
     val s = ctx.state
 
     {
-      post_state: {
-        ...s,
-        phase: Timedout
-      },
+      post_state: s,
       effects: Set(
+        choreo::TriggerEvent(Timeout({
+          height: s.current_height,
+          round: s.current_round
+        })),
         choreo::CustomEffect(RecordAction(
           Failure({
             node: s.process_id,

@@ -2,12 +2,17 @@ use alloy_primitives::Address;
 use clap::{Parser, Subcommand, ValueHint};
 use color_eyre::eyre::Result;
 use genesis::{generate_genesis, make_signers};
+use mempool_monitor::MempoolMonitor;
 use reqwest::Url;
 use spammer::Spammer;
 
+pub mod dex_templates;
+pub mod dexalot_generator;
 pub mod genesis;
+pub mod mempool_monitor;
 pub mod modify_config;
 pub mod poa;
+pub mod rubicon_generator;
 pub mod spammer;
 pub mod tx;
 pub mod validator_manager;
@@ -16,7 +21,7 @@ pub mod validator_manager;
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    pub command: Commands,
 }
 
 impl Cli {
@@ -42,6 +47,7 @@ impl Cli {
             Commands::Spam(spam_cmd) => spam_cmd.run().await,
             Commands::Poa(poa_cmd) => poa_cmd.run().await,
             Commands::SpamContract(spam_contract_cmd) => spam_contract_cmd.run().await,
+            Commands::MonitorMempool(monitor_cmd) => monitor_cmd.run().await,
             Commands::ModifyConfig(modify_config_cmd) => modify_config_cmd.run(),
         }
     }
@@ -120,6 +126,10 @@ pub enum Commands {
     #[command(arg_required_else_help = true)]
     SpamContract(SpamContractCmd),
 
+    /// Monitor mempool and log when it becomes empty
+    #[command(arg_required_else_help = true)]
+    MonitorMempool(MonitorMempoolCmd),
+
     /// Apply custom node configurations from a TOML file
     #[command(arg_required_else_help = true)]
     ModifyConfig(ModifyConfigCmd),
@@ -130,6 +140,12 @@ pub struct SpamCmd {
     /// URL of the execution client's RPC endpoint (e.g., http://127.0.0.1:8545, https://eth.example.com)
     #[clap(long, default_value = "http://127.0.0.1:8545")]
     rpc_url: String,
+    /// Enable DEX transaction spamming mode (loads exchange_transactions.yaml)
+    #[clap(long, default_value = "false")]
+    pub dex: bool,
+    /// Path to custom transaction template YAML file (used with --dex)
+    #[clap(long)]
+    template: Option<String>,
     /// Number of transactions to send
     #[clap(short, long, default_value = "0")]
     num_txs: u64,
@@ -149,24 +165,175 @@ pub struct SpamCmd {
     #[clap(long, default_value = "0")]
     signer_index: usize,
 
+    /// Dexalot Portfolio contract address (required for dexalot templates)
+    #[clap(long, required_if_eq("template", "dexalot"))]
+    portfolio: Option<Address>,
+
+    /// Dexalot TradePairs contract address (required for dexalot templates)
+    #[clap(long, required_if_eq("template", "dexalot"))]
+    tradepairs: Option<Address>,
+
+    /// RubiconMarket contract address (for rubicon templates)
+    #[clap(long)]
+    rubicon_market: Option<Address>,
+
+    /// WETH9 token contract address (for rubicon templates)
+    #[clap(long)]
+    weth: Option<Address>,
+
+    /// USDC token contract address (for rubicon templates)
+    #[clap(long)]
+    usdc: Option<Address>,
+
     #[clap(long, short)]
     chain_id: u64,
 }
 
+#[derive(Parser, Debug, Clone, PartialEq)]
+pub struct MonitorMempoolCmd {
+    /// URL of the execution client's RPC endpoint
+    #[clap(long, default_value = "127.0.0.1:8545")]
+    rpc_url: String,
+
+    /// Polling interval in milliseconds (lower = more precise, higher CPU usage)
+    #[clap(long, default_value = "10")]
+    poll_interval_ms: u64,
+}
+
+impl MonitorMempoolCmd {
+    pub(crate) async fn run(&self) -> Result<()> {
+        let Self {
+            rpc_url,
+            poll_interval_ms,
+        } = self;
+
+        let url = if rpc_url.starts_with("http://") || rpc_url.starts_with("https://") {
+            rpc_url.parse()?
+        } else {
+            format!("http://{rpc_url}").parse()?
+        };
+        MempoolMonitor::new(url, *poll_interval_ms).run().await
+    }
+}
 impl SpamCmd {
     pub(crate) async fn run(&self) -> Result<()> {
         let Self {
             rpc_url,
+            dex,
+            template,
             num_txs,
             rate,
             interval,
             time,
             blobs,
             signer_index,
+            portfolio,
+            tradepairs,
+            rubicon_market,
+            weth,
+            usdc,
             chain_id,
         } = self;
 
-        let url: Url = rpc_url.parse()?;
+        let url: Url = if rpc_url.starts_with("http://") || rpc_url.starts_with("https://") {
+            rpc_url.parse()?
+        } else {
+            format!("http://{rpc_url}").parse()?
+        };
+
+        // Load DEX templates if --dex flag is set
+        let templates = if *dex {
+            // Use custom template path if provided, otherwise use default
+            let config_path = template
+                .as_deref()
+                .unwrap_or("utils/examples/exchange_transactions.yaml");
+
+            // Check if this is a dexalot template (generate dynamically)
+            if config_path.contains("dexalot") {
+                // Get signer address for dynamic template generation
+                let signers = make_signers();
+                let signer_address = signers[*signer_index].address();
+
+                // Require both portfolio and tradepairs addresses
+                let portfolio_addr = portfolio.ok_or_else(|| {
+                    color_eyre::eyre::eyre!(
+                        "Dexalot template requires --portfolio address to be specified"
+                    )
+                })?;
+                let tradepairs_addr = tradepairs.ok_or_else(|| {
+                    color_eyre::eyre::eyre!(
+                        "Dexalot template requires --tradepairs address to be specified"
+                    )
+                })?;
+
+                let config = dexalot_generator::DexalotConfig {
+                    portfolio: portfolio_addr,
+                    tradepairs: tradepairs_addr,
+                };
+
+                let templates =
+                    dexalot_generator::generate_dexalot_transactions(signer_address, config)?;
+
+                // Save generated templates to file
+                let output_path = "utils/examples/generated_dexalot.yaml";
+                if let Err(e) = dex_templates::save_templates(&templates, output_path) {
+                    eprintln!("Warning: Failed to save generated template: {e}");
+                } else {
+                    println!("Generated Dexalot template saved to: {output_path}");
+                }
+
+                Some(templates)
+            } else if config_path.contains("rubicon") || rubicon_market.is_some() {
+                // Check if this is a rubicon template (generate dynamically)
+                // Require all three contract addresses
+                let rubicon_market_addr = rubicon_market.ok_or_else(|| {
+                    color_eyre::eyre::eyre!(
+                        "Rubicon template requires --rubicon-market address to be specified"
+                    )
+                })?;
+                let weth_addr = weth.ok_or_else(|| {
+                    color_eyre::eyre::eyre!(
+                        "Rubicon template requires --weth address to be specified"
+                    )
+                })?;
+                let usdc_addr = usdc.ok_or_else(|| {
+                    color_eyre::eyre::eyre!(
+                        "Rubicon template requires --usdc address to be specified"
+                    )
+                })?;
+
+                let config = rubicon_generator::RubiconConfig {
+                    rubicon_market: rubicon_market_addr,
+                    weth: weth_addr,
+                    usdc: usdc_addr,
+                };
+
+                println!("Generating Rubicon DEX transaction templates with custom addresses");
+                let templates = rubicon_generator::generate_rubicon_transactions(config)?;
+
+                // Save generated templates to file
+                let output_path = "utils/examples/generated_rubicon.yaml";
+                if let Err(e) = dex_templates::save_templates(&templates, output_path) {
+                    eprintln!("Warning: Failed to save generated template: {e}");
+                } else {
+                    println!("Generated Rubicon template saved to: {output_path}");
+                }
+
+                Some(templates)
+            } else {
+                println!("Loading DEX transaction templates from: {config_path}");
+                Some(dex_templates::load_templates(config_path)?)
+            }
+        } else if template.is_some() {
+            // If template is specified but --dex is not set, warn the user
+            eprintln!(
+                "Warning: --template specified without --dex flag. Template will be ignored."
+            );
+            None
+        } else {
+            None
+        };
+
         let config = spammer::SpammerConfig {
             max_num_txs: *num_txs,
             max_time: *time,
@@ -175,7 +342,8 @@ impl SpamCmd {
             blobs: *blobs,
             chain_id: *chain_id,
         };
-        Spammer::new(url, *signer_index, config)?.run().await
+
+        Spammer::new(url, *signer_index, config, templates)?.run().await
     }
 }
 

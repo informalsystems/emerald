@@ -1,6 +1,6 @@
 use core::fmt;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use alloy_network::eip2718::Encodable2718;
 use alloy_primitives::Address;
@@ -17,8 +17,12 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::time::{self, sleep, Duration, Instant};
 use tracing::debug;
 
+use crate::dex_templates::{RoundRobinSelector, TxTemplate};
 use crate::make_signers;
-use crate::tx::{make_signed_contract_call_tx, make_signed_eip1559_tx, make_signed_eip4844_tx};
+use crate::tx::{
+    make_signed_contract_call_tx, make_signed_eip1559_tx, make_signed_eip4844_tx,
+    make_signed_tx_from_template,
+};
 
 /// Target pool size to maintain (in number of transactions).
 const TARGET_POOL_SIZE: u64 = 30_000;
@@ -71,10 +75,18 @@ pub struct Spammer {
     chain_id: u64,
     /// Optional payload describing contract call spam parameters.
     contract_payload: Option<ContractPayload>,
+    /// Optional transaction templates for round-robin spamming.
+    /// Wrapped in Arc<Mutex<>> to allow shared mutable access across tasks.
+    templates: Option<Arc<Mutex<RoundRobinSelector>>>,
 }
 
 impl Spammer {
-    pub fn new(url: Url, signer_index: usize, config: SpammerConfig) -> Result<Self> {
+    pub fn new(
+        url: Url,
+        signer_index: usize,
+        config: SpammerConfig,
+        templates: Option<Vec<TxTemplate>>,
+    ) -> Result<Self> {
         let signers = make_signers();
         Ok(Self {
             id: signer_index.to_string(),
@@ -87,6 +99,7 @@ impl Spammer {
             blobs: config.blobs,
             chain_id: config.chain_id,
             contract_payload: None,
+            templates: templates.map(|t| Arc::new(Mutex::new(RoundRobinSelector::new(t)))),
         })
     }
 
@@ -113,8 +126,9 @@ impl Spammer {
             max_rate: config.max_rate,
             batch_interval: config.batch_interval,
             blobs: false, // Contract calls don't use blobs
-            contract_payload: Some(contract_payload),
             chain_id: config.chain_id,
+            contract_payload: Some(contract_payload),
+            templates: None,
         })
     }
 
@@ -205,16 +219,12 @@ impl Spammer {
         let mut interval = time::interval(Duration::from_millis(self.batch_interval));
 
         loop {
-            // Wait for next one-second tick.
+            // Wait for next tick
             let _ = interval.tick().await;
             let interval_start = Instant::now();
 
             // Verify the nonce for gaps
-            // TODO: probably this should run as a separate task
             let on_chain_nonce = self.get_latest_nonce(address).await?;
-            // If the span between the on-chain nonce and the one we are about to send
-            // is too big, then probably there is a gap that doesn't allow the
-            // on-chain nonce too advance.
             let nonce_span = nonce.saturating_sub(on_chain_nonce);
             if nonce_span > self.max_rate {
                 debug!("Current nonce={nonce}, on-chain nonce={on_chain_nonce}. Sending 10 txs");
@@ -228,7 +238,7 @@ impl Spammer {
                         ));
                     }
 
-                    // Report individual results.
+                    // Report individual results
                     for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
                         let mapped_result = result.map(|_| tx_bytes_len);
                         result_sender.send(mapped_result).await?;
@@ -322,7 +332,14 @@ impl Spammer {
         let mut next_nonce = nonce;
 
         for _ in 0..tx_count {
-            let signed_tx = if let Some(ref payload) = self.contract_payload {
+            let signed_tx = if let Some(ref templates) = self.templates {
+                // Use template-based transaction generation
+                let template = {
+                    let mut selector = templates.lock().unwrap();
+                    selector.next_template().clone()
+                };
+                make_signed_tx_from_template(&self.signer, &template, next_nonce).await?
+            } else if let Some(ref payload) = self.contract_payload {
                 make_signed_contract_call_tx(
                     &self.signer,
                     next_nonce,

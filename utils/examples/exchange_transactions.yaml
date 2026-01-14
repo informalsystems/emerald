@@ -1,0 +1,177 @@
+# Exchange DEX Transaction Templates
+#
+# This file contains transaction templates for testing the Exchange.sol DEX contract.
+# The transactions cycle through price initialization, sell orders, and buy orders
+# to simulate realistic trading activity and stress test the order matching engine.
+#
+# Based on: foundry-backend/quick_test.sh
+#
+# Contract Addresses (from deployment):
+#   Exchange: 0xD8E47743AC7C5eaE9A8e0C570b91A28FdB3f8F71
+#   ETH Token (tokenA): 0x419e6594AFb029A41fDF986964CcEE8aDeE141b7
+#   USDb Token (tokenB): 0xb2ea407e360d2f5C5F327cDcC38182Bd2e7FFeCa
+#
+# IMPORTANT Prerequisites:
+#   1. Approve Exchange contract to spend both tokens (using WALLET_PRIVATE_KEY_1):
+#      cast send 0x419e6594AFb029A41fDF986964CcEE8aDeE141b7 \
+#        "approve(address,uint256)" 0xD8E47743AC7C5eaE9A8e0C570b91A28FdB3f8F71 \
+#        $(cast max-uint) --private-key $WALLET_PRIVATE_KEY_1 --rpc-url http://127.0.0.1:8545
+#      cast send 0xb2ea407e360d2f5C5F327cDcC38182Bd2e7FFeCa \
+#        "approve(address,uint256)" 0xD8E47743AC7C5eaE9A8e0C570b91A28FdB3f8F71 \
+#        $(cast max-uint) --private-key $WALLET_PRIVATE_KEY_1 --rpc-url http://127.0.0.1:8545
+#
+#   2. Ensure signer has sufficient token balances
+#
+#   3. Price Index Limitation:
+#      The priceIdx parameter in sell/buy orders MUST match the actual index returned by
+#      Exchange.getIndexOfPrice(price). This template assumes:
+#        - Price 1500 is at index 0 (initialized first)
+#        - No other prices exist in the order book
+#
+#      If prices are initialized in a different order, or other prices already exist,
+#      the priceIdx values will be incorrect and transactions will revert with:
+#      "Price does not match the index"
+#
+#      To verify correct indices, run:
+#        cast call $EXCHANGE "getIndexOfPrice(uint32)" 1500 --rpc-url http://127.0.0.1:8545
+
+transactions:
+  # Transaction 1: Initialize price level 1500
+  # Function: initPVnode(uint32 price)
+  # Selector: 0x1cfe8740
+  # Parameters: price = 1500 (0x05dc)
+  # From quick_test.sh line 51: cast send $EXCHANGE "initPVnode(uint32)" 1500
+  # Will succeed on first run, then revert with "Price already exist in orderbook"
+  - type: eip1559
+    to: "0xD8E47743AC7C5eaE9A8e0C570b91A28FdB3f8F71"
+    value: "0.0"
+    gas_limit: 500000
+    max_fee_per_gas: "5"
+    max_priority_fee_per_gas: "2"
+    input: "0x1cfe874000000000000000000000000000000000000000000000000000000000000005dc"
+
+  # Transaction 2: Place sell order - 50 ETH @ price 1500 (index 0)
+  # Function: newSellOrder(uint32 price, uint256 sellAmount, uint256 priceIdx)
+  # Selector: 0x4cc4b233
+  # Parameters: price=1500 (0x05dc), sellAmount=50000000 (50M = 50 tokens with 6 decimals), priceIdx=0
+  # From quick_test.sh line 76: cast send $EXCHANGE "newSellOrder(uint32,uint256,uint256)" 1500 50000000 $PRICE_INDEX_DEC
+  - type: eip1559
+    to: "0xD8E47743AC7C5eaE9A8e0C570b91A28FdB3f8F71"
+    value: "0.0"
+    gas_limit: 500000
+    max_fee_per_gas: "5"
+    max_priority_fee_per_gas: "2"
+    input: "0x4cc4b23300000000000000000000000000000000000000000000000000000000000005dc0000000000000000000000000000000000000000000000000000000002faf0800000000000000000000000000000000000000000000000000000000000000000"
+
+  # Transaction 3: Place buy order - 25 ETH @ price 1500 (index 0)
+  # Function: newBuyOrder(uint32 price, uint256 buyAmount, uint256 priceIdx)
+  # Selector: 0xd1a6e82c
+  # Parameters: price=1500 (0x05dc), buyAmount=25000000 (25M = 25 tokens with 6 decimals), priceIdx=0
+  # From quick_test.sh line 82: cast send $EXCHANGE "newBuyOrder(uint32,uint256,uint256)" 1500 25000000 $PRICE_INDEX_DEC
+  # This will match with the sell order above, executing a trade
+  - type: eip1559
+    to: "0xD8E47743AC7C5eaE9A8e0C570b91A28FdB3f8F71"
+    value: "0.0"
+    gas_limit: 500000
+    max_fee_per_gas: "5"
+    max_priority_fee_per_gas: "2"
+    input: "0xd1a6e82c00000000000000000000000000000000000000000000000000000000000005dc00000000000000000000000000000000000000000000000000000000017d78400000000000000000000000000000000000000000000000000000000000000000"
+
+  # Transaction 2: Place sell order - 50 ETH @ price 1500 (index 0)
+  # Function: newSellOrder(uint32 price, uint256 sellAmount, uint256 priceIdx)
+  # Selector: 0x4cc4b233
+  # Parameters: price=1500 (0x05dc), sellAmount=50000000 (50M = 50 tokens with 6 decimals), priceIdx=0
+  # From quick_test.sh line 76: cast send $EXCHANGE "newSellOrder(uint32,uint256,uint256)" 1500 50000000 $PRICE_INDEX_DEC
+  - type: eip1559
+    to: "0xD8E47743AC7C5eaE9A8e0C570b91A28FdB3f8F71"
+    value: "0.0"
+    gas_limit: 500000
+    max_fee_per_gas: "5"
+    max_priority_fee_per_gas: "2"
+    input: "0x4cc4b23300000000000000000000000000000000000000000000000000000000000005dc0000000000000000000000000000000000000000000000000000000002faf0800000000000000000000000000000000000000000000000000000000000000000"
+
+  # Transaction 3: Place buy order - 25 ETH @ price 1500 (index 0)
+  # Function: newBuyOrder(uint32 price, uint256 buyAmount, uint256 priceIdx)
+  # Selector: 0xd1a6e82c
+  # Parameters: price=1500 (0x05dc), buyAmount=25000000 (25M = 25 tokens with 6 decimals), priceIdx=0
+  # From quick_test.sh line 82: cast send $EXCHANGE "newBuyOrder(uint32,uint256,uint256)" 1500 25000000 $PRICE_INDEX_DEC
+  # This will match with the sell order above, executing a trade
+  - type: eip1559
+    to: "0xD8E47743AC7C5eaE9A8e0C570b91A28FdB3f8F71"
+    value: "0.0"
+    gas_limit: 500000
+    max_fee_per_gas: "5"
+    max_priority_fee_per_gas: "2"
+    input: "0xd1a6e82c00000000000000000000000000000000000000000000000000000000000005dc00000000000000000000000000000000000000000000000000000000017d78400000000000000000000000000000000000000000000000000000000000000000"
+  # Transaction 3: Place buy order - 25 ETH @ price 1500 (index 0)
+  # Function: newBuyOrder(uint32 price, uint256 buyAmount, uint256 priceIdx)
+  # Selector: 0xd1a6e82c
+  # Parameters: price=1500 (0x05dc), buyAmount=25000000 (25M = 25 tokens with 6 decimals), priceIdx=0
+  # From quick_test.sh line 82: cast send $EXCHANGE "newBuyOrder(uint32,uint256,uint256)" 1500 25000000 $PRICE_INDEX_DEC
+  # This will match with the sell order above, executing a trade
+  - type: eip1559
+    to: "0xD8E47743AC7C5eaE9A8e0C570b91A28FdB3f8F71"
+    value: "0.0"
+    gas_limit: 500000
+    max_fee_per_gas: "5"
+    max_priority_fee_per_gas: "2"
+    input: "0xd1a6e82c00000000000000000000000000000000000000000000000000000000000005dc00000000000000000000000000000000000000000000000000000000017d78400000000000000000000000000000000000000000000000000000000000000000"
+  # Transaction 3: Place buy order - 25 ETH @ price 1500 (index 0)
+  # Function: newBuyOrder(uint32 price, uint256 buyAmount, uint256 priceIdx)
+  # Selector: 0xd1a6e82c
+  # Parameters: price=1500 (0x05dc), buyAmount=25000000 (25M = 25 tokens with 6 decimals), priceIdx=0
+  # From quick_test.sh line 82: cast send $EXCHANGE "newBuyOrder(uint32,uint256,uint256)" 1500 25000000 $PRICE_INDEX_DEC
+  # This will match with the sell order above, executing a trade
+  - type: eip1559
+    to: "0xD8E47743AC7C5eaE9A8e0C570b91A28FdB3f8F71"
+    value: "0.0"
+    gas_limit: 500000
+    max_fee_per_gas: "5"
+    max_priority_fee_per_gas: "2"
+    input: "0xd1a6e82c00000000000000000000000000000000000000000000000000000000000005dc00000000000000000000000000000000000000000000000000000000017d78400000000000000000000000000000000000000000000000000000000000000000"
+ # Transaction 2: Place sell order - 50 ETH @ price 1500 (index 0)
+  # Function: newSellOrder(uint32 price, uint256 sellAmount, uint256 priceIdx)
+  # Selector: 0x4cc4b233
+  # Parameters: price=1500 (0x05dc), sellAmount=50000000 (50M = 50 tokens with 6 decimals), priceIdx=0
+  # From quick_test.sh line 76: cast send $EXCHANGE "newSellOrder(uint32,uint256,uint256)" 1500 50000000 $PRICE_INDEX_DEC
+  - type: eip1559
+    to: "0xD8E47743AC7C5eaE9A8e0C570b91A28FdB3f8F71"
+    value: "0.0"
+    gas_limit: 500000
+    max_fee_per_gas: "5"
+    max_priority_fee_per_gas: "2"
+    input: "0x4cc4b23300000000000000000000000000000000000000000000000000000000000005dc0000000000000000000000000000000000000000000000000000000002faf0800000000000000000000000000000000000000000000000000000000000000000"
+
+
+# Usage Example:
+#
+# 1. First, ensure you have run the approvals (see Prerequisites section above)
+#
+# 2. Run the spammer with --dex flag:
+#   cargo run --bin malachitebft-eth-utils -- spam \
+#     --dex \
+#     --rate 10 \
+#     --num-txs 30 \
+#     --rpc-url 127.0.0.1:8545 \
+#     --signer-index 0
+#
+# This will spam the Exchange contract with 30 transactions at 10 tx/s,
+# cycling through the 3 transaction templates in round-robin fashion:
+#   initPVnode -> newSellOrder -> newBuyOrder -> initPVnode -> newSellOrder -> ...
+#
+# Expected behavior (matches quick_test.sh flow):
+#   - First initPVnode(1500) will succeed and create price at index 0
+#   - Subsequent initPVnode(1500) calls will fail with "Price already exist in orderbook"
+#   - newSellOrder transactions will place 50 ETH sell orders at price 1500
+#   - newBuyOrder transactions will place 25 ETH buy orders and trigger matching
+#   - Each buy order will partially match with a sell order, executing a trade
+#   - After matching, 25 ETH of the sell order is filled, leaving 25 ETH remaining
+#   - Fees accumulate in the Exchange contract (0.1% per trade, feeRate=999)
+#
+# Troubleshooting:
+#   - If transactions fail with "Price does not match the index":
+#     Verify the price index with: cast call $EXCHANGE "getIndexOfPrice(uint32)" 1500
+#   - If transactions fail with "ERC20: insufficient allowance":
+#     Run the approval commands from Prerequisites section
+#   - If transactions fail with "ERC20: transfer amount exceeds balance":
+#     Ensure the signer has sufficient ETH token and USDb token balances

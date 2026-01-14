@@ -7,6 +7,11 @@ use alloy_signer_local::PrivateKeySigner;
 use color_eyre::eyre::{bail, Result};
 use reth_primitives::{Transaction, TransactionSigned};
 
+use crate::dex_templates::{
+    parse_address, parse_eth_value, parse_gwei_value, parse_input_data, Eip1559Template,
+    Eip4844Template, TxTemplate,
+};
+
 pub(crate) fn make_eip4844_tx(nonce: u64, chain_id: u64) -> Transaction {
     Transaction::Eip4844(TxEip4844 {
         chain_id,
@@ -112,6 +117,71 @@ pub(crate) async fn make_signed_contract_call_tx(
 ) -> Result<TransactionSigned> {
     let tx = make_contract_call_tx(nonce, contract_address, function_sig, args, chain_id).await?;
     sign_transaction(signer, tx).await
+}
+
+// Template-based transaction generation
+
+pub(crate) fn make_eip1559_tx_from_template(
+    template: &Eip1559Template,
+    nonce: u64,
+) -> Result<Transaction> {
+    let to = parse_address(&template.to)?;
+    let value = parse_eth_value(&template.value)?;
+    let max_fee_per_gas = parse_gwei_value(&template.max_fee_per_gas)?;
+    let max_priority_fee_per_gas = parse_gwei_value(&template.max_priority_fee_per_gas)?;
+    let input = parse_input_data(&template.input)?;
+
+    Ok(Transaction::Eip1559(TxEip1559 {
+        chain_id: 1u64,
+        nonce,
+        max_priority_fee_per_gas,
+        max_fee_per_gas,
+        gas_limit: template.gas_limit,
+        to: to.into(),
+        value,
+        input,
+        access_list: Default::default(),
+    }))
+}
+
+pub(crate) fn make_eip4844_tx_from_template(
+    template: &Eip4844Template,
+    nonce: u64,
+) -> Result<Transaction> {
+    let to = parse_address(&template.to)?;
+    let value = parse_eth_value(&template.value)?;
+    let max_fee_per_gas = parse_gwei_value(&template.max_fee_per_gas)?;
+    let max_priority_fee_per_gas = parse_gwei_value(&template.max_priority_fee_per_gas)?;
+    let max_fee_per_blob_gas = parse_gwei_value(&template.max_fee_per_blob_gas)?;
+
+    Ok(Transaction::Eip4844(TxEip4844 {
+        chain_id: 1u64,
+        nonce,
+        max_fee_per_gas,
+        max_priority_fee_per_gas,
+        gas_limit: template.gas_limit,
+        to,
+        value,
+        input: Bytes::default(),
+        access_list: Default::default(),
+        blob_versioned_hashes: vec![B256::random()],
+        max_fee_per_blob_gas,
+    }))
+}
+
+pub(crate) async fn make_signed_tx_from_template(
+    signer: &PrivateKeySigner,
+    template: &TxTemplate,
+    nonce: u64,
+) -> Result<TransactionSigned> {
+    let tx = match template {
+        TxTemplate::Eip1559(t) => make_eip1559_tx_from_template(t, nonce)?,
+        TxTemplate::Eip4844(t) => make_eip4844_tx_from_template(t, nonce)?,
+    };
+
+    let tx_sign_hash = tx.signature_hash();
+    let signature = signer.sign_hash(&tx_sign_hash).await?;
+    Ok(TransactionSigned::new_unhashed(tx, signature))
 }
 
 #[cfg(test)]

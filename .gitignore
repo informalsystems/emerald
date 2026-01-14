@@ -3,7 +3,17 @@
 /rethdata
 monitoring/data-grafana/
 monitoring/data-prometheus/
-/assets
+
+utils/logs/
+
+# Foundry build artifacts
+example/cache/
+example/out/
+
+# Keep broadcast files except local dev chains and dry runs
+example/broadcast/*/31337/
+example/broadcast/**/dry-run/
+assets
 .testnet
 .claude
 

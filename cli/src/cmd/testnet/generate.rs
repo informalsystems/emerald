@@ -1,8 +1,8 @@
-//! Testnet command
+//! Original testnet generation command (backward compatibility)
 
+use core::str::FromStr;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use clap::Parser;
 use color_eyre::eyre::eyre;
@@ -10,6 +10,7 @@ use color_eyre::Result;
 use directories::BaseDirs;
 use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, Node};
 use malachitebft_config::*;
+use malachitebft_core_types::{Context, SigningScheme};
 use serde::Deserialize;
 use tracing::info;
 
@@ -17,7 +18,9 @@ use crate::args::Args;
 use crate::error::Error;
 use crate::file::{save_config, save_genesis, save_priv_validator_key};
 
-const TESTNET_FOLDER: &str = ".malachite_testnet";
+type PrivateKey<C> = <<C as Context>::SigningScheme as SigningScheme>::PrivateKey;
+
+const TESTNET_FOLDER: &str = ".emerald-devnet";
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeFlavour {
@@ -31,7 +34,7 @@ impl FromStr for RuntimeFlavour {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.contains(':') {
             match s.split_once(':') {
-                Some(("multi-threaded", n)) => Ok(RuntimeFlavour::MultiThreaded(
+                Some(("multi-threaded", n)) => Ok(Self::MultiThreaded(
                     n.parse()
                         .map_err(|_| "Invalid number of threads".to_string())?,
                 )),
@@ -39,8 +42,8 @@ impl FromStr for RuntimeFlavour {
             }
         } else {
             match s {
-                "single-threaded" => Ok(RuntimeFlavour::SingleThreaded),
-                "multi-threaded" => Ok(RuntimeFlavour::MultiThreaded(0)),
+                "single-threaded" => Ok(Self::SingleThreaded),
+                "multi-threaded" => Ok(Self::MultiThreaded(0)),
                 _ => Err(format!("Invalid runtime flavour: {s}")),
             }
         }
@@ -48,7 +51,7 @@ impl FromStr for RuntimeFlavour {
 }
 
 #[derive(Parser, Debug, Clone, PartialEq)]
-pub struct TestnetCmd {
+pub struct TestnetGenerateCmd {
     #[clap(long)]
     pub testnet_config: Option<PathBuf>,
 
@@ -103,11 +106,12 @@ pub struct TestnetCmd {
     pub transport: TransportProtocol,
 }
 
-impl TestnetCmd {
-    /// Execute the testnet command
+impl TestnetGenerateCmd {
+    /// Execute the testnet generation command
     pub fn run<N>(&self, node: &N, home_dir: &Path, logging: LoggingConfig) -> Result<()>
     where
         N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
+        PrivateKey<N::Context>: serde::de::DeserializeOwned,
     {
         let runtime = match self.runtime {
             RuntimeFlavour::SingleThreaded => RuntimeConfig::SingleThreaded,
@@ -122,12 +126,13 @@ impl TestnetCmd {
             },
             |p| Ok(p.clone()),
         )?;
+
         let testnet_config_content = fs::read_to_string(testnet_config_file.clone())
             .map_err(|e| Error::LoadFile(testnet_config_file.to_path_buf(), e))?;
         let testnet_config =
             toml::from_str::<TestnetConfig>(&testnet_config_content).map_err(Error::FromTOML)?;
 
-        testnet(
+        generate_testnet(
             node,
             home_dir,
             &testnet_config,
@@ -146,7 +151,7 @@ impl TestnetCmd {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn testnet<N>(
+pub fn generate_testnet<N>(
     node: &N,
     home_dir: &Path,
     testnet_config: &TestnetConfig,
@@ -159,13 +164,39 @@ pub fn testnet<N>(
     ephemeral_connection_timeout_ms: u64,
     transport: TransportProtocol,
     logging: LoggingConfig,
-) -> std::result::Result<(), Error>
+) -> core::result::Result<(), Error>
 where
     N: Node + CanGeneratePrivateKey + CanMakeGenesis + CanMakePrivateKeyFile,
+    PrivateKey<N::Context>: serde::de::DeserializeOwned,
 {
     let nodes = testnet_config.nodes;
     let deterministic = testnet_config.deterministic;
-    let private_keys = crate::new::generate_private_keys(node, nodes, deterministic);
+
+    // Use provided private keys if available, otherwise generate them
+    let private_keys: Vec<PrivateKey<N::Context>> = if let Some(ref keys_hex) =
+        testnet_config.private_keys
+    {
+        if keys_hex.len() != nodes {
+            return Err(Error::InvalidConfig(format!(
+                "Number of private keys ({}) doesn't match number of nodes ({})",
+                keys_hex.len(),
+                nodes
+            )));
+        }
+
+        keys_hex
+            .iter()
+            .enumerate()
+            .map(|(i, key_str)| {
+                parse_private_key(node, key_str).map_err(|e| {
+                    Error::InvalidConfig(format!("Failed to parse private key at index {i}: {e}"))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        crate::new::generate_private_keys(node, nodes, deterministic)
+    };
+
     let public_keys = private_keys
         .iter()
         .map(|pk| node.get_public_key(pk))
@@ -176,8 +207,8 @@ where
         // Use home directory `home_dir/<index>`
         let node_home_dir = home_dir.join(i.to_string());
 
-        // Use malaketh config directory `malaketh_config_dir/<index>/config.toml`
-        let node_malaketh_config_file = testnet_config
+        // Use emerald config directory `emerald_config_dir/<index>/config.toml`
+        let node_emerald_config_file = testnet_config
             .configuration_paths
             .get(i)
             .ok_or(Error::MissingPath(i))?;
@@ -191,18 +222,18 @@ where
         info!(
             id = %i,
             home = %node_home_dir.display(),
-            malaketh_config = %node_malaketh_config_file.display(),
+            emerald_config = %node_emerald_config_file.display(),
             "Generating configuration for node..."
         );
 
         // Set the destination folder
         let args = Args {
             home: Some(node_home_dir),
-            config: Some(node_malaketh_config_file.clone()),
+            config: Some(node_emerald_config_file.clone()),
             ..Args::default()
         };
 
-        // Save config
+        // Save Malachite config
         save_config(
             &args.get_config_file_path()?,
             &crate::new::generate_config(
@@ -242,4 +273,56 @@ pub struct TestnetConfig {
     pub deterministic: bool,
     pub configuration_paths: Vec<PathBuf>,
     pub monikers: Vec<String>,
+    pub private_keys: Option<Vec<String>>,
+}
+
+/// Parse a private key from either:
+/// 1. JSON format (as generated by `malachitebft-eth-app init`):
+///    {"type": "tendermint/PrivKeySecp256k1", "value": "base64..."}
+/// 2. Ethereum hex format (with or without 0x prefix): "0x1234..." or "1234..."
+///
+/// This function:
+/// 1. Attempts to parse as JSON and extract base64 value
+/// 2. Falls back to parsing as hex string
+/// 3. Creates a concrete Ethereum PrivateKey from the bytes
+/// 4. Converts through serde to the generic type
+fn parse_private_key<N>(
+    _node: &N,
+    key_str: &str,
+) -> core::result::Result<PrivateKey<N::Context>, String>
+where
+    N: Node,
+    PrivateKey<N::Context>: serde::de::DeserializeOwned,
+{
+    use malachitebft_eth_types::secp256k1::PrivateKey as EthPrivateKey;
+
+    // Try to parse as JSON first (init command format)
+    let bytes = if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(key_str) {
+        // Extract the base64 "value" field
+        let base64_str = json_value
+            .get("value")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "JSON format requires 'value' field with base64 string".to_string())?;
+
+        // Decode base64 to bytes
+        base64::Engine::decode(&base64::engine::general_purpose::STANDARD, base64_str)
+            .map_err(|e| format!("Invalid base64 in 'value' field: {e}"))?
+    } else {
+        // Not JSON, try parsing as hex string
+        let hex_str = key_str.trim().strip_prefix("0x").unwrap_or(key_str.trim());
+
+        // Decode hex to bytes
+        hex::decode(hex_str)
+            .map_err(|e| format!("Invalid format: not valid JSON or hex string: {e}"))?
+    };
+
+    // Create the concrete Ethereum PrivateKey from bytes
+    let eth_key =
+        EthPrivateKey::from_slice(&bytes).map_err(|e| format!("Invalid private key bytes: {e}"))?;
+
+    // Convert through serde (both types have the same serde representation)
+    let json = serde_json::to_string(&eth_key)
+        .map_err(|e| format!("Failed to serialize private key: {e}"))?;
+
+    serde_json::from_str(&json).map_err(|e| format!("Failed to deserialize private key: {e}"))
 }

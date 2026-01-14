@@ -1,0 +1,26 @@
+name: Feature Request
+description: Suggest a feature for Emerald
+title: "[Feature]: "
+labels: ["type: feature-request", "status: waiting-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for wanting to improve Emerald.
+
+  - type: checkboxes
+    attributes:
+      label: Is there an existing issue for this?
+      description: Please search existing issues to avoid creating duplicates.
+      options:
+        - label: I have searched the existing issues
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the feature
+      description: |
+        Please describe the feature and what it is aiming to solve.
+    validations:
+      required: true

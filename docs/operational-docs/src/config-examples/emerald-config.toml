@@ -1,0 +1,17 @@
+moniker = "test-0"
+execution_authrpc_address = "http://<RETH_IP>:8545"
+engine_authrpc_address = "http://<RETH_IP>:8551"
+jwt_token_path = "/home/emerald/jwt"
+el_node_type = "archive"
+sync_timeout_ms = 1000000
+sync_initial_delay_ms = 100
+fee_recipient = "0x4242424242424242424242424242424242424242"
+
+max_retain_blocks = 0
+prune_at_block_interval = 5
+
+[retry_config]
+initial_delay = "100ms"
+max_delay = "5s"
+max_elapsed_time = "30s"
+multiplier = 2.0

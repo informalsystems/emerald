@@ -4,13 +4,12 @@ run-name: Deploy to GHCR by @${{ github.actor }}
 # Workflow practices adapted from https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
     tags:
       - "v*"
-  pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: read

@@ -1,0 +1,1 @@
+- Use secp256k1 for signing ([#36](https://github.com/informalsystems/emerald/issues/36))

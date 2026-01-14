@@ -1,6 +1,6 @@
 #![allow(clippy::result_large_err)]
 
-use std::mem::size_of;
+use core::mem::size_of;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
@@ -11,7 +11,7 @@ use malachitebft_app_channel::app::types::core::{CommitCertificate, Round};
 use malachitebft_app_channel::app::types::ProposedValue;
 use malachitebft_eth_types::codec::proto as codec;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::{proto, Height, MalakethContext, Value, ValueId};
+use malachitebft_eth_types::{proto, EmeraldContext, Height, Value, ValueId};
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 use prost::Message;
 use redb::ReadableTable;
@@ -24,19 +24,25 @@ use crate::metrics::DbMetrics;
 use crate::store::keys::PendingValueKey;
 use crate::streaming::ProposalParts;
 
+/// Malachite keeps values (block data) during processing a height and stores it.
+/// For blocks decided on, that data is stored by the execution engine as well.
+/// We therefore want to prune these heights to decrease the storage usage.
+/// The retain height set via config refers to storing certificate data which is
+/// stored only in the consensus engine.
+const VALUE_RETAIN_HEIGHT: Height = Height::new(10);
 #[derive(Clone, Debug)]
 pub struct DecidedValue {
     pub value: Value,
-    pub certificate: CommitCertificate<MalakethContext>,
+    pub certificate: CommitCertificate<EmeraldContext>,
 }
 
-fn decode_certificate(bytes: &[u8]) -> Result<CommitCertificate<MalakethContext>, ProtoError> {
+fn decode_certificate(bytes: &[u8]) -> Result<CommitCertificate<EmeraldContext>, ProtoError> {
     let proto = proto::CommitCertificate::decode(bytes)?;
     codec::decode_certificate(proto)
 }
 
 fn encode_certificate(
-    certificate: &CommitCertificate<MalakethContext>,
+    certificate: &CommitCertificate<EmeraldContext>,
 ) -> Result<Vec<u8>, ProtoError> {
     let proto = codec::encode_certificate(certificate)?;
     Ok(proto.encode_to_vec())
@@ -69,28 +75,28 @@ pub enum StoreError {
     Serialization(#[from] serde_json::Error),
 }
 
-const CERTIFICATES_TABLE: redb::TableDefinition<HeightKey, Vec<u8>> =
+const CERTIFICATES_TABLE: redb::TableDefinition<'_, HeightKey, Vec<u8>> =
     redb::TableDefinition::new("certificates");
 
-const DECIDED_VALUES_TABLE: redb::TableDefinition<HeightKey, Vec<u8>> =
+const DECIDED_VALUES_TABLE: redb::TableDefinition<'_, HeightKey, Vec<u8>> =
     redb::TableDefinition::new("decided_values");
 
-const UNDECIDED_PROPOSALS_TABLE: redb::TableDefinition<UndecidedValueKey, Vec<u8>> =
+const UNDECIDED_PROPOSALS_TABLE: redb::TableDefinition<'_, UndecidedValueKey, Vec<u8>> =
     redb::TableDefinition::new("undecided_values");
 
-const DECIDED_BLOCK_DATA_TABLE: redb::TableDefinition<HeightKey, Vec<u8>> =
+const DECIDED_BLOCK_DATA_TABLE: redb::TableDefinition<'_, HeightKey, Vec<u8>> =
     redb::TableDefinition::new("decided_block_data");
 
-const UNDECIDED_BLOCK_DATA_TABLE: redb::TableDefinition<UndecidedValueKey, Vec<u8>> =
+const UNDECIDED_BLOCK_DATA_TABLE: redb::TableDefinition<'_, UndecidedValueKey, Vec<u8>> =
     redb::TableDefinition::new("undecided_block_data");
 
-const DECIDED_BLOCK_HEADERS_TABLE: redb::TableDefinition<HeightKey, Vec<u8>> =
+const DECIDED_BLOCK_HEADERS_TABLE: redb::TableDefinition<'_, HeightKey, Vec<u8>> =
     redb::TableDefinition::new("decided_block_headers");
 
-const PERSISTENT_METRICS_TABLE: redb::TableDefinition<&str, u64> =
+const PERSISTENT_METRICS_TABLE: redb::TableDefinition<'_, &str, u64> =
     redb::TableDefinition::new("persistent_metrics");
 
-const PENDING_PROPOSAL_PARTS_TABLE: redb::TableDefinition<PendingValueKey, Vec<u8>> =
+const PENDING_PROPOSAL_PARTS_TABLE: redb::TableDefinition<'_, PendingValueKey, Vec<u8>> =
     redb::TableDefinition::new("pending_proposal_parts");
 
 struct Db {
@@ -188,7 +194,7 @@ impl Db {
         height: Height,
         round: Round,
         value_id: ValueId,
-    ) -> Result<Option<ProposedValue<MalakethContext>>, StoreError> {
+    ) -> Result<Option<ProposedValue<EmeraldContext>>, StoreError> {
         let start = Instant::now();
         let mut read_bytes = 0;
 
@@ -220,7 +226,7 @@ impl Db {
         &self,
         height: Height,
         round: Round,
-    ) -> Result<Vec<ProposedValue<MalakethContext>>, StoreError> {
+    ) -> Result<Vec<ProposedValue<EmeraldContext>>, StoreError> {
         let start = Instant::now();
         let mut read_bytes = 0;
 
@@ -255,7 +261,7 @@ impl Db {
 
     fn insert_undecided_proposal(
         &self,
-        proposal: ProposedValue<MalakethContext>,
+        proposal: ProposedValue<EmeraldContext>,
     ) -> Result<(), StoreError> {
         let start = Instant::now();
 
@@ -392,31 +398,51 @@ impl Db {
         ValueId::new(u64::from_be_bytes(bytes))
     }
 
-    fn prune(&self, retain_height: Height) -> Result<(), StoreError> {
+    // All values except certificates can be retrieved from Reth (if the node has not been pruned)
+    // But if we prune certificates, other nodes will not be able to catchup.
+    fn prune(
+        &self,
+        retain_height: Height,
+        curr_height: Height,
+        prune_certificates: bool,
+    ) -> Result<(), StoreError> {
         let start = Instant::now();
 
         let tx = self.db.begin_write().unwrap();
 
         {
-            // Remove all undecided proposals with height < retain_height
-            let mut undecided = tx.open_table(UNDECIDED_PROPOSALS_TABLE)?;
-            undecided.retain(|k, _| k.0 >= retain_height)?;
+            if curr_height > VALUE_RETAIN_HEIGHT {
+                let block_data_retain_height = Height::new(
+                    curr_height
+                        .as_u64()
+                        .saturating_sub(VALUE_RETAIN_HEIGHT.as_u64()),
+                );
 
-            // Remove all undecided block data with height < retain_height
-            let mut undecided_block_data = tx.open_table(UNDECIDED_BLOCK_DATA_TABLE)?;
-            undecided_block_data.retain(|k, _| k.0 >= retain_height)?;
+                // Remove all undecided proposals with height < retain_height
+                let mut undecided = tx.open_table(UNDECIDED_PROPOSALS_TABLE)?;
+                undecided.retain(|k, _| k.0 >= block_data_retain_height)?;
 
-            // Remove all pending proposal parts with height < retain_height
-            let mut pending = tx.open_table(PENDING_PROPOSAL_PARTS_TABLE)?;
-            pending.retain(|k, _| k.0 >= retain_height)?;
+                // Remove all undecided block data with height < retain_height
+                let mut undecided_block_data = tx.open_table(UNDECIDED_BLOCK_DATA_TABLE)?;
+                undecided_block_data.retain(|k, _| k.0 >= block_data_retain_height)?;
 
-            // Remove all decided values with height < retain_height
-            let mut decided = tx.open_table(DECIDED_VALUES_TABLE)?;
-            decided.retain(|k, _| k >= retain_height)?;
+                // Remove all pending proposal parts with height < retain_height
+                let mut pending = tx.open_table(PENDING_PROPOSAL_PARTS_TABLE)?;
+                pending.retain(|k, _| k.0 >= block_data_retain_height)?;
 
-            // Remove all decided block data with height < retain_height
-            let mut decided_block_data = tx.open_table(DECIDED_BLOCK_DATA_TABLE)?;
-            decided_block_data.retain(|k, _| k >= retain_height)?;
+                // Remove all decided values with height < retain_height
+                let mut decided = tx.open_table(DECIDED_VALUES_TABLE)?;
+                decided.retain(|k, _| k >= block_data_retain_height)?;
+
+                // Remove all decided block data with height < retain_height
+                let mut decided_block_data = tx.open_table(DECIDED_BLOCK_DATA_TABLE)?;
+                decided_block_data.retain(|k, _| k >= block_data_retain_height)?;
+            }
+            if prune_certificates {
+                // We prune certificates only if pruning is set.
+                let mut certificate_data = tx.open_table(CERTIFICATES_TABLE)?;
+                certificate_data.retain(|k, _| k >= retain_height)?;
+            }
         }
 
         tx.commit()?;
@@ -631,7 +657,7 @@ impl Db {
     fn get_certificate_and_header(
         &self,
         height: Height,
-    ) -> Result<Option<(CommitCertificate<MalakethContext>, Bytes)>, StoreError> {
+    ) -> Result<Option<(CommitCertificate<EmeraldContext>, Bytes)>, StoreError> {
         let start = Instant::now();
         let mut read_bytes = 0;
 
@@ -723,7 +749,7 @@ impl Store {
     /// Called by the application when it `commit`s a value decided by consensus.
     pub async fn store_decided_value(
         &self,
-        certificate: &CommitCertificate<MalakethContext>,
+        certificate: &CommitCertificate<EmeraldContext>,
         value: Value,
         block_header_bytes: Bytes,
     ) -> Result<(), StoreError> {
@@ -743,7 +769,7 @@ impl Store {
     /// Called by the application when receiving new proposals from peers.
     pub async fn store_undecided_proposal(
         &self,
-        value: ProposedValue<MalakethContext>,
+        value: ProposedValue<EmeraldContext>,
     ) -> Result<(), StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.insert_undecided_proposal(value)).await?
@@ -756,7 +782,7 @@ impl Store {
         height: Height,
         round: Round,
         value_id: ValueId,
-    ) -> Result<Option<ProposedValue<MalakethContext>>, StoreError> {
+    ) -> Result<Option<ProposedValue<EmeraldContext>>, StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.get_undecided_proposal(height, round, value_id))
             .await?
@@ -768,7 +794,7 @@ impl Store {
         &self,
         height: Height,
         round: Round,
-    ) -> Result<Vec<ProposedValue<MalakethContext>>, StoreError> {
+    ) -> Result<Vec<ProposedValue<EmeraldContext>>, StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.get_undecided_proposals(height, round)).await?
     }
@@ -806,9 +832,19 @@ impl Store {
 
     /// Prunes the store by removing all undecided proposals and decided values up to the retain height.
     /// Called by the application to clean up old data and free up space. This is done when a new value is committed.
-    pub async fn prune(&self, retain_height: Height) -> Result<(), StoreError> {
+    /// If state.max_retain_height is set to something else than u64::MAX, this function also prunes certificates.
+    /// Pruned certificates cannot be retrieved later on.
+    pub async fn prune(
+        &self,
+        retain_height: Height,
+        curr_height: Height,
+        prune_certificates: bool,
+    ) -> Result<(), StoreError> {
         let db = Arc::clone(&self.db);
-        tokio::task::spawn_blocking(move || db.prune(retain_height)).await?
+        tokio::task::spawn_blocking(move || {
+            db.prune(retain_height, curr_height, prune_certificates)
+        })
+        .await?
     }
 
     pub async fn get_block_data(
@@ -847,7 +883,7 @@ impl Store {
     pub async fn get_certificate_and_header(
         &self,
         height: Height,
-    ) -> Result<Option<(CommitCertificate<MalakethContext>, Bytes)>, StoreError> {
+    ) -> Result<Option<(CommitCertificate<EmeraldContext>, Bytes)>, StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.get_certificate_and_header(height)).await?
     }

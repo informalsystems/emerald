@@ -1,0 +1,108 @@
+moniker = "test-0"
+
+[logging]
+log_level = "debug"
+log_format = "plaintext"
+
+[consensus]
+timeout_propose = "3s"
+timeout_propose_delta = "500ms"
+timeout_prevote = "1s"
+timeout_prevote_delta = "500ms"
+timeout_precommit = "1s"
+timeout_precommit_delta = "500ms"
+timeout_commit = "0s"
+timeout_step = "30s"
+value_payload = "parts-only"
+timeout_rebroadcast = "5s"
+queue_capacity = 0
+
+[consensus.p2p]
+listen_addr = "/ip4/0.0.0.0/tcp/27000"
+persistent_peers = [
+	"/ip4/<IP_ADDRESS_TO_REMOTE_PEER>/tcp/<PORT_FOR_REMOTE_PEER>",
+	"/ip4/<IP_ADDRESS_TO_REMOTE_PEER>/tcp/<PORT_FOR_REMOTE_PEER>",
+	"/ip4/<IP_ADDRESS_TO_REMOTE_PEER>/tcp/<PORT_FOR_REMOTE_PEER>",
+]
+transport = "tcp"
+pubsub_max_size = "4.2 MB"
+rpc_max_size = "10.5 MB"
+
+[consensus.p2p.discovery]
+enabled = false
+bootstrap_protocol = "full"
+selector = "random"
+num_outbound_peers = 2
+num_inbound_peers = 2
+ephemeral_connection_timeout = "5s"
+
+[consensus.p2p.protocol]
+type = "gossipsub"
+mesh_n = 6
+mesh_n_high = 12
+mesh_n_low = 4
+mesh_outbound_min = 2
+
+[mempool]
+max_tx_count = 10000
+gossip_batch_size = 0
+
+[mempool.load]
+load_type = "no_load"
+
+[mempool.p2p]
+listen_addr = "/ip4/0.0.0.0/tcp/28000"
+persistent_peers = [
+	"/ip4/<IP_ADDRESS_TO_REMOTE_PEER>/tcp/<PORT_FOR_REMOTE_PEER>",
+	"/ip4/<IP_ADDRESS_TO_REMOTE_PEER>/tcp/<PORT_FOR_REMOTE_PEER>",
+	"/ip4/<IP_ADDRESS_TO_REMOTE_PEER>/tcp/<PORT_FOR_REMOTE_PEER>",
+]
+transport = "tcp"
+pubsub_max_size = "4.2 MB"
+rpc_max_size = "10.5 MB"
+
+[mempool.p2p.discovery]
+enabled = false
+bootstrap_protocol = "full"
+selector = "random"
+num_outbound_peers = 20
+num_inbound_peers = 20
+ephemeral_connection_timeout = "5s"
+
+[mempool.p2p.protocol]
+type = "gossipsub"
+mesh_n = 6
+mesh_n_high = 12
+mesh_n_low = 4
+mesh_outbound_min = 2
+
+[value_sync]
+enabled = true
+status_update_interval = "10s"
+request_timeout = "10s"
+max_request_size = "1048.6 KB"
+max_response_size = "10.5 MB"
+parallel_requests = 10
+scoring_strategy = "ema"
+inactive_threshold = "1m"
+batch_size = 500
+
+[metrics]
+enabled = true
+listen_addr = "0.0.0.0:30000"
+
+[runtime]
+flavor = "single_threaded"
+
+[test]
+max_block_size = "1048.6 KB"
+value_payload = "parts-only"
+tx_size = "1.0 KB"
+txs_per_part = 256
+time_allowance_factor = 0.5
+exec_time_per_tx = "1ms"
+max_retain_blocks = 1000
+
+[test.vote_extensions]
+enabled = false
+size = "0 B"

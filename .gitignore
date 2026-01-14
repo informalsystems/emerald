@@ -15,6 +15,11 @@ example/broadcast/*/31337/
 example/broadcast/**/dry-run/
 assets
 .testnet
+.claude
+
+# Custom-reth build artifacts
+custom-reth/target/
+custom-reth/Cargo.lock
 
 # Docs and env
 example/docs/

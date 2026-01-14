@@ -24,6 +24,9 @@ use crate::tx::{
     make_signed_tx_from_template,
 };
 
+/// Target pool size to maintain (in number of transactions).
+const TARGET_POOL_SIZE: u64 = 30_000;
+
 struct ContractPayload {
     /// Contract address for contract call spamming.
     address: Address,
@@ -31,6 +34,22 @@ struct ContractPayload {
     function_sig: String,
     /// Function arguments.
     args: Vec<String>,
+}
+
+/// Configuration for the transaction spammer.
+pub struct SpammerConfig {
+    /// Maximum number of transactions to send (0 for no limit).
+    pub max_num_txs: u64,
+    /// Maximum number of seconds to run the spammer (0 for no limit).
+    pub max_time: u64,
+    /// Maximum number of transactions to send per second.
+    pub max_rate: u64,
+    /// Number of ms between sending batches of txs.
+    pub batch_interval: u64,
+    /// Whether to send EIP-4844 blob transactions.
+    pub blobs: bool,
+    /// Chain ID for the transactions.
+    pub chain_id: u64,
 }
 
 /// A transaction spammer that sends Ethereum transactions at a controlled rate.
@@ -48,8 +67,12 @@ pub struct Spammer {
     max_time: u64,
     /// Maximum number of transactions to send per second.
     max_rate: u64,
+    /// Number of ms between sending batches of txs (default: 200).
+    batch_interval: u64,
     /// Whether to send EIP-4844 blob transactions.
     blobs: bool,
+    /// Chain ID for the transactions.
+    chain_id: u64,
     /// Optional payload describing contract call spam parameters.
     contract_payload: Option<ContractPayload>,
     /// Optional transaction templates for round-robin spamming.
@@ -61,10 +84,7 @@ impl Spammer {
     pub fn new(
         url: Url,
         signer_index: usize,
-        max_num_txs: u64,
-        max_time: u64,
-        max_rate: u64,
-        blobs: bool,
+        config: SpammerConfig,
         templates: Option<Vec<TxTemplate>>,
     ) -> Result<Self> {
         let signers = make_signers();
@@ -72,22 +92,21 @@ impl Spammer {
             id: signer_index.to_string(),
             client: RpcClient::new(url)?,
             signer: signers[signer_index].clone(),
-            max_num_txs,
-            max_time,
-            max_rate,
-            blobs,
+            max_num_txs: config.max_num_txs,
+            max_time: config.max_time,
+            max_rate: config.max_rate,
+            batch_interval: config.batch_interval,
+            blobs: config.blobs,
+            chain_id: config.chain_id,
             contract_payload: None,
             templates: templates.map(|t| Arc::new(Mutex::new(RoundRobinSelector::new(t)))),
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn new_contract(
         url: Url,
         signer_index: usize,
-        max_num_txs: u64,
-        max_time: u64,
-        max_rate: u64,
+        config: SpammerConfig,
         contract: &Address,
         function: &str,
         args: &[String],
@@ -102,10 +121,12 @@ impl Spammer {
             id: signer_index.to_string(),
             client: RpcClient::new(url)?,
             signer: signers[signer_index].clone(),
-            max_num_txs,
-            max_time,
-            max_rate,
+            max_num_txs: config.max_num_txs,
+            max_time: config.max_time,
+            max_rate: config.max_rate,
+            batch_interval: config.batch_interval,
             blobs: false, // Contract calls don't use blobs
+            chain_id: config.chain_id,
             contract_payload: Some(contract_payload),
             templates: None,
         })
@@ -164,6 +185,12 @@ impl Spammer {
         self.client.rpc_request("txpool_status", vec![]).await
     }
 
+    // Get current number of pending and queued transactions in the pool.
+    async fn get_mempool_count(&self) -> Result<u64> {
+        let status = self.get_txpool_status().await?;
+        Ok(status.pending + status.queued)
+    }
+
     /// Generate and send transactions to the Ethereum node at a controlled rate.
     async fn spammer(
         &self,
@@ -174,150 +201,116 @@ impl Spammer {
         // Fetch latest nonce for the sender address.
         let address = self.signer.address();
         let latest_nonce = self.get_latest_nonce(address).await?;
-        debug!("Spamming {address} starting from nonce={latest_nonce}");
+        let txs_per_batch = self
+            .max_rate
+            .saturating_mul(self.batch_interval)
+            .checked_div(1000)
+            .unwrap_or(0);
+        debug!(
+            "Spamming {address} starting from nonce={latest_nonce} at rate {}, sending {txs_per_batch} txs every {}ms", 
+            self.max_rate,
+            self.batch_interval,
+        );
 
         // Initialize nonce and counters.
         let mut nonce = latest_nonce;
         let start_time = Instant::now();
         let mut txs_sent_total = 0u64;
-        let mut interval = time::interval(Duration::from_secs(1));
-
-        // Channel for receiving nonce updates from background verification tasks
-        let (nonce_update_sender, mut nonce_update_receiver) = mpsc::channel::<(u64, u64)>(1);
+        let mut interval = time::interval(Duration::from_millis(self.batch_interval));
 
         loop {
-            // Check for nonce updates from background tasks (non-blocking)
-            while let Ok((expected_nonce, actual_nonce)) = nonce_update_receiver.try_recv() {
-                if actual_nonce != expected_nonce {
-                    eprintln!(
-                        "⚠️  Nonce mismatch detected! Expected {expected_nonce}, but node has {actual_nonce}. Re-syncing..."
-                    );
-                    // Only update if the actual nonce is different from what we expected
-                    nonce = actual_nonce;
-
-                    // Calculate the correct template index based on the actual nonce
-                    // This allows us to resume at the correct position in the template cycle
-                    if let Some(ref templates) = self.templates {
-                        let mut selector = templates.lock().unwrap();
-                        let template_count = selector.template_count();
-
-                        // Calculate how many transactions we've completed since latest_nonce
-                        let nonce_offset = (actual_nonce - latest_nonce) as usize;
-                        let correct_index = nonce_offset % template_count;
-
-                        selector.set_index(correct_index);
-                        eprintln!(
-                            "Template index adjusted to {correct_index} (nonce offset: {nonce_offset}, template count: {template_count})"
-                        );
-                    }
-                }
-            }
-
-            // Wait for next one-second tick.
+            // Wait for next tick
             let _ = interval.tick().await;
             let interval_start = Instant::now();
 
-            // Prepare batch of transactions for this interval.
-            let mut batch_entries = Vec::with_capacity(self.max_rate as usize);
+            // Verify the nonce for gaps
+            let on_chain_nonce = self.get_latest_nonce(address).await?;
+            let nonce_span = nonce.saturating_sub(on_chain_nonce);
+            if nonce_span > self.max_rate {
+                debug!("Current nonce={nonce}, on-chain nonce={on_chain_nonce}. Sending 10 txs");
+                let batch_entries = self.build_batch_entries(10, on_chain_nonce).await?;
+                if let Some(results) = self.send_raw_batch(&batch_entries).await? {
+                    if results.len() != batch_entries.len() {
+                        return Err(eyre::eyre!(
+                            "Batch response count {} does not match request count {}",
+                            results.len(),
+                            batch_entries.len()
+                        ));
+                    }
 
-            for _ in 0..self.max_rate {
-                // Check exit conditions before creating each transaction.
-                if (self.max_num_txs > 0 && txs_sent_total >= self.max_num_txs)
-                    || (self.max_time > 0 && start_time.elapsed().as_secs() >= self.max_time)
-                {
-                    break;
-                }
-
-                // Create one transaction and sign it.
-                let signed_tx = if let Some(ref templates) = self.templates {
-                    // Use template-based transaction generation
-                    let template = {
-                        let mut selector = templates.lock().unwrap();
-                        selector.next_template().clone()
-                    };
-                    make_signed_tx_from_template(&self.signer, &template, nonce).await?
-                } else if let Some(ref payload) = self.contract_payload {
-                    // Contract call transaction
-                    make_signed_contract_call_tx(
-                        &self.signer,
-                        nonce,
-                        payload.address,
-                        &payload.function_sig,
-                        payload.args.as_slice(),
-                    )
-                    .await?
-                } else if self.blobs {
-                    // Blob transaction
-                    make_signed_eip4844_tx(&self.signer, nonce).await?
+                    // Report individual results
+                    for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
+                        let mapped_result = result.map(|_| tx_bytes_len);
+                        result_sender.send(mapped_result).await?;
+                    }
                 } else {
-                    // Regular transfer
-                    make_signed_eip1559_tx(&self.signer, nonce).await?
-                };
-                let tx_bytes = signed_tx.encoded_2718();
-                let tx_bytes_len = tx_bytes.len() as u64;
-
-                // Add to batch.
-                let payload = hex::encode(tx_bytes);
-                batch_entries.push((vec![json!(payload)], tx_bytes_len));
-
-                nonce += 1;
-                txs_sent_total += 1;
+                    debug!("Batch eth_sendRawTransaction timed out; skipping this tick");
+                    report_sender.send(interval_start).await?;
+                    continue;
+                }
             }
+
+            // Get current pool size and calculate dynamic send rate
+            let current_pool_size = self.get_mempool_count().await.unwrap_or(0);
+            let space_available = TARGET_POOL_SIZE.saturating_sub(current_pool_size);
+            let txs_to_send = if space_available < txs_per_batch {
+                space_available
+            } else {
+                txs_per_batch
+            };
+
+            // Continue if there is no space available
+            if txs_to_send == 0 {
+                debug!("Mempool already full. Do not send more transactions.");
+                let _ = report_sender.send(interval_start).await;
+                continue;
+            }
+
+            // Limit the max number of transactions
+            let tx_count = if self.max_num_txs > 0 {
+                txs_to_send.min(self.max_num_txs.saturating_sub(txs_sent_total))
+            } else {
+                txs_to_send
+            };
+
+            // Prepare batch of transactions for this interval.
+            let batch_entries = self.build_batch_entries(tx_count, nonce).await?;
+            let batch_size = batch_entries.len() as u64;
+
+            debug!(
+                "Pool: {current_pool_size}/{TARGET_POOL_SIZE}, sending {batch_size} txs from nonce {nonce} (rate: {})",
+                self.max_rate
+            );
 
             // Send all transactions in a single batch RPC call.
             if !batch_entries.is_empty() {
-                let params: Vec<_> = batch_entries
-                    .iter()
-                    .map(|(params, _)| params.clone())
-                    .collect();
-
-                let results = self
-                    .client
-                    .rpc_batch_request("eth_sendRawTransaction", params)
-                    .await?;
-
-                if results.len() != batch_entries.len() {
-                    return Err(eyre::eyre!(
-                        "Batch response count {} does not match request count {}",
-                        results.len(),
-                        batch_entries.len()
-                    ));
-                }
-
-                // Report individual results.
-                for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
-                    let mapped_result = result.map(|_| tx_bytes_len);
-                    result_sender.send(mapped_result).await?;
-                }
-
-                // Spawn background task to verify nonce (non-blocking)
-                // This allows the spammer to continue immediately without waiting for the RPC call
-                let nonce_sender = nonce_update_sender.clone();
-                let client = self.client.clone();
-                let check_address = address;
-                let expected_nonce = nonce;
-                tokio::spawn(async move {
-                    if let Ok(actual_nonce) = client
-                        .rpc_request::<String>(
-                            "eth_getTransactionCount",
-                            vec![json!(check_address), json!("pending")],
-                        )
-                        .await
-                    {
-                        if let Some(hex_str) = actual_nonce.strip_prefix("0x") {
-                            if let Ok(nonce_value) = u64::from_str_radix(hex_str, 16) {
-                                let _ = nonce_sender.try_send((expected_nonce, nonce_value));
-                            }
-                        }
+                if let Some(results) = self.send_raw_batch(&batch_entries).await? {
+                    if results.len() != batch_entries.len() {
+                        return Err(eyre::eyre!(
+                            "Batch response count {} does not match request count {}",
+                            results.len(),
+                            batch_entries.len()
+                        ));
                     }
-                });
+
+                    // Report individual results.
+                    for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
+                        let mapped_result = result.map(|_| tx_bytes_len);
+                        result_sender.send(mapped_result).await?;
+                    }
+
+                    txs_sent_total += batch_size;
+                    nonce += batch_size;
+                } else {
+                    debug!("Batch eth_sendRawTransaction timed out; skipping this tick");
+                }
             }
 
             // Give time to the in-flight results to be received.
             sleep(Duration::from_millis(20)).await;
 
             // Signal tracker to report stats after this batch.
-            report_sender.try_send(interval_start)?;
+            let _ = report_sender.send(interval_start).await;
 
             // Check exit conditions after each tick.
             if (self.max_num_txs > 0 && txs_sent_total >= self.max_num_txs)
@@ -328,6 +321,75 @@ impl Spammer {
         }
         finish_sender.send(()).await?;
         Ok(())
+    }
+
+    async fn build_batch_entries(
+        &self,
+        tx_count: u64,
+        nonce: u64,
+    ) -> Result<Vec<(Vec<serde_json::Value>, u64)>> {
+        let mut batch_entries = Vec::with_capacity(tx_count as usize);
+        let mut next_nonce = nonce;
+
+        for _ in 0..tx_count {
+            let signed_tx = if let Some(ref templates) = self.templates {
+                // Use template-based transaction generation
+                let template = {
+                    let mut selector = templates.lock().unwrap();
+                    selector.next_template().clone()
+                };
+                make_signed_tx_from_template(&self.signer, &template, next_nonce).await?
+            } else if let Some(ref payload) = self.contract_payload {
+                make_signed_contract_call_tx(
+                    &self.signer,
+                    next_nonce,
+                    payload.address,
+                    &payload.function_sig,
+                    payload.args.as_slice(),
+                    self.chain_id,
+                )
+                .await?
+            } else if self.blobs {
+                make_signed_eip4844_tx(&self.signer, next_nonce, self.chain_id).await?
+            } else {
+                make_signed_eip1559_tx(&self.signer, next_nonce, self.chain_id).await?
+            };
+
+            let tx_bytes = signed_tx.encoded_2718();
+            let tx_bytes_len = tx_bytes.len() as u64;
+            let payload = hex::encode(tx_bytes);
+            batch_entries.push((vec![json!(payload)], tx_bytes_len));
+            next_nonce += 1;
+        }
+
+        Ok(batch_entries)
+    }
+
+    async fn send_raw_batch(
+        &self,
+        batch_entries: &[(Vec<serde_json::Value>, u64)],
+    ) -> Result<Option<Vec<Result<String>>>> {
+        let params: Vec<_> = batch_entries
+            .iter()
+            .map(|(params, _)| params.clone())
+            .collect();
+
+        match self
+            .client
+            .rpc_batch_request("eth_sendRawTransaction", params)
+            .await
+        {
+            Ok(responses) => Ok(Some(responses)),
+            Err(err) => {
+                if let Some(jsonrpsee_core::client::Error::RequestTimeout) =
+                    err.downcast_ref::<jsonrpsee_core::client::Error>()
+                {
+                    Ok(None)
+                } else {
+                    Err(err)
+                }
+            }
+        }
     }
 
     // Track and report statistics on sent transactions.
@@ -427,7 +489,7 @@ impl Stats {
 }
 
 impl fmt::Display for Stats {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let elapsed = self.start_time.elapsed().as_millis();
         let stats = format!(
             "[{}] elapsed {:.3}s: Sent {} txs ({} bytes)",
@@ -454,7 +516,7 @@ struct RpcClient {
 impl RpcClient {
     pub fn new(url: Url) -> Result<Self> {
         let client = HttpClientBuilder::default()
-            .request_timeout(Duration::from_secs(5))
+            .request_timeout(Duration::from_secs(1))
             .build(url)?;
         Ok(Self { client })
     }

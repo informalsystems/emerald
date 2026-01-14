@@ -3,17 +3,21 @@ volumes:
   reth1:
   reth2:
   reth3:
+  reth4:
+  reth5:
+  reth6:
 
 services:
   reth0:
     network_mode: host
-    image: ghcr.io/paradigmxyz/reth:v1.7.0
+    image: ghcr.io/informalsystems/custom-reth:latest
     container_name: reth0
     volumes:
       - reth0:/data
       - ./assets:/root/assets/
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      RUST_LOG: info
     command:
       - "node"
       - "-vvvvv"
@@ -21,17 +25,21 @@ services:
       - "--datadir=/data/reth/execution-data"
       - "--chain=/root/assets/genesis.json"
       - "--http"
-      - "--http.port=8545"
+      - "--http.port=8645"
       - "--http.addr=0.0.0.0"
       - "--http.corsdomain=*"
       - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+      - "--ws"
+      - "--ws.port=8646"
+      - "--ws.addr=0.0.0.0"
       - "--authrpc.addr=0.0.0.0"
       - "--authrpc.port=8551"
       - "--authrpc.jwtsecret=/root/assets/jwtsecret"
       - "--metrics=127.0.0.1:9000"
-      - "--discovery.port=30303"
-      - "--port=30303"
+      - "--discovery.port=31303"
+      - "--port=31303"
       - "--nat=extip:127.0.0.1"
+      - "--engine.persistence-threshold=0"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -42,13 +50,14 @@ services:
       # - "--txpool.queued-max-count=50000" # default=10000
   reth1:
     network_mode: host
-    image: ghcr.io/paradigmxyz/reth:v1.7.0
+    image: ghcr.io/informalsystems/custom-reth:latest
     container_name: reth1
     volumes:
       - reth1:/data
       - ./assets:/root/assets/
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      RUST_LOG: info
     command:
       - "node"
       - "-vvvvv"
@@ -56,17 +65,29 @@ services:
       - "--datadir=/data/reth/execution-data"
       - "--chain=/root/assets/genesis.json"
       - "--http"
-      - "--http.port=18545"
+      - "--http.port=8745"
       - "--http.addr=0.0.0.0"
       - "--http.corsdomain=*"
       - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+      - "--ws"
+      - "--ws.port=8746"
+      - "--ws.addr=0.0.0.0"
       - "--authrpc.addr=0.0.0.0"
-      - "--authrpc.port=18551"
+      - "--authrpc.port=9551"
       - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+      # If node pruning is to be enabled - uncomment this
+      # - "--prune.receipts.distance=10064"
+      # - "--prune.account-history.distance=10064"
+      # - "--prune.storage-history.distance=10064"
+      # - "--prune.transaction-lookup.distance=10064"
+      # - "--prune.sender-recovery.distance=10064"
+      # - "--prune.block-interval=5"
+      # - "--prune.bodies.distance=10064"
       - "--metrics=127.0.0.1:9001"
-      - "--discovery.port=40303"
-      - "--port=40303"
+      - "--discovery.port=32303"
+      - "--port=32303"
       - "--nat=extip:127.0.0.1"
+      - "--engine.persistence-threshold=0"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -77,13 +98,14 @@ services:
       # - "--txpool.queued-max-count=50000" # default=10000
   reth2:
     network_mode: host
-    image: ghcr.io/paradigmxyz/reth:v1.7.0
+    image: ghcr.io/informalsystems/custom-reth:latest
     container_name: reth2
     volumes:
       - reth2:/data
       - ./assets:/root/assets/
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      RUST_LOG: info
     command:
       - "node"
       - "-vvvvv"
@@ -91,17 +113,21 @@ services:
       - "--datadir=/data/reth/execution-data"
       - "--chain=/root/assets/genesis.json"
       - "--http"
-      - "--http.port=28545"
+      - "--http.port=8845"
       - "--http.addr=0.0.0.0"
       - "--http.corsdomain=*"
       - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+      - "--ws"
+      - "--ws.port=8846"
+      - "--ws.addr=0.0.0.0"
       - "--authrpc.addr=0.0.0.0"
-      - "--authrpc.port=28551"
+      - "--authrpc.port=10551"
       - "--authrpc.jwtsecret=/root/assets/jwtsecret"
       - "--metrics=127.0.0.1:9002"
-      - "--discovery.port=50303"
-      - "--port=50303"
+      - "--discovery.port=33303"
+      - "--port=33303"
       - "--nat=extip:127.0.0.1"
+      - "--engine.persistence-threshold=0"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -112,13 +138,14 @@ services:
       # - "--txpool.queued-max-count=50000" # default=10000
   reth3:
     network_mode: host
-    image: ghcr.io/paradigmxyz/reth:v1.7.0
+    image: ghcr.io/informalsystems/custom-reth:latest
     container_name: reth3
     volumes:
       - reth3:/data
       - ./assets:/root/assets/
     environment:
       PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      RUST_LOG: info
     command:
       - "node"
       - "-vvvvv"
@@ -126,17 +153,141 @@ services:
       - "--datadir=/data/reth/execution-data"
       - "--chain=/root/assets/genesis.json"
       - "--http"
-      - "--http.port=38545"
+      - "--http.port=8945"
       - "--http.addr=0.0.0.0"
       - "--http.corsdomain=*"
       - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+      - "--ws"
+      - "--ws.port=8946"
+      - "--ws.addr=0.0.0.0"
       - "--authrpc.addr=0.0.0.0"
-      - "--authrpc.port=38551"
+      - "--authrpc.port=11551"
       - "--authrpc.jwtsecret=/root/assets/jwtsecret"
       - "--metrics=127.0.0.1:9003"
-      - "--discovery.port=60303"
-      - "--port=60303"
+      - "--discovery.port=34303"
+      - "--port=34303"
       - "--nat=extip:127.0.0.1"
+      - "--engine.persistence-threshold=0"
+      # - "--builder.gaslimit=3600000000" # default * 100
+      # - "--builder.interval=10ms"
+      # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
+      # - "--builder.max-tasks=10" # default=3
+      # - "--txpool.gas-limit=300000000" # default * 10
+      # - "--blobpool.pricebump=1"
+      # - "--txpool.pending-max-count=50000" # default=10000
+      # - "--txpool.queued-max-count=50000" # default=10000
+  reth4:
+    network_mode: host
+    image: ghcr.io/informalsystems/custom-reth:latest
+    container_name: reth4
+    volumes:
+      - reth4:/data
+      - ./assets:/root/assets/
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      RUST_LOG: info
+    command:
+      - "node"
+      - "-vvvvv"
+      - "-d"
+      - "--datadir=/data/reth/execution-data"
+      - "--chain=/root/assets/genesis.json"
+      - "--http"
+      - "--http.port=9045"
+      - "--http.addr=0.0.0.0"
+      - "--http.corsdomain=*"
+      - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+      - "--ws"
+      - "--ws.port=9046"
+      - "--ws.addr=0.0.0.0"
+      - "--authrpc.addr=0.0.0.0"
+      - "--authrpc.port=12551"
+      - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+      - "--metrics=127.0.0.1:9004"
+      - "--discovery.port=35303"
+      - "--port=35303"
+      - "--nat=extip:127.0.0.1"
+      - "--engine.persistence-threshold=0"
+      # - "--builder.gaslimit=3600000000" # default * 100
+      # - "--builder.interval=10ms"
+      # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
+      # - "--builder.max-tasks=10" # default=3
+      # - "--txpool.gas-limit=300000000" # default * 10
+      # - "--blobpool.pricebump=1"
+      # - "--txpool.pending-max-count=50000" # default=10000
+      # - "--txpool.queued-max-count=50000" # default=10000
+  reth5:
+    network_mode: host
+    image: ghcr.io/informalsystems/custom-reth:latest
+    container_name: reth5
+    volumes:
+      - reth5:/data
+      - ./assets:/root/assets/
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      RUST_LOG: info
+    command:
+      - "node"
+      - "-vvvvv"
+      - "-d"
+      - "--datadir=/data/reth/execution-data"
+      - "--chain=/root/assets/genesis.json"
+      - "--http"
+      - "--http.port=9145"
+      - "--http.addr=0.0.0.0"
+      - "--http.corsdomain=*"
+      - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+      - "--ws"
+      - "--ws.port=9146"
+      - "--ws.addr=0.0.0.0"
+      - "--authrpc.addr=0.0.0.0"
+      - "--authrpc.port=13551"
+      - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+      - "--metrics=127.0.0.1:9005"
+      - "--discovery.port=36303"
+      - "--port=36303"
+      - "--nat=extip:127.0.0.1"
+      - "--engine.persistence-threshold=0"
+      # - "--builder.gaslimit=3600000000" # default * 100
+      # - "--builder.interval=10ms"
+      # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
+      # - "--builder.max-tasks=10" # default=3
+      # - "--txpool.gas-limit=300000000" # default * 10
+      # - "--blobpool.pricebump=1"
+      # - "--txpool.pending-max-count=50000" # default=10000
+      # - "--txpool.queued-max-count=50000" # default=10000
+  reth6:
+    network_mode: host
+    image: ghcr.io/informalsystems/custom-reth:latest
+    container_name: reth6
+    volumes:
+      - reth6:/data
+      - ./assets:/root/assets/
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      RUST_LOG: info
+    command:
+      - "node"
+      - "-vvvvv"
+      - "-d"
+      - "--datadir=/data/reth/execution-data"
+      - "--chain=/root/assets/genesis.json"
+      - "--http"
+      - "--http.port=9245"
+      - "--http.addr=0.0.0.0"
+      - "--http.corsdomain=*"
+      - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+      - "--ws"
+      - "--ws.port=9246"
+      - "--ws.addr=0.0.0.0"
+      - "--authrpc.addr=0.0.0.0"
+      - "--authrpc.port=14551"
+      - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+      - "--metrics=127.0.0.1:9006"
+      - "--discovery.port=37303"
+      - "--port=37303"
+      - "--nat=extip:127.0.0.1"
+      - "--engine.persistence-threshold=0"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -157,6 +308,8 @@ services:
     user: "501"
     environment:
       GF_LOG_LEVEL: info
+      GF_SERVER_HTTP_PORT: 4000
+      GF_SERVER_HTTP_ADDR: 0.0.0.0
       GF_ANALYTICS_ENABLED: false
       GF_ANALYTICS_REPORTING_ENABLED: false
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: false
@@ -176,4 +329,4 @@ services:
       - reth0
     network_mode: host # frontend is at http://127.0.0.1:80
     environment:
-      ERIGON_URL: "http://127.0.0.1:8545"
+      ERIGON_URL: "http://127.0.0.1:8645"

@@ -3,7 +3,7 @@ use std::fs::{self, File};
 use chrono::Local;
 use clap::Parser;
 use color_eyre::eyre::Result;
-use malachitebft_eth_utils::{Cli, Commands};
+use emerald_utils::{Cli, Commands};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};

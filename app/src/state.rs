@@ -3,6 +3,7 @@
 
 use std::fmt;
 
+use alloy_genesis::ChainConfig;
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use caches::lru::AdaptiveCache;
@@ -13,18 +14,19 @@ use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Context, Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
 use malachitebft_eth_engine::engine::Engine;
+use malachitebft_eth_engine::engine_rpc::Fork;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::secp256k1::K256Provider;
 use malachitebft_eth_types::{
-    Address, Block, BlockHash, Genesis, Height, MalakethContext, ProposalData, ProposalFin,
-    ProposalInit, ProposalPart, RetryConfig, ValidatorSet, Value, ValueId,
+    Address, Block, BlockHash, BlockTimestamp, EmeraldContext, Genesis, Height, ProposalData,
+    ProposalFin, ProposalInit, ProposalPart, RetryConfig, ValidatorSet, Value, ValueId,
 };
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sha3::Digest;
 use ssz::Decode;
-use tokio::time::Instant;
+use tokio::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
 use crate::metrics::Metrics;
@@ -75,7 +77,7 @@ const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB
 /// Contains information about current height, round, proposals and blocks
 pub struct State {
     #[allow(dead_code)]
-    ctx: MalakethContext,
+    ctx: EmeraldContext,
     signing_provider: K256Provider,
     address: Address,
     pub store: Store,
@@ -90,7 +92,7 @@ pub struct State {
 
     pub latest_block: Option<ExecutionBlock>,
 
-    validator_set: Option<ValidatorSet>,
+    validator_set: Option<(Height, ValidatorSet)>,
 
     // Cache for tracking recently validated payloads to avoid duplicate validation
     validated_payload_cache: ValidatedPayloadCache,
@@ -100,6 +102,14 @@ pub struct State {
     pub chain_bytes: u64,
     pub start_time: Instant,
     pub metrics: Metrics,
+
+    pub max_retain_blocks: u64,
+    pub prune_at_block_interval: u64,
+    pub min_block_time: Duration,
+
+    pub last_block_time: Instant,
+
+    pub eth_chain_config: ChainConfig,
 }
 
 /// Represents errors that can occur during the verification of a proposal's signature.
@@ -113,6 +123,8 @@ pub enum SignatureVerificationError {
     ProposerNotFound,
     /// Indicates that the signature in the `Fin` part is invalid.
     InvalidSignature,
+    /// Validator set not found for the given height
+    ValidatorSetNotFound { _height: Height },
 }
 
 /// Represents errors that can occur during proposal validation.
@@ -122,16 +134,21 @@ pub enum ProposalValidationError {
     WrongProposer { actual: Address, expected: Address },
     /// Signature verification errors
     Signature(SignatureVerificationError),
+    /// Validator set not found for the given height
+    ValidatorSetNotFound { height: Height },
 }
 
 impl fmt::Display for ProposalValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ProposalValidationError::WrongProposer { actual, expected } => {
+            Self::WrongProposer { actual, expected } => {
                 write!(f, "Wrong proposer: got {actual}, expected {expected}")
             }
-            ProposalValidationError::Signature(err) => {
+            Self::Signature(err) => {
                 write!(f, "Signature verification failed: {err:?}")
+            }
+            Self::ValidatorSetNotFound { height } => {
+                write!(f, "Validator set not found for height {height}")
             }
         }
     }
@@ -163,20 +180,25 @@ fn build_execution_block_from_bytes(raw_block_data: Bytes) -> ExecutionBlock {
 
 impl State {
     /// Creates a new State instance with the given validator address and starting height
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         _genesis: Genesis, // all genesis data is in EVM via genesis.json
-        ctx: MalakethContext,
+        ctx: EmeraldContext,
         signing_provider: K256Provider,
         address: Address,
         height: Height,
         store: Store,
         state_metrics: StateMetrics,
+        max_retain_blocks: u64,
+        prune_at_interval: u64,
+        min_block_time: Duration,
+        eth_chain_config: ChainConfig,
     ) -> Self {
         // Calculate start_time by subtracting elapsed_seconds from now.
         // It represents the start time of measuring metrics, not the actual node start time.
         // This allows us to continue accumulating time correctly after a restart
         let start_time =
-            Instant::now() - std::time::Duration::from_secs(state_metrics.elapsed_seconds);
+            Instant::now() - core::time::Duration::from_secs(state_metrics.elapsed_seconds);
 
         Self {
             ctx,
@@ -199,7 +221,30 @@ impl State {
             chain_bytes: state_metrics.chain_bytes,
             start_time,
             metrics: state_metrics.metrics,
+            max_retain_blocks,
+            prune_at_block_interval: prune_at_interval,
+            min_block_time,
+            last_block_time: Instant::now(),
+            eth_chain_config,
         }
+    }
+
+    pub fn get_fork(&self, block_timestamp: BlockTimestamp) -> Fork {
+        let is_osaka = self
+            .eth_chain_config
+            .osaka_time
+            .is_some_and(|time| time <= block_timestamp);
+        if is_osaka {
+            return Fork::Osaka;
+        }
+        let is_prague = self
+            .eth_chain_config
+            .prague_time
+            .is_some_and(|time| time <= block_timestamp);
+        if is_prague {
+            return Fork::Prague;
+        }
+        Fork::Unsupported
     }
 
     pub fn validated_cache_mut(&mut self) -> &mut ValidatedPayloadCache {
@@ -248,7 +293,9 @@ impl State {
         let round = parts.round;
 
         // Get the expected proposer for this height and round
-        let validator_set = self.get_validator_set(); // TODO: Should pass height as a parameter
+        let validator_set = self
+            .get_validator_set(height)
+            .ok_or(ProposalValidationError::ValidatorSetNotFound { height })?;
         let expected_proposer = self
             .ctx
             .select_proposer(validator_set, height, round)
@@ -298,7 +345,11 @@ impl State {
         };
 
         // Retrieve the proposer from the validator set for the given height
-        let validator_set = self.get_validator_set(); // TODO: Should pass height as a parameter
+        let validator_set = self.get_validator_set(parts.height).ok_or(
+            SignatureVerificationError::ValidatorSetNotFound {
+                _height: parts.height,
+            },
+        )?;
         let proposer = validator_set
             .get_by_address(&parts.proposer)
             .ok_or(SignatureVerificationError::ProposerNotFound)?;
@@ -375,7 +426,7 @@ impl State {
         part: StreamMessage<ProposalPart>,
         engine: &Engine,
         retry_config: &RetryConfig,
-    ) -> eyre::Result<Option<ProposedValue<MalakethContext>>> {
+    ) -> eyre::Result<Option<ProposedValue<EmeraldContext>>> {
         let sequence = part.sequence;
 
         // Check if we have a full proposal
@@ -441,9 +492,9 @@ impl State {
                     return Ok(None);
                 }
                 info!(%value.height, %value.round, %value.proposer, "Storing validated proposal as undecided");
-                self.store.store_undecided_proposal(value.clone()).await?;
                 self.store_undecided_block_data(value.height, value.round, value.value.id(), data)
                     .await?;
+                self.store.store_undecided_proposal(value.clone()).await?;
 
                 Ok(Some(value))
             }
@@ -491,7 +542,7 @@ impl State {
     /// and moving to the next height
     pub async fn commit(
         &mut self,
-        certificate: CommitCertificate<MalakethContext>,
+        certificate: CommitCertificate<EmeraldContext>,
         block_header_bytes: Bytes,
     ) -> eyre::Result<()> {
         info!(
@@ -542,13 +593,41 @@ impl State {
                 .await?;
         }
 
-        // Prune the store, keep the last 5 heights
-        let retain_height = Height::new(certificate.height.as_u64().saturating_sub(5));
-        self.store.prune(retain_height).await?;
+        let prune_certificates = self.max_retain_blocks != u64::MAX
+            && certificate.height.as_u64() % self.prune_at_block_interval == 0;
+
+        // This will compute the retain heigth for the certificates which is based on the
+        // retain height set in the config.
+        // The intermediary block data stored for Consensus is pruned at every height after
+        // VALUE_RETAIN_HEIGHT (defined in store.rs)
+        let retain_height = Height::new(
+            certificate
+                .height
+                .as_u64()
+                .saturating_sub(self.max_retain_blocks),
+        );
+
+        // If storege becomes a bottleneck, consider optimizing this by pruning every INTERVAL heights
+        self.store
+            .prune(retain_height, certificate.height, prune_certificates)
+            .await?;
 
         // Move to next height
         self.current_height = self.current_height.increment();
         self.current_round = Round::new(0);
+
+        // Sleep to reduce the block speed, if set via config.
+        debug!(timeout_commit = ?self.min_block_time);
+        let elapsed_height_time = self.last_block_time.elapsed();
+
+        info!(
+            "👉 stats at {:?}: block_time {:?}",
+            certificate.height, elapsed_height_time
+        );
+
+        if elapsed_height_time < self.min_block_time {
+            tokio::time::sleep(self.min_block_time - elapsed_height_time).await;
+        }
 
         Ok(())
     }
@@ -562,8 +641,9 @@ impl State {
         &self,
         height: Height,
         round: Round,
-    ) -> eyre::Result<Option<LocallyProposedValue<MalakethContext>>> {
-        let proposals = self.store.get_undecided_proposals(height, round).await?;
+    ) -> eyre::Result<Option<LocallyProposedValue<EmeraldContext>>> {
+        let proposals: Vec<ProposedValue<EmeraldContext>> =
+            self.store.get_undecided_proposals(height, round).await?;
 
         assert!(
             proposals.len() <= 1,
@@ -576,6 +656,36 @@ impl State {
             .map(Some)
             .map(Ok)
             .unwrap_or(Ok(None))
+    }
+
+    /// Retrieves a previously built proposal value for the given height and round.
+    /// Called by the consensus engine to re-use a previously built value.
+    /// There should be at most one proposal for a given height and round when the proposer is not byzantine.
+    /// We assume this implementation is not byzantine and we are the proposer for the given height and round.
+    /// Therefore there must be a single proposal for the rounds where we are the proposer, with the proposer address matching our own.
+    pub async fn get_previous_proposal_by_value_and_proposer(
+        &self,
+        height: Height,
+        round: Round,
+        value_id: ValueId,
+        address: Address,
+    ) -> eyre::Result<Option<LocallyProposedValue<EmeraldContext>>> {
+        let proposal = self
+            .store
+            .get_undecided_proposal(height, round, value_id)
+            .await?;
+        match proposal {
+            Some(prop) => {
+                if prop.proposer.eq(&address) {
+                    let lp: LocallyProposedValue<EmeraldContext> =
+                        LocallyProposedValue::new(prop.height, prop.round, prop.value);
+                    Ok(Some(lp))
+                } else {
+                    Ok(None)
+                }
+            }
+            None => Ok(None),
+        }
     }
 
     // /// Make up a new value to propose
@@ -601,14 +711,14 @@ impl State {
         height: Height,
         round: Round,
         data: Bytes,
-    ) -> eyre::Result<LocallyProposedValue<MalakethContext>> {
+    ) -> eyre::Result<LocallyProposedValue<EmeraldContext>> {
         assert_eq!(height, self.current_height);
         assert_eq!(round, self.current_round);
 
         // We create a new value.
-        let value = Value::new(data);
+        let value = Value::new(data.clone());
 
-        let proposal = ProposedValue {
+        let proposal: ProposedValue<EmeraldContext> = ProposedValue {
             height,
             round,
             valid_round: Round::Nil,
@@ -616,6 +726,11 @@ impl State {
             value,
             validity: Validity::Valid, // Our proposals are de facto valid
         };
+        // Store the block data at the proposal's height/round,
+        // which will be passed to the execution client (EL) on commit.
+        // WARN: THE ORDER OF THE FOLLOWING TWO OPERATIONS IS IMPORTANT.
+        self.store_undecided_block_data(height, round, proposal.value.id(), data.clone())
+            .await?;
 
         // Insert the new proposal into the undecided proposals.
         self.store
@@ -642,7 +757,7 @@ impl State {
     /// Updates internal sequence number and current proposal.
     pub fn stream_proposal(
         &mut self,
-        value: LocallyProposedValue<MalakethContext>,
+        value: LocallyProposedValue<EmeraldContext>,
         data: Bytes,
         pol_round: Round,
     ) -> impl Iterator<Item = StreamMessage<ProposalPart>> {
@@ -665,7 +780,7 @@ impl State {
 
     fn make_proposal_parts(
         &self,
-        value: LocallyProposedValue<MalakethContext>,
+        value: LocallyProposedValue<EmeraldContext>,
         data: Bytes,
         pol_round: Round,
     ) -> Vec<ProposalPart> {
@@ -703,23 +818,24 @@ impl State {
         parts
     }
 
-    /// Returns the set of validators.
-    pub fn get_validator_set(&self) -> &ValidatorSet {
+    /// Returns the set of validators for the given consensus height.
+    /// Returns None if the height doesn't match the stored validator set height.
+    pub fn get_validator_set(&self, height: Height) -> Option<&ValidatorSet> {
         self.validator_set
             .as_ref()
-            .expect("Validator set must be initialized before use")
+            .and_then(|(h, vs)| if *h == height { Some(vs) } else { None })
     }
 
-    /// Sets the validator set.
-    pub fn set_validator_set(&mut self, validator_set: ValidatorSet) {
-        self.validator_set = Some(validator_set);
+    /// Sets the validator set for the given consensus height.
+    pub fn set_validator_set(&mut self, height: Height, validator_set: ValidatorSet) {
+        self.validator_set = Some((height, validator_set));
     }
 }
 
 /// Re-assemble a [`ProposedValue`] from its [`ProposalParts`].
 ///
 /// This is done by multiplying all the factors in the parts.
-pub fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<MalakethContext>, Bytes) {
+pub fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<EmeraldContext>, Bytes) {
     // Get the init part to extract pol_round
     let init = parts
         .parts

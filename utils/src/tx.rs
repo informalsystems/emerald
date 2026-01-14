@@ -12,9 +12,9 @@ use crate::dex_templates::{
     Eip4844Template, TxTemplate,
 };
 
-pub(crate) fn make_eip4844_tx(nonce: u64) -> Transaction {
+pub(crate) fn make_eip4844_tx(nonce: u64, chain_id: u64) -> Transaction {
     Transaction::Eip4844(TxEip4844 {
-        chain_id: 1u64,
+        chain_id,
         nonce,
         max_fee_per_gas: 50_000_000_000,             // 50 gwei
         max_priority_fee_per_gas: 1_000_000_000_000, // 1000 gwei
@@ -37,14 +37,15 @@ async fn sign_transaction(signer: &PrivateKeySigner, tx: Transaction) -> Result<
 pub(crate) async fn make_signed_eip4844_tx(
     signer: &PrivateKeySigner,
     nonce: u64,
+    chain_id: u64,
 ) -> Result<TransactionSigned> {
-    let tx = make_eip4844_tx(nonce);
+    let tx = make_eip4844_tx(nonce, chain_id);
     sign_transaction(signer, tx).await
 }
 
-pub(crate) fn make_eip1559_tx(nonce: u64) -> Transaction {
+pub(crate) fn make_eip1559_tx(nonce: u64, chain_id: u64) -> Transaction {
     Transaction::Eip1559(TxEip1559 {
-        chain_id: 1u64,
+        chain_id,
         nonce,
         max_priority_fee_per_gas: 1_000_000_000, // 1 gwei
         max_fee_per_gas: 2_000_000_000,          // 2 gwei
@@ -59,16 +60,18 @@ pub(crate) fn make_eip1559_tx(nonce: u64) -> Transaction {
 pub(crate) async fn make_signed_eip1559_tx(
     signer: &PrivateKeySigner,
     nonce: u64,
+    chain_id: u64,
 ) -> Result<TransactionSigned> {
-    let tx = make_eip1559_tx(nonce);
+    let tx = make_eip1559_tx(nonce, chain_id);
     sign_transaction(signer, tx).await
 }
 
-pub(crate) fn make_contract_call_tx(
+pub(crate) async fn make_contract_call_tx(
     nonce: u64,
     contract_address: Address,
     function_sig: &str,
     args: &[String],
+    chain_id: u64,
 ) -> Result<Transaction> {
     let function = Function::parse(function_sig)?;
     if function.inputs.len() != args.len() {
@@ -92,7 +95,7 @@ pub(crate) fn make_contract_call_tx(
     let call_data = function.abi_encode_input(&arg_values)?;
 
     Ok(Transaction::Eip1559(TxEip1559 {
-        chain_id: 1u64,
+        chain_id,
         nonce,
         max_priority_fee_per_gas: 1_000_000_000, // 1 gwei
         max_fee_per_gas: 2_000_000_000,          // 2 gwei
@@ -110,8 +113,9 @@ pub(crate) async fn make_signed_contract_call_tx(
     contract_address: Address,
     function_sig: &str,
     args: &[String],
+    chain_id: u64,
 ) -> Result<TransactionSigned> {
-    let tx = make_contract_call_tx(nonce, contract_address, function_sig, args)?;
+    let tx = make_contract_call_tx(nonce, contract_address, function_sig, args, chain_id).await?;
     sign_transaction(signer, tx).await
 }
 
@@ -183,14 +187,14 @@ pub(crate) async fn make_signed_tx_from_template(
 #[cfg(test)]
 mod tests {
     use alloy_network::eip2718::Encodable2718;
-    use alloy_primitives::PrimitiveSignature as Signature;
+    use alloy_primitives::Signature;
     use alloy_rlp::Decodable;
 
     use super::*;
 
     #[tokio::test]
     async fn test_encode_decode_signed_eip4844_tx() {
-        let tx = make_eip4844_tx(0);
+        let tx = make_eip4844_tx(0, 1);
         let signature = Signature::test_signature();
         let signed_tx = TransactionSigned::new_unhashed(tx, signature);
         let tx_bytes = signed_tx.encoded_2718();
@@ -201,7 +205,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_encode_decode_signed_eip1559_tx() {
-        let tx = make_eip1559_tx(0);
+        let tx = make_eip1559_tx(0, 1);
         let signature = Signature::test_signature();
         let signed_tx = TransactionSigned::new_unhashed(tx, signature);
         let tx_bytes = signed_tx.encoded_2718();

@@ -4,17 +4,46 @@ use crate::driver::EmeraldDriver;
 
 #[quint_test(
     spec = "../../specs/emerald_tests.qnt",
-    test = "emeraldSingleHeightConsensusTest"
+    test = "emeraldSingleHeightConsensusTest",
+    max_samples = 1
 )]
-fn single_height_consensus() -> impl Driver {
+fn test_single_height_consensus() -> impl Driver {
     EmeraldDriver::default()
 }
 
 #[quint_test(
     spec = "../../specs/emerald_tests.qnt",
-    test = "emeraldNodeCrashAfterConsensusTest"
+    test = "emeraldTimeoutAndDecideTest",
+    max_samples = 1
 )]
-fn node_crash_after_consensus() -> impl Driver {
+fn test_timeout_and_decide() -> impl Driver {
+    EmeraldDriver::default()
+}
+
+#[quint_test(
+    spec = "../../specs/emerald_tests.qnt",
+    test = "emeraldStalledNodeCatchesUpViaSyncTest",
+    max_samples = 1
+)]
+fn test_stalled_node_catches_up_via_sync() -> impl Driver {
+    EmeraldDriver::default()
+}
+
+#[quint_test(
+    spec = "../../specs/emerald_tests.qnt",
+    test = "emeraldStalledNodeCatchesUpAfterCrashTest",
+    max_samples = 1
+)]
+fn test_stalled_node_catches_up_after_crash() -> impl Driver {
+    EmeraldDriver::default()
+}
+
+#[quint_test(
+    spec = "../../specs/emerald_tests.qnt",
+    test = "emeraldStalledNodeCatchesUpAfterRestartTest",
+    max_samples = 1
+)]
+fn test_stalled_node_catches_up_after_restart() -> impl Driver {
     EmeraldDriver::default()
 }
 

@@ -70,7 +70,7 @@ module emerald_tests {
         }
       )
 
-  run processSynedValue(node: Node, proposal: Proposal): bool =
+  run processSyncedValue(node: Node, proposal: Proposal): bool =
     node
       .with_cue(listen_process_synced_value, proposal)
       .perform(handle_process_synced_value)
@@ -203,8 +203,8 @@ module emerald_tests {
   // Unhappy path: stalled node catches up on consensus
   run emeraldStalledNodeCatchesUpViaSyncTest =
     node3Stalled
-      .then("node3".processSynedValue(proposal(1, 0, 0)))
-      .then("node3".processSynedValue(proposal(2, 0, 1)))
+      .then("node3".processSyncedValue(proposal(1, 0, 0)))
+      .then("node3".processSyncedValue(proposal(2, 0, 1)))
       .then("node3".decided(proposal(1, 0, 0)))
       .then("node3".startedRound(2, 0))
       .then("node3".decided(proposal(2, 0, 1)))
@@ -222,8 +222,8 @@ module emerald_tests {
       .then("node3".crash())
       .then("node3".consensusReady(1, 0))
       .then("node3".startedRound(1, 0))
-      .then("node3".processSynedValue(proposal(1, 0, 0)))
-      .then("node3".processSynedValue(proposal(2, 0, 1)))
+      .then("node3".processSyncedValue(proposal(1, 0, 0)))
+      .then("node3".processSyncedValue(proposal(2, 0, 1)))
       .then("node3".decided(proposal(1, 0, 0)))
       .then("node3".startedRound(2, 0))
       .then("node3".decided(proposal(2, 0, 1)))
@@ -238,12 +238,12 @@ module emerald_tests {
   // Unhappy path: stalled node catches up after a restart
   run emeraldStalledNodeCatchesUpAfterRestartTest =
     node3Stalled
-      .then("node3".processSynedValue(proposal(1, 0, 0)))
+      .then("node3".processSyncedValue(proposal(1, 0, 0)))
       .then("node3".decided(proposal(1, 0, 0)))
       .then("node3".restart())
       .then("node3".consensusReady(2, 0))
       .then("node3".startedRound(2, 0))
-      .then("node3".processSynedValue(proposal(2, 0, 1)))
+      .then("node3".processSyncedValue(proposal(2, 0, 1)))
       .then("node3".decided(proposal(2, 0, 1)))
       .expect(NODES.toSet().forall(node =>
         val st = s.system.get(node)

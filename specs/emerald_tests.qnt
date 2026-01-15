@@ -9,9 +9,11 @@
 // state machine.
 //
 // Note that tests are prefixed with "emerald" in order to isolate them from
-// tests in other imported Quint modules. Run Emerald only test with:
+// tests in other imported Quint modules. Run Emerald-only tests with:
 //
+// ```
 // quint test emerald_tests.qnt --match "emerald"
+// ```
 
 module emerald_tests {
   import basicSpells.* from "spells/basicSpells"
@@ -116,7 +118,7 @@ module emerald_tests {
       proposer: proposer_for(height, round)
     }
 
-  // All nodes start from from genesis
+  // All nodes start from genesis
   run genesisStart =
     init
       .then("node1".consensusReady(1, 0))

@@ -1,26 +1,43 @@
 // -*- mode: Bluespec; -*-
 
-// This spec refines the abstract Emerald spec and introduces transition
-// predicates in order to guide MBT exploration into interesting/realistic
-// scenarios.
+// =============================================================================
+// Emerald Model-Based Tests Specification
+// =============================================================================
+// 
+// This is a refinement of the Emerald specification for model-based testing
+// (MBT) purposes.
+//
+// This spec guides MBT exploration into realistic scenarios by limiting the
+// amount of failures per run. Without such limitations, traces can get stuck on
+// crashes or restarts, preventing the exploration from covering more diverse
+// behavioral cases.
+//
+// Note that this spec inherits `init` and `step` from the more general Emerald
+// spec. To use the filtered step transitions, run it with `--step
+// step_no_failures` or `--step step_with_failures`.
+//
+// ```
+// quint run emerald_mbt.qnt --step step_no_failures --invariant="agreement"
+// ```
 
 module emerald_mbt {
   import basicSpells.* from "spells/basicSpells"
-  import emerald(NODES = List("node1", "node2", "node3")) as em from "emerald"
+  import emerald(NODES = List("node1", "node2", "node3")).* from "emerald"
 
-  // No failures
-  pure def no_failures_filter(ctx: em::LocalContext, t: em::Transition): bool =
-    match em::get_action_taken(t) {
+  // A transition filter that rejects all failure actions
+  pure def no_failures_filter(ctx: LocalContext, t: Transition): bool =
+    match get_action_taken(t) {
       | Failure(args) => false
       | _             => true
     }
 
-  // One failure per (node, height) pair
-  pure def one_failure_filter(ctx: em::LocalContext, t: em::Transition): bool = {
+  // A transition filter that allows at most one failure per (node, height)
+  // pair. Note that it rejects failures at height == 0 (uninitialized nodes).
+  pure def one_failure_per_height(ctx: LocalContext, t: Transition): bool = {
     val s = t.post_state
     val ext = ctx.extensions
 
-    match em::get_action_taken(t) {
+    match get_action_taken(t) {
       | Failure(args) => {
           val last_failure_in_height =
             ext.failures
@@ -38,8 +55,19 @@ module emerald_mbt {
     }
   }
 
-  action init = em::init
-  action step = em::step_with_filter(one_failure_filter)
-  action step_no_failures = em::step_with_filter(no_failures_filter)
-  action step_with_failures = em::step_with_filter(one_failure_filter)
+  action step_no_failures = step_with_filter(no_failures_filter)
+  action step_with_failures = step_with_filter(one_failure_per_height)
 }
+
+
+
+
+
+
+
+
+
+
+
+
+

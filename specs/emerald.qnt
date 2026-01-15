@@ -9,8 +9,8 @@
 // across multiple distributed nodes.
 //
 // We model Malachite consensus inputs and how Emerald reacts to them. The
-// network, storage, and blockchain systems are considered a implementation
-// details and it's not modeled here.
+// network, storage, and blockchain systems are considered implementation
+// details and are not modeled here.
 //
 // For model-based testing (MBT), actions and relevant data are tracked as part
 // of global state so they can be made available to Quint Connect for testing.
@@ -34,7 +34,7 @@ module emerald {
   // A consensus height
   type Height = int
 
-  // A consensus round withing a given height
+  // A consensus round within a given height
   type Round = int
 
   // A block's payload
@@ -66,7 +66,7 @@ module emerald {
   type Node = str
 
   // Note: this specification does not model message exchanges between nodes as
-  // those are Malachaite's responsibility.
+  // those are Malachite's responsibility.
   type Message = ()
 
   type Event =
@@ -101,14 +101,14 @@ module emerald {
   // Different forms of node failure the service can experience.
   //
   // Note that NodeRestart and ProcessRestart are the same failure wrt. the
-  // model but, MBT distinguishes them by restarting the process or the node
+  // model, but MBT distinguishes them by restarting the process or the node
   // when testing.
   type FailureMode =
-    // The whole node (all processes) has crash and lost its data.
+    // The whole node (all processes) has crashed and lost its data
     | NodeCrash
-    // The whole node (all processes) has restarted without data loss.
+    // The whole node (all processes) has restarted without data loss
     | NodeRestart
-    // The Emerald process has restarted without data loss.
+    // The Emerald process has restarted without data loss
     | ProcessRestart
     // Consensus has timed out.
     | ConsensusTimeout
@@ -311,9 +311,10 @@ module emerald {
 
   // ===== ReceivedProposal: Receive a proposal =====
   //
-  // Assumption: Malachite will call ReceivedProposal on the Emerald node
-  // informing of a new proposal being received for a height >= current_height.
-  // In response, Emerald will store the new proposal in its local state.
+  // Assumption: Malachite will call ReceivedProposal on the Emerald node,
+  // informing it of a new proposal being received for a height >=
+  // current_height. In response, Emerald will store the new proposal in its
+  // local state.
 
   pure def listen_received_proposal(ctx: LocalContext): Set[Proposal] = {
     val s = ctx.state
@@ -351,8 +352,8 @@ module emerald {
   // ===== Decided: Commit decided value =====
   //
   // Assumption: Eventually the proposer decides on the proposal. Malachite
-  // calls Decided on an Emerald node to inform of a decision. In response,
-  // Emerald tracks decision and moves to the next height.
+  // calls Decided on an Emerald node to inform it of a decision. In response,
+  // Emerald tracks the decision and moves to the next height.
 
   pure def listen_decided(ctx: LocalContext): Set[Proposal] = {
     val s = ctx.state
@@ -511,7 +512,7 @@ module emerald {
   // ===== NodeCrash: A node crashes and comes back without any state =====
   //
   // Assumption: A whole node can crash at any point and lose all its data. When
-  // restarted, it catches up with others ReceivedProposal or
+  // restarted, it catches up with others via ReceivedProposal or
   // ProcessSyncedValue.
 
   pure def node_crash(ctx: LocalContext): Set[Transition] = {
@@ -534,7 +535,7 @@ module emerald {
   //
   // Assumption: A node can restart without data loss. When restarted, it comes
   // back at height and round zero, then ConsensusReady and StartedRound will
-  // move them back to they height they were before restarting.
+  // move it back to the height it was before restarting.
 
   pure def node_restart(ctx: LocalContext): Set[Transition] = {
     val s = ctx.state
@@ -557,12 +558,11 @@ module emerald {
     })
   }
 
-  // ===== ProcessRestart: A process restart restarts but preserves its state =====
-  // 
+  // ===== ProcessRestart: The Emerald process restarts but preserves its state =====
+  //
   // Assumption: The Emerald process can restart without data loss. When
   // restarted, it comes back at height and round zero, then ConsensusReady and
-  // StartedRound will move them back to they height they were before
-  // restarting.
+  // StartedRound will move it back to the height it was before restarting.
 
   pure def process_restart(ctx: LocalContext): Set[Transition] = {
     val s = ctx.state

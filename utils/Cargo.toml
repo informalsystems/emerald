@@ -48,7 +48,7 @@ alloy-json-abi         = { workspace = true }
 alloy-dyn-abi          = { workspace = true }
 
 jsonrpsee-core        = { version = "0.26.0" }
-jsonrpsee-http-client = { version = "0.25.0" }
+jsonrpsee-http-client = { version = "0.26.0" }
 
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 url             = { workspace = true }

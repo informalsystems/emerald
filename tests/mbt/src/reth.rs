@@ -1,13 +1,8 @@
 use std::process::Command;
-use std::time::Duration;
 
 use anyhow::{bail, Result};
 
 use crate::NODES;
-
-const MAX_STARTUP_ATTEMPTS: u32 = 300;
-const RPC_TIMEOUT: Duration = Duration::from_secs(1);
-const STARTUP_CHECK_INTERVAL: Duration = Duration::from_millis(100);
 
 pub fn recreate_all() -> Result<()> {
     let mut nodes = String::new();
@@ -20,11 +15,11 @@ pub fn recreate_all() -> Result<()> {
 }
 
 pub fn recreate(node_idx: usize) -> Result<()> {
-    run_reth_make_cmd(&format!("reth{}", node_idx), "testnet-reth-recreate")
+    run_reth_make_cmd(&format!("reth{node_idx}"), "testnet-reth-recreate")
 }
 
 pub fn restart(node_idx: usize) -> Result<()> {
-    run_reth_make_cmd(&format!("reth{}", node_idx), "testnet-reth-restart")
+    run_reth_make_cmd(&format!("reth{node_idx}"), "testnet-reth-restart")
 }
 
 fn run_reth_make_cmd(nodes: &str, cmd: &str) -> Result<()> {

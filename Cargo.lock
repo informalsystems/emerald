@@ -2306,30 +2306,21 @@ dependencies = [
 
 [[package]]
 name = "emerald-mbt"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "bimap",
- "bytes",
  "emerald",
- "hex",
  "informalsystems-malachitebft-app-channel",
  "informalsystems-malachitebft-core-consensus",
- "itf",
- "k256",
+ "itf 0.2.4",
  "malachitebft-eth-cli",
  "malachitebft-eth-engine",
  "malachitebft-eth-types",
  "quint-connect",
- "rand 0.8.5",
  "serde",
- "serde_json",
  "tempfile",
- "test-log",
  "tokio",
- "toml",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -3843,6 +3834,19 @@ dependencies = [
 
 [[package]]
 name = "itf"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc1bbb9bbb46408c303da511b75b446e9c5ef3d74bf0f7028cfeb0f811a2c24d"
+dependencies = [
+ "num-bigint",
+ "num-traits",
+ "serde",
+ "serde_json",
+ "serde_with",
+]
+
+[[package]]
+name = "itf"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d620b7b3d17650581da9208d1240baaff4ee33decff1c7782bdb9b4cab71c20"
@@ -4978,6 +4982,7 @@ checksum = "a5e44f723f1133c9deac646763579fdb3ac745e418f2a7af9cd0c431da1f20b9"
 dependencies = [
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -5724,7 +5729,7 @@ checksum = "6a66d8666ae428df917037dc064921a48ac74ff5758033aa388c1cd3e24af551"
 dependencies = [
  "anyhow",
  "colored",
- "itf",
+ "itf 0.4.0",
  "quint-connect-macros",
  "rand 0.9.0",
  "serde",

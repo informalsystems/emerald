@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
-use informalsystems_malachitebft_core_consensus::PeerId;
 use malachitebft_app_channel::AppMsg;
+use malachitebft_core_consensus::PeerId;
 
 use super::Sut;
 use crate::history::History;

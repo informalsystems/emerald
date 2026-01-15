@@ -1,7 +1,7 @@
 use anyhow::Result;
-use informalsystems_malachitebft_core_consensus::Role;
 use malachitebft_app_channel::app::types::core::Round as EmeraldRound;
 use malachitebft_app_channel::AppMsg;
+use malachitebft_core_consensus::Role;
 use malachitebft_eth_types::Height as EmeraldHeight;
 
 use super::Sut;

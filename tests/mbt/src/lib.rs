@@ -7,5 +7,7 @@ mod sut;
 #[cfg(test)]
 mod tests;
 
+pub use driver::EmeraldDriver;
+
 // Must match spec's node identifiers.
-pub const NODES: [&str; 3] = ["node1", "node2", "node3"];
+const NODES: [&str; 3] = ["node1", "node2", "node3"];

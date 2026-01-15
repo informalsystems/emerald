@@ -76,7 +76,7 @@ impl QuintState<EmeraldDriver> for SpecState {
             system.insert(node.clone(), spec_state);
         }
 
-        Ok(SpecState(system))
+        Ok(Self(system))
     }
 }
 

@@ -1,38 +1,25 @@
 [package]
-name = "emerald-mbt"
-version = "0.1.0"
-edition = "2021"
+name    = "emerald-mbt"
+version = { workspace = true }
+edition = { workspace = true }
 publish = false
 
-[lints.rust]
-dead_code = "allow"
+[lints]
+workspace = true
 
 [dependencies]
-quint-connect = { version = "0.1" }
-serde = { version = "1.0", features = ["derive"] }
-itf = "0.4"
-anyhow = "1.0"
+emerald                     = { workspace = true }
+malachitebft-eth-types      = { workspace = true }
+malachitebft-eth-engine     = { workspace = true }
+malachitebft-eth-cli        = { workspace = true }
+malachitebft-app-channel    = { workspace = true }
+malachitebft-core-consensus = { workspace = true }
 
-# Emerald dependencies
-emerald = { path = "../../app" }
-malachitebft-eth-types = { path = "../../types" }
-malachitebft-eth-engine = { path = "../../engine" }
-malachitebft-eth-cli = { path = "../../cli" }
-malachitebft-app-channel = { package = "informalsystems-malachitebft-app-channel", git = "https://github.com/informalsystems/malachite.git", rev = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a" }
-informalsystems-malachitebft-core-consensus = { git = "https://github.com/informalsystems/malachite.git", rev = "bcac2b2dbd369a6c29b9151fcd0889b133d7221a" }
+serde = { workspace = true }
+itf   = { workspace = true }
+tokio = { workspace = true }
 
-# Additional utilities
-bytes = "1"
-tracing = "0.1"
-tokio = { version = "1", features = ["rt", "sync", "macros"] }
-rand = "0.8"
-toml = "0.8"
-serde_json = "1.0"
-hex = "0.4"
-k256 = { workspace = true }
-bimap = "0.6.3"
-tempfile = "3.23.0"
-
-[dev-dependencies]
-test-log = { version = "0.2", features = ["trace"] }
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+quint-connect = "0.1"
+anyhow        = "1.0"
+bimap         = "0.6.3"
+tempfile      = "3.23.0"

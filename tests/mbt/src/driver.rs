@@ -4,13 +4,18 @@ mod utils;
 
 use std::collections::BTreeMap;
 
-use quint_connect::{switch, Driver, Result, Step};
+use quint_connect::{switch, Result, Step};
 
 use crate::driver::runtime::Runtime;
 use crate::history::History;
 use crate::state::{Node, SpecState};
 use crate::sut::{self, Sut};
 
+/// Model-based testing driver for Emerald.
+///
+/// Connects a Quint formal specification to the Emerald implementation,
+/// executing actions taken on the system under test (SUT) while tracking
+/// execution history for verification.
 #[derive(Default)]
 pub struct EmeraldDriver {
     pub sut: BTreeMap<Node, Sut>,
@@ -18,7 +23,7 @@ pub struct EmeraldDriver {
     pub runtime: Option<Runtime>,
 }
 
-impl Driver for EmeraldDriver {
+impl quint_connect::Driver for EmeraldDriver {
     type State = SpecState;
 
     fn config() -> quint_connect::Config {
@@ -28,6 +33,8 @@ impl Driver for EmeraldDriver {
         }
     }
 
+    /// Called for each action taken in the Quint trace. It maps the Quint
+    /// action and its associated values with the equivalent code in the SUT.
     fn step(&mut self, step: &Step) -> Result {
         switch!(step {
             InitAction => {

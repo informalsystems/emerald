@@ -238,7 +238,7 @@ dependencies = [
  "c-kzg",
  "derive_more",
  "either",
- "ethereum_ssz",
+ "ethereum_ssz 0.9.1",
  "ethereum_ssz_derive",
  "serde",
  "serde_with",
@@ -544,7 +544,7 @@ dependencies = [
  "alloy-rlp",
  "alloy-serde",
  "derive_more",
- "ethereum_ssz",
+ "ethereum_ssz 0.9.1",
  "ethereum_ssz_derive",
  "jsonwebtoken",
  "rand 0.8.5",
@@ -2545,7 +2545,7 @@ dependencies = [
  "caches",
  "color-eyre",
  "derive-where",
- "ethereum_ssz",
+ "ethereum_ssz 0.10.1",
  "hex",
  "humantime-serde",
  "informalsystems-malachitebft-app-channel",
@@ -2730,6 +2730,21 @@ dependencies = [
  "alloy-primitives",
  "ethereum_serde_utils",
  "itertools 0.13.0",
+ "serde",
+ "serde_derive",
+ "smallvec",
+ "typenum",
+]
+
+[[package]]
+name = "ethereum_ssz"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2128a84f7a3850d54ee343334e3392cca61f9f6aa9441eec481b9394b43c238b"
+dependencies = [
+ "alloy-primitives",
+ "ethereum_serde_utils",
+ "itertools 0.14.0",
  "serde",
  "serde_derive",
  "smallvec",
@@ -5314,7 +5329,7 @@ dependencies = [
  "alloy-rlp",
  "alloy-rpc-types-engine",
  "derive_more",
- "ethereum_ssz",
+ "ethereum_ssz 0.9.1",
  "ethereum_ssz_derive",
  "op-alloy-consensus",
  "snap",

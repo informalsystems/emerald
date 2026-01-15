@@ -1,13 +1,12 @@
 mod environment;
-mod runtime;
 mod utils;
 
 use std::collections::BTreeMap;
 
 use quint_connect::{switch, Result, Step};
 
-use crate::driver::runtime::Runtime;
 use crate::history::History;
+use crate::runtime::Runtime;
 use crate::state::{Node, SpecState};
 use crate::sut::{self, Sut};
 

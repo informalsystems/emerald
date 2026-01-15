@@ -6,8 +6,8 @@ use malachitebft_eth_cli::config;
 use malachitebft_eth_types::{Address, Height as EmeraldHeight};
 use tempfile::TempDir;
 
-use crate::driver::runtime::Runtime;
 use crate::driver::EmeraldDriver;
+use crate::runtime::Runtime;
 use crate::state::{FailureMode, Node};
 use crate::sut::Sut;
 use crate::{reth, NODES};
@@ -20,16 +20,16 @@ impl EmeraldDriver {
         *self = Default::default();
         reth::recreate_all()?;
 
-        let tokio = tokio::runtime::Runtime::new()?;
-        let temp_dir = TempDir::with_prefix("emerald-mbt")?;
+        // Fresh test directory for the new environment
+        let test_dir = TempDir::with_prefix("emerald-mbt")?;
 
         for (node_idx, node) in NODES.iter().enumerate() {
             let node = node.to_string();
-            let home_dir = TempDir::with_suffix_in(&node, &temp_dir)?;
-            tokio.block_on(self.init_node(node_idx, node, home_dir))?;
+            let home_dir = TempDir::with_suffix_in(&node, &test_dir)?;
+            self.init_node(node_idx, node, home_dir)?;
         }
 
-        self.runtime.replace(Runtime { tokio, temp_dir });
+        self.runtime.replace(Runtime::new(test_dir)?);
         Ok(())
     }
 
@@ -46,12 +46,6 @@ impl EmeraldDriver {
             return Ok(());
         }
 
-        // Take ownership of runtime during the restarts.
-        let rt = self
-            .runtime
-            .take()
-            .ok_or(anyhow!("Uninitialized runtime"))?;
-
         let node_idx = NODES
             .iter()
             .position(|&other| node == other)
@@ -63,7 +57,14 @@ impl EmeraldDriver {
             FailureMode::NodeCrash => {
                 self.stop_node(&node)?;
                 reth::recreate(node_idx)?;
-                TempDir::with_suffix_in(&node, &rt.temp_dir)?
+                TempDir::with_suffix_in(
+                    &node,
+                    &self
+                        .runtime
+                        .as_ref()
+                        .map(|rt| rt.temp_dir.path())
+                        .ok_or(anyhow!("Uninitialized test dir"))?,
+                )?
             }
             // Both Emerald and Reth restarted without data loss. Restart
             // Emerald and return the previous home dir for Emerald to start
@@ -79,15 +80,14 @@ impl EmeraldDriver {
             FailureMode::ConsensusTimeout => unreachable!(),
         };
 
-        rt.block_on(self.init_node(node_idx, node, home_dir))?;
-        self.runtime.replace(rt); // move runtime back
+        self.init_node(node_idx, node, home_dir)?;
         Ok(())
     }
 
-    async fn init_node(&mut self, node_idx: usize, node: String, home_dir: TempDir) -> Result<()> {
-        let components = self
-            .init_app_state(node_idx, home_dir.path().to_path_buf())
-            .await?;
+    fn init_node(&mut self, node_idx: usize, node: String, home_dir: TempDir) -> Result<()> {
+        let home_path = home_dir.path().to_path_buf();
+        let runtime = Runtime::new(home_dir)?;
+        let components = runtime.block_on(self.init_app_state(node_idx, home_path))?;
 
         let public_key = components.state.signing_provider.private_key().public_key();
         let address = Address::from_public_key(&public_key);
@@ -98,7 +98,7 @@ impl EmeraldDriver {
             Sut {
                 components,
                 address,
-                home_dir,
+                runtime,
             },
         );
 
@@ -152,11 +152,11 @@ impl EmeraldDriver {
 
     fn stop_node(&mut self, node: &Node) -> Result<TempDir> {
         // NOTE: by removing the SUT from the driver state we let its components
-        // drop and clean up. We only return the `home_dir` so that the caller
-        // can decide to reuse it or not.
+        // drop and clean up. We only return the node's `temp_dir` so that the
+        // caller can decide to reuse it or not.
         self.sut
             .remove(node)
-            .map(|sut| sut.home_dir)
+            .map(|sut| sut.runtime.temp_dir)
             .ok_or(anyhow!("No SUT for node: {}", node))
     }
 }

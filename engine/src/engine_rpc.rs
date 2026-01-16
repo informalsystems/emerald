@@ -219,6 +219,10 @@ impl EngineRPC {
         .await
     }
 
+    // Note that we take only the execution payload from the nevelopes.
+    // The consensus client currently does not have support for processing
+    // items like blobs or execution requests.
+    // TODO Support handling of all fields from the response
     pub async fn get_payload(
         &self,
         payload_id: AlloyPayloadId,

@@ -5,7 +5,6 @@
 ### FEATURES
 
 - Scripts can now generate setup for more than 4 nodes ([#136](https://github.com/informalsystems/emerald/pull/136))
-- Height replay mechanism automatically recovers when Reth is behind Emerald's stored height after a crash, eliminating the need for `--engine.persistence-threshold=0`
 
 ### FIXES
 

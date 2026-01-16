@@ -8,6 +8,8 @@ use crate::state::Node;
 use crate::sut::Sut;
 
 impl EmeraldDriver {
+    /// Locates the system under test and use the driver's runtime to wait for
+    /// the execution of the given future.
     pub fn perform<'a, F, Fut>(&'a mut self, node: Node, action: F) -> Result<()>
     where
         F: FnOnce(&'a mut Sut, &'a mut History) -> Fut,

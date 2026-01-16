@@ -11,6 +11,15 @@ use malachitebft_eth_types::{
 
 use crate::state::{Node, Payload, Proposal, ValueId};
 
+/// Records mappings between Quint and Emerald state.
+///
+/// Historical data is used when referring to values produced by Emerald during
+/// an earlier step. For example, when Quint produces a GetValue step, replaying
+/// it in Emerald generates a stream of message parts. Later, Quint may include a
+/// ReceivedProposal step in the trace, which requires the driver to feed
+/// message parts of a given proposal to the target node. It ends up being
+/// simpler to remember the message parts from earlier than to produce them
+/// again later.
 #[derive(Default)]
 pub struct History {
     pub addresses: BiMap<Node, Address>,
@@ -21,6 +30,7 @@ pub struct History {
 }
 
 impl History {
+    /// Returns the Emerald address for a given Quint node.
     pub fn get_address(&self, node: &Node) -> Result<Address> {
         self.addresses
             .get_by_left(node)
@@ -28,6 +38,7 @@ impl History {
             .ok_or(anyhow!("Can't find address for node: {}", node))
     }
 
+    /// Returns the payload for a given block hash.
     pub fn get_payload(&self, hash: &BlockHash) -> Result<Payload> {
         self.blocks
             .get_by_right(hash)
@@ -35,6 +46,7 @@ impl History {
             .ok_or(anyhow!("Can't find payload for hash: {}", hash))
     }
 
+    /// Returns the Quint proposal for a given Emerald value.
     pub fn get_proposal(
         &self,
         height: EmeraldHeight,
@@ -47,6 +59,7 @@ impl History {
             .ok_or(anyhow!("No proposal for value id: {}", value_id))
     }
 
+    /// Returns the stream message parts for a given Quint value.
     pub fn get_stream(&self, value_id: &ValueId) -> Result<Vec<StreamMessage<ProposalPart>>> {
         self.streams
             .get(value_id)
@@ -54,6 +67,7 @@ impl History {
             .ok_or(anyhow!("No stream parts for value id: {:?}", value_id))
     }
 
+    /// Returns the Emerald value for a given Quint value.
     pub fn get_value(&self, value_id: &ValueId) -> Result<Value> {
         self.values
             .get(value_id)
@@ -61,6 +75,7 @@ impl History {
             .ok_or(anyhow!("No value for id: {:?}", value_id))
     }
 
+    /// Returns the Emerald value ID for a given Quint proposal.
     pub fn get_value_id(&self, proposal: &Proposal) -> Result<EmeraldValueId> {
         let (_, _, value_id) = self
             .proposals
@@ -70,10 +85,12 @@ impl History {
         Ok(value_id)
     }
 
+    /// Records the mapping between a Quint node and its Emerald address.
     pub fn record_address(&mut self, node: Node, address: Address) {
         self.addresses.insert(node, address);
     }
 
+    /// Records a Quint proposal along with its Emerald value and message parts.
     pub fn record_proposal(
         &mut self,
         proposal: Proposal,
@@ -89,6 +106,8 @@ impl History {
         self.proposals.insert(proposal, (height, round, value_id));
     }
 
+    /// Records the mapping between a Quint proposal's payload and the Emerald
+    /// execution block hash.
     pub fn record_block(&mut self, proposal: Proposal, block: ExecutionBlock) {
         self.blocks.insert(proposal.payload, block.block_hash);
     }

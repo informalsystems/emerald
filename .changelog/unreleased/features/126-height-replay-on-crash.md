@@ -1,0 +1,1 @@
+- Replay missing heights in Reth after crash. Blocks are persisted by Malachite at every height but Reth does not persist 2 blocks. ([#126](https://github.com/informalsystems/emerald/issues/126))

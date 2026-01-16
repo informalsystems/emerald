@@ -1,3 +1,7 @@
+//! This module maps Quint and Emerald states. Only relevant parts of the
+//! Emerald state are captured. Quint Connect is responsible for comparing the
+//! extracted data with the Quint state.
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::bail;
@@ -6,7 +10,7 @@ use emerald::State;
 use itf::de::{self, As};
 use malachitebft_app_channel::app::types::core::Round as EmeraldRound;
 use malachitebft_eth_types::Height as EmeraldHeight;
-use quint_connect::{Result, State as QuintState};
+use quint_connect::Result;
 use serde::Deserialize;
 
 use crate::driver::EmeraldDriver;
@@ -53,7 +57,7 @@ pub enum FailureMode {
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 pub struct SpecState(pub BTreeMap<Node, NodeState>);
 
-impl QuintState<EmeraldDriver> for SpecState {
+impl quint_connect::State<EmeraldDriver> for SpecState {
     fn from_driver(driver: &EmeraldDriver) -> Result<Self> {
         let mut system = BTreeMap::new();
         let Some(rt) = &driver.runtime else {

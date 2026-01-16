@@ -4,6 +4,11 @@ use anyhow::{bail, Result};
 
 use crate::NODES;
 
+/// Recreate all Reth instances using the project's testnet commands.
+///
+/// Note that reth instance names are composed based on the [NODES] list. If
+/// there are 3 nodes in [NODES], Reth instances will be `reth0 reth1 reth2`,
+/// for example.
 pub fn recreate_all() -> Result<()> {
     let mut nodes = String::new();
     for i in 0..NODES.len() {
@@ -14,10 +19,18 @@ pub fn recreate_all() -> Result<()> {
     run_reth_make_cmd(&nodes, "testnet-reth-recreate")
 }
 
+/// Recreate the given Reth instance using the project's testnet commands.
+///
+/// The given node index becomes the Reth identifier in the testnet config. If 0
+/// is given, the `reth0` instance will be recreated, for example.
 pub fn recreate(node_idx: usize) -> Result<()> {
     run_reth_make_cmd(&format!("reth{node_idx}"), "testnet-reth-recreate")
 }
 
+/// Restart the given Reth instance using the project's testnet commands.
+///
+/// The given node index becomes the Reth identifier in the testnet config. If 0
+/// is given, the `reth0` instance will be restarted, for example.
 pub fn restart(node_idx: usize) -> Result<()> {
     run_reth_make_cmd(&format!("reth{node_idx}"), "testnet-reth-restart")
 }

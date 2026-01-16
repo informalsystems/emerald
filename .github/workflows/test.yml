@@ -38,11 +38,11 @@ jobs:
         with:
           filters: |
             code:
-              - '**/.rs'
+              - '**/*.rs'
               - 'Makefile'
               - '**/Cargo.toml'
               - '**/Cargo.lock'
-              - '**/.sh'
+              - '**/*.sh'
               - '*/workflows/test.yml'
       - name: Install Protoc
         uses: arduino/setup-protoc@v3

@@ -40,11 +40,11 @@ jobs:
         with:
           filters: |
             code:
-              - '**/.rs'
+              - '**/*.rs'
               - 'Makefile'
               - '**/Cargo.toml'
               - '**/Cargo.lock'
-              - '**/.sh'
+              - '**/*.sh'
               - '*/workflows/emerald.yml'
       - name: Install Protoc
         uses: arduino/setup-protoc@v3

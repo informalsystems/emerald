@@ -6,7 +6,7 @@ use alloy_rpc_types_engine::{
 };
 use color_eyre::eyre;
 use malachitebft_eth_types::{Address, BlockHash, RetryConfig, B256};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use crate::engine_rpc::{EngineRPC, Fork};
 use crate::ethereum_rpc::EthereumRPC;
@@ -126,7 +126,7 @@ impl Engine {
         fee_recipient: &Address,
         fork: Fork,
     ) -> eyre::Result<ExecutionPayloadV3> {
-        info!("🟠 current fork is {:?}", fork);
+        debug!("🟠 current fork is {:?}", fork);
 
         debug!("🟠 generate_block on top of {:?}", latest_block);
         let payload_attributes: PayloadAttributes;

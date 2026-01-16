@@ -59,8 +59,7 @@ impl EmeraldDriver {
                 reth::recreate(node_idx)?;
                 TempDir::with_suffix_in(
                     &node,
-                    &self
-                        .runtime
+                    self.runtime
                         .as_ref()
                         .map(|rt| rt.temp_dir.path())
                         .ok_or(anyhow!("Uninitialized test dir"))?,
@@ -94,7 +93,7 @@ impl EmeraldDriver {
         self.history.record_address(node.clone(), address);
 
         self.sut.insert(
-            node.to_string(),
+            node,
             Sut {
                 components,
                 address,

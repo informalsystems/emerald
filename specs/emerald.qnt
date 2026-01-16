@@ -116,6 +116,7 @@ module emerald {
   // Local state for each Emerald node
   type StateFields = {
     phase: AppPhase,
+    start_height: Height,
     // Consensus state
     current_height: Height,
     current_round: Round,
@@ -198,12 +199,42 @@ module emerald {
 
   pure def handle_consensus_ready(ctx: LocalContext, _params: ()): Transition = {
     val s = ctx.state
+    val ext = ctx.extensions
+
+    val decided_proposals =
+      s.proposals
+        .filter(p => p.in(ext.decided_proposals))
+        .toList((a, b) => intCompare(a.height, b.height))
+
+    val s0 =
+      if (decided_proposals.length() == 0) {
+        // Genesis start: Emerald do not have any previously known decided
+        // value. Start and current height begins in 1.
+        {
+          ...s,
+          start_height: 1,
+          current_height: 1,
+          last_decided_height: 0,
+          last_decided_payload: None
+        }
+      } else {
+        // Non-genesis start: Emerald knows a previously decided value. Start
+        // height is the last decided height + 1 but current height is the last
+        // decided height.
+        val last_decided = decided_proposals[decided_proposals.length() - 1]
+        {
+          ...s,
+          start_height: last_decided.height + 1,
+          current_height: last_decided.height,
+          last_decided_height: last_decided.height,
+          last_decided_payload: Some(last_decided.payload)
+        }
+      }
 
     {
       post_state: {
-        ...s,
+        ...s0,
         phase: Ready,
-        current_height: s.last_decided_height + 1,
         current_round: 0
       },
       effects: Set(
@@ -232,7 +263,7 @@ module emerald {
       })
 
     if (timeout != None)       Set((s.current_height, s.current_round + 1))
-    else if (s.phase == Ready) Set((s.current_height, s.current_round))
+    else if (s.phase == Ready) Set((s.start_height, s.current_round))
     else                       Set()
   }
 
@@ -394,6 +425,7 @@ module emerald {
         // Start next height by moving back to the ready phase, which enables
         // the handle_started_round transition.
         phase: Ready,
+        start_height: decided.height + 1,
         current_height: decided.height + 1,
         current_round: 0,
         // Records the last decided block
@@ -425,18 +457,12 @@ module emerald {
     val s = ctx.state
 
     if (s.phase == Working)
-      val candidate =
+      val candidates =
         ctx.extensions.decided_proposals
           .filter(p => not(p.in(s.proposals)))
-          .fold(None, (acc, b) => match acc {
-            | Some(a) => if (a.height < b.height) Some(a) else Some(b)
-            | None    => Some(b)
-          })
+          .toList((a, b) => intCompare(a.height, b.height))
 
-      match candidate {
-        | Some(p) => Set(p)
-        | None    => Set()
-      }
+      if (candidates.length() > 0) Set(candidates[0]) else Set()
     else
       Set()
   }
@@ -542,10 +568,8 @@ module emerald {
 
     Set({
       post_state: {
-        ...s,
-        phase: Uninitialized,
-        current_height: 0,
-        current_round: 0,
+        ...initialize(s.process_id),
+        proposals: s.proposals
       },
       effects: Set(
         choreo::CustomEffect(RecordAction(
@@ -569,10 +593,8 @@ module emerald {
 
     Set({
       post_state: {
-        ...s,
-        phase: Uninitialized,
-        current_height: 0,
-        current_round: 0,
+        ...initialize(s.process_id),
+        proposals: s.proposals
       },
       effects: Set(
         choreo::CustomEffect(RecordAction(
@@ -708,6 +730,7 @@ module emerald {
     {
       process_id: node,
       phase: Uninitialized,
+      start_height: 0,
       current_height: 0,
       current_round: 0,
       proposals: Set(),

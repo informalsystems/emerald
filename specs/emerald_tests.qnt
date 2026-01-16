@@ -241,7 +241,7 @@ module emerald_tests {
       .then("node3".processSyncedValue(proposal(1, 0, 0)))
       .then("node3".decided(proposal(1, 0, 0)))
       .then("node3".restart())
-      .then("node3".consensusReady(2, 0))
+      .then("node3".consensusReady(1, 0))
       .then("node3".startedRound(2, 0))
       .then("node3".processSyncedValue(proposal(2, 0, 1)))
       .then("node3".decided(proposal(2, 0, 1)))

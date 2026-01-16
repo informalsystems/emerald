@@ -1,3 +1,5 @@
+//! Translates StartedRoundAction from Quint to AppMsg::StartedRound.
+
 use anyhow::Result;
 use malachitebft_app_channel::app::types::core::Round as EmeraldRound;
 use malachitebft_app_channel::AppMsg;
@@ -9,6 +11,7 @@ use crate::history::History;
 use crate::state::{Height, Node, Round};
 
 impl Sut {
+    /// Replays the StartedRound Quint action (see emerald.qnt handle_started_round).
     pub async fn started_round(
         &mut self,
         hist: &History,

@@ -1,3 +1,5 @@
+//! Translates GetValueAction from Quint to AppMsg::GetValue.
+
 use anyhow::{anyhow, Result};
 use malachitebft_app_channel::app::types::core::Round as EmeraldRound;
 use malachitebft_app_channel::AppMsg;
@@ -9,6 +11,10 @@ use crate::history::History;
 use crate::state::{Height, Proposal, Round};
 
 impl Sut {
+    /// Replays the GetValue Quint action (see emerald.qnt handle_get_value).
+    ///
+    /// This method records the Emerald value and message parts for the given
+    /// Quint proposal.
     pub async fn get_value(
         &mut self,
         hist: &mut History,

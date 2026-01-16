@@ -1,3 +1,5 @@
+//! Translates ReceivedProposalAction from Quint to AppMsg::ReceivedProposalPart.
+
 use anyhow::{anyhow, Result};
 use malachitebft_app_channel::AppMsg;
 use malachitebft_core_consensus::PeerId;
@@ -7,6 +9,11 @@ use crate::history::History;
 use crate::state::Proposal;
 
 impl Sut {
+    /// Replays the ReceivedProposal Quint action (see emerald.qnt
+    /// handle_received_proposal).
+    ///
+    /// This method relies on history's recorded message parts for the given
+    /// Quint proposal.
     pub async fn receive_proposal(&mut self, hist: &History, proposal: Proposal) -> Result<()> {
         let peer_id = PeerId::from_multihash(Default::default())
             .map_err(|err| anyhow!("Failed to create peer id: {:?}", err))?;

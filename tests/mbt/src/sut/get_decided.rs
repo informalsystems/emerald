@@ -1,3 +1,5 @@
+//! Translates GetDecidedValueAction from Quint to AppMsg::GetDecidedValue.
+
 use anyhow::{bail, Result};
 use malachitebft_app_channel::AppMsg;
 use malachitebft_eth_types::Height as EmeraldHeight;
@@ -7,6 +9,11 @@ use crate::history::History;
 use crate::state::{Height, Proposal};
 
 impl Sut {
+    /// Replays the GetDecidedValue Quint action (see emerald.qnt
+    /// handle_get_decided_value).
+    ///
+    /// This method relies on history's recorded proposals to assert that the
+    /// Emerald proposal returned is equal to the expected Quint proposal.
     pub async fn get_decided(
         &mut self,
         hist: &History,

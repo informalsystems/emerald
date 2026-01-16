@@ -1,3 +1,5 @@
+//! Translates DecidedAction from Quint to AppMsg::Decided.
+
 use std::collections::BTreeMap;
 
 use anyhow::{anyhow, Result};
@@ -12,6 +14,13 @@ use crate::history::History;
 use crate::state::{Node, Proposal};
 
 impl Sut {
+    /// Replays the Decided Quint action (see emerald.qnt handle_decided).
+    ///
+    /// Note that the caller must call [mock_votes] to generate a set of mocked
+    /// votes prior to calling this method.
+    ///
+    /// This method relies on history's recorded values and records the Emerald
+    /// execution block produced for the given Quint proposal.
     pub async fn decided(
         &mut self,
         hist: &mut History,
@@ -36,13 +45,14 @@ impl Sut {
         let state = &self.components.state;
         let block = state
             .latest_block
-            .ok_or(anyhow!("Should have filled lastt block"))?;
+            .ok_or(anyhow!("Should have filled latest block"))?;
 
         hist.record_block(proposal, block);
         Ok(())
     }
 }
 
+/// Generates mock precommit votes from all nodes for a given proposal.
 pub fn mock_votes(
     sut: &BTreeMap<Node, Sut>,
     hist: &History,

@@ -1,6 +1,6 @@
 //! Sync handler functions for processing synced payloads
 
-use alloy_rpc_types_engine::ExecutionPayloadV3;
+use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre};
 use malachitebft_app_channel::app::types::codec::Codec;
@@ -10,7 +10,7 @@ use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::{BlockHash, EmeraldContext, Height, RetryConfig, Value};
 use ssz::{Decode, Encode};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::state::{reconstruct_execution_payload, ValidatedPayloadCache};
 use crate::store::Store;
@@ -54,14 +54,19 @@ pub async fn validate_payload(
             )
         })?;
 
-    if payload_status.status.is_valid() {
-        Ok(Validity::Valid)
-    } else {
-        // INVALID or ACCEPTED - both are treated as invalid
-        // INVALID: malicious block
-        // ACCEPTED: Non-canonical payload - should not happen with instant finality
-        error!(%height, %round, "🔴 Synced block validation failed: {}", payload_status.status);
-        Ok(Validity::Invalid)
+    match payload_status.status {
+        PayloadStatusEnum::Valid => Ok(Validity::Valid),
+        PayloadStatusEnum::Accepted => {
+            warn!(%height, %round, "⚠️  Synced block ACCEPTED: {:?}, this shouldn't happen", payload_status.status);
+            Ok(Validity::Invalid)
+        }
+        PayloadStatusEnum::Invalid { validation_error } => {
+            error!(%height, %round, validation_error = ?validation_error, "🔴 Synced block INVALID");
+            Ok(Validity::Invalid)
+        }
+        PayloadStatusEnum::Syncing => {
+            unreachable!("SYNCING status should be handled by notify_new_block_with_retry")
+        }
     }
 }
 

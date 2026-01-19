@@ -1,0 +1,1 @@
+- `[state/app/engine]` Emerald supports Fusaka and activates it by default from genesis. Replaces ENGINE_GET_PAYLOAD_V4 with ENGINE_GET_PAYLOAD_V5([#138](https://github.com/informalsystems/emerald/pull/138))

@@ -1,1 +1,0 @@
-- `[reth]` Use Reth 1.9.3.([#138](https://github.com/informalsystems/emerald/pull/138))

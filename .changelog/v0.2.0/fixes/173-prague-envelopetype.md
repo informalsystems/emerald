@@ -1,1 +1,0 @@
-- `[engine]` Use `ExecutionPayloadEnvelopeV4` for Prague instead of `ExecutionPayloadEnvelopeV3` ([#173](https://github.com/informalsystems/emerald/issues/173))

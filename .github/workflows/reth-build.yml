@@ -52,12 +52,6 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: Install cargo-nextest
         uses: taiki-e/install-action@cargo-nextest
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build Reth
         run: |
           cd custom-reth && cargo build

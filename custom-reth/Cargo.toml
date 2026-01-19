@@ -22,7 +22,7 @@ reth-payload-primitives  = { git = "https://github.com/paradigmxyz/reth", tag = 
 alloy-rpc-types-engine   = { version = "1.4.3" }
 
 
-vergen = "=9.0.4"
+vergen      = "=9.0.4"
 vergen-git2 = "=1.0.5"
 
 eyre = "0.6"

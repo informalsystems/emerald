@@ -1,4 +1,4 @@
-mod app;
+pub mod app;
 mod metrics;
 pub mod node;
 mod state;

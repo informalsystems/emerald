@@ -42,7 +42,7 @@ jobs:
             code:
               - 'custom-reth/*.rs'
               - 'custom-reth/Cargo.toml'
-              - 'custom-rethCargo.lock'
+              - 'custom-reth/Cargo.lock'
               - '*/workflows/reth-build.yml'
       - name: Install Protoc
         uses: arduino/setup-protoc@v3

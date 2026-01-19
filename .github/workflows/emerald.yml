@@ -65,6 +65,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build emerald
+        run: |
+          cargo build
       - name: Run emerald
         run: |
           ./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet --fee-recipient 0x0000000000000000000000000000000000000042

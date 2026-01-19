@@ -68,6 +68,7 @@ jobs:
       - name: Build emerald
         run: |
           cargo build
+          if: steps.filter.outputs.code == 'true'
       - name: Run emerald
         run: |
           ./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet --fee-recipient 0x0000000000000000000000000000000000000042

@@ -14,7 +14,7 @@ While Emerald closely follows Osaka semantics, there are several important diffe
   As a result, multiple consecutive blocks may share the same timestamp.
   This keeps compatibility with EVM execution engines and most block explorers that expect second-level timestamp granularity.
 - **`PREV_RANDAO`**: On Ethereum, `PREV_RANDAO` can be used as a source of randomness. 
-  On Emerald, `PREV_RANDAO` is always 0 and MUST not be used for randomness.
+  On Emerald, `PREV_RANDAO` is always 0 and MUST NOT be used for randomness.
 - **`PARENT_BEACON_BLOCK_ROOT`**: There is no beacon chain on Emerald. 
   This field is populated with the hash of the previous execution block header.
 - **EIP-4844 (Blobs)**: EIP-4844 blob transactions are not supported.

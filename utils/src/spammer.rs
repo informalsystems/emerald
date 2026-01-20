@@ -1,6 +1,6 @@
 use core::fmt;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use alloy_network::eip2718::Encodable2718;
 use alloy_primitives::Address;
@@ -15,9 +15,8 @@ use serde::de::DeserializeOwned;
 use serde_json::json;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::time::{self, sleep, Duration, Instant};
-use tracing::debug;
+use tracing::{debug, info};
 
-use crate::make_signers;
 use crate::tx::{make_signed_contract_call_tx, make_signed_eip1559_tx, make_signed_eip4844_tx};
 
 /// Target pool size to maintain (in number of transactions).
@@ -46,6 +45,8 @@ pub struct SpammerConfig {
     pub blobs: bool,
     /// Chain ID for the transactions.
     pub chain_id: u64,
+    /// Signer indexes to use for transaction signing in rotation.
+    pub signer_indexes: Vec<usize>,
 }
 
 /// A transaction spammer that sends Ethereum transactions at a controlled rate.
@@ -55,8 +56,10 @@ pub struct Spammer {
     id: String,
     /// Client for Ethereum RPC node server.
     client: RpcClient,
-    /// Ethereum transaction signer.
-    signer: PrivateKeySigner,
+    /// Transaction signers.
+    signers: Vec<PrivateKeySigner>,
+    /// Current signer index for rotation.
+    current_signer_index: Arc<Mutex<usize>>,
     /// Maximum number of transactions to send (0 for no limit).
     max_num_txs: u64,
     /// Maximum number of seconds to run the spammer (0 for no limit).
@@ -74,12 +77,32 @@ pub struct Spammer {
 }
 
 impl Spammer {
-    pub fn new(url: Url, signer_index: usize, config: SpammerConfig) -> Result<Self> {
-        let signers = make_signers();
+    pub fn new(url: Url, config: SpammerConfig) -> Result<Self> {
+        // Create the signers needed for spammer
+        let max_index = config.signer_indexes.iter().max().copied().unwrap_or(0);
+        let all_signers = crate::genesis::make_signers_with_count((max_index + 1) as u64);
+
+        let signers: Vec<PrivateKeySigner> = config
+            .signer_indexes
+            .iter()
+            .map(|&idx| all_signers[idx].clone())
+            .collect();
+
+        let id = if config.signer_indexes.len() == 1 {
+            config.signer_indexes[0].to_string()
+        } else {
+            format!(
+                "{}-{}",
+                config.signer_indexes[0],
+                config.signer_indexes[config.signer_indexes.len() - 1]
+            )
+        };
+
         Ok(Self {
-            id: signer_index.to_string(),
+            id,
             client: RpcClient::new(url)?,
-            signer: signers[signer_index].clone(),
+            signers,
+            current_signer_index: Arc::new(Mutex::new(0)),
             max_num_txs: config.max_num_txs,
             max_time: config.max_time,
             max_rate: config.max_rate,
@@ -92,22 +115,41 @@ impl Spammer {
 
     pub fn new_contract(
         url: Url,
-        signer_index: usize,
         config: SpammerConfig,
         contract: &Address,
         function: &str,
         args: &[String],
     ) -> Result<Self> {
-        let signers = make_signers();
+        // Create the signers needed for spammer
+        let max_index = config.signer_indexes.iter().max().copied().unwrap_or(0);
+        let all_signers = crate::genesis::make_signers_with_count((max_index + 1) as u64);
+
+        let signers: Vec<PrivateKeySigner> = config
+            .signer_indexes
+            .iter()
+            .map(|&idx| all_signers[idx].clone())
+            .collect();
+
+        let id = if config.signer_indexes.len() == 1 {
+            config.signer_indexes[0].to_string()
+        } else {
+            format!(
+                "{}-{}",
+                config.signer_indexes[0],
+                config.signer_indexes[config.signer_indexes.len() - 1]
+            )
+        };
+
         let contract_payload = ContractPayload {
             address: *contract,
             function_sig: function.to_string(),
             args: args.to_vec(),
         };
         Ok(Self {
-            id: signer_index.to_string(),
+            id,
             client: RpcClient::new(url)?,
-            signer: signers[signer_index].clone(),
+            signers,
+            current_signer_index: Arc::new(Mutex::new(0)),
             max_num_txs: config.max_num_txs,
             max_time: config.max_time,
             max_rate: config.max_rate,
@@ -152,8 +194,8 @@ impl Spammer {
         Ok(())
     }
 
-    // Fetch from an Ethereum node the latest used nonce for the given address.
-    async fn get_latest_nonce(&self, address: Address) -> Result<u64> {
+    // Fetch the next nonce to use for the given address.
+    async fn get_next_nonce(&self, address: Address) -> Result<u64> {
         let response: String = self
             .client
             .rpc_request(
@@ -184,22 +226,26 @@ impl Spammer {
         report_sender: Sender<Instant>,
         finish_sender: Sender<()>,
     ) -> Result<()> {
-        // Fetch latest nonce for the sender address.
-        let address = self.signer.address();
-        let latest_nonce = self.get_latest_nonce(address).await?;
+        // Fetch latest nonces for all signer addresses
+        let mut nonces: HashMap<Address, u64> = HashMap::new();
+        for signer in &self.signers {
+            let address = signer.address();
+            let latest_nonce = self.get_next_nonce(address).await?;
+            nonces.insert(address, latest_nonce);
+            debug!("Signer {address} starting from nonce={latest_nonce}");
+        }
+
         let txs_per_batch = self
             .max_rate
             .saturating_mul(self.batch_interval)
             .checked_div(1000)
             .unwrap_or(0);
         debug!(
-            "Spamming {address} starting from nonce={latest_nonce} at rate {}, sending {txs_per_batch} txs every {}ms", 
+            "Spamming with {} signer(s) at rate {}, sending {txs_per_batch} txs every {}ms",
+            self.signers.len(),
             self.max_rate,
             self.batch_interval,
         );
-
-        // Initialize nonce and counters.
-        let mut nonce = latest_nonce;
         let start_time = Instant::now();
         let mut txs_sent_total = 0u64;
         let mut interval = time::interval(Duration::from_millis(self.batch_interval));
@@ -209,34 +255,46 @@ impl Spammer {
             let _ = interval.tick().await;
             let interval_start = Instant::now();
 
-            // Verify the nonce for gaps
-            // TODO: probably this should run as a separate task
-            let on_chain_nonce = self.get_latest_nonce(address).await?;
-            // If the span between the on-chain nonce and the one we are about to send
-            // is too big, then probably there is a gap that doesn't allow the
-            // on-chain nonce too advance.
-            let nonce_span = nonce.saturating_sub(on_chain_nonce);
-            if nonce_span > self.max_rate {
-                debug!("Current nonce={nonce}, on-chain nonce={on_chain_nonce}. Sending 10 txs");
-                let batch_entries = self.build_batch_entries(10, on_chain_nonce).await?;
-                if let Some(results) = self.send_raw_batch(&batch_entries).await? {
-                    if results.len() != batch_entries.len() {
-                        return Err(eyre::eyre!(
-                            "Batch response count {} does not match request count {}",
-                            results.len(),
-                            batch_entries.len()
-                        ));
+            // Check for nonce gaps for all signers
+            let nonce_checks: Vec<_> = self
+                .signers
+                .iter()
+                .map(|signer| {
+                    let current_nonce = nonces.get(&signer.address()).copied().unwrap_or(0);
+                    async move {
+                        let on_chain_nonce = self.get_next_nonce(signer.address()).await?;
+                        Ok::<_, eyre::Error>((signer.address(), current_nonce, on_chain_nonce))
                     }
+                })
+                .collect();
 
-                    // Report individual results.
-                    for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
-                        let mapped_result = result.map(|_| tx_bytes_len);
-                        result_sender.send(mapped_result).await?;
+            let nonce_results = futures::future::join_all(nonce_checks).await;
+
+            for result in nonce_results {
+                let (address, current_nonce, on_chain_nonce) = result?;
+                let nonce_span = current_nonce.saturating_sub(on_chain_nonce);
+                if nonce_span > self.max_rate {
+                    info!("Signer {address}: current nonce={current_nonce}, on-chain nonce={on_chain_nonce}. Sending 10 txs");
+                    let batch_entries = self.build_batch_entries(10, &mut nonces).await?;
+                    if let Some(results) = self.send_raw_batch(&batch_entries).await? {
+                        if results.len() != batch_entries.len() {
+                            return Err(eyre::eyre!(
+                                "Batch response count {} does not match request count {}",
+                                results.len(),
+                                batch_entries.len()
+                            ));
+                        }
+
+                        // Report individual results
+                        for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
+                            let mapped_result = result.map(|_| tx_bytes_len);
+                            result_sender.send(mapped_result).await?;
+                        }
+                    } else {
+                        debug!("Batch eth_sendRawTransaction timed out; skipping this tick");
+                        report_sender.send(interval_start).await?;
+                        continue;
                     }
-                } else {
-                    debug!("Batch eth_sendRawTransaction timed out; skipping this tick");
-                    report_sender.send(interval_start).await?;
-                    continue;
                 }
             }
 
@@ -264,11 +322,11 @@ impl Spammer {
             };
 
             // Prepare batch of transactions for this interval.
-            let batch_entries = self.build_batch_entries(tx_count, nonce).await?;
+            let batch_entries = self.build_batch_entries(tx_count, &mut nonces).await?;
             let batch_size = batch_entries.len() as u64;
 
             debug!(
-                "Pool: {current_pool_size}/{TARGET_POOL_SIZE}, sending {batch_size} txs from nonce {nonce} (rate: {})",
+                "Pool: {current_pool_size}/{TARGET_POOL_SIZE}, sending {batch_size} txs (rate: {})",
                 self.max_rate
             );
 
@@ -290,7 +348,6 @@ impl Spammer {
                     }
 
                     txs_sent_total += batch_size;
-                    nonce += batch_size;
                 } else {
                     debug!("Batch eth_sendRawTransaction timed out; skipping this tick");
                 }
@@ -316,16 +373,34 @@ impl Spammer {
     async fn build_batch_entries(
         &self,
         tx_count: u64,
-        nonce: u64,
+        nonces: &mut HashMap<Address, u64>,
     ) -> Result<Vec<(Vec<serde_json::Value>, u64)>> {
         let mut batch_entries = Vec::with_capacity(tx_count as usize);
-        let mut next_nonce = nonce;
 
         for _ in 0..tx_count {
+            // Get the current signer by rotating through the list
+            let signer_idx = {
+                let mut idx = self.current_signer_index.lock().unwrap();
+                let current = *idx;
+                *idx = (*idx + 1) % self.signers.len();
+                current
+            };
+            let signer = &self.signers[signer_idx];
+
+            // Get and increment nonce for this signer
+            let nonce = nonces.get(&signer.address()).copied().unwrap_or(0);
+            nonces.insert(signer.address(), nonce + 1);
+
+            debug!(
+                "Adding tx to batch: signer={}, nonce={}",
+                signer.address(),
+                nonce
+            );
+
             let signed_tx = if let Some(ref payload) = self.contract_payload {
                 make_signed_contract_call_tx(
-                    &self.signer,
-                    next_nonce,
+                    signer,
+                    nonce,
                     payload.address,
                     &payload.function_sig,
                     payload.args.as_slice(),
@@ -333,16 +408,15 @@ impl Spammer {
                 )
                 .await?
             } else if self.blobs {
-                make_signed_eip4844_tx(&self.signer, next_nonce, self.chain_id).await?
+                make_signed_eip4844_tx(signer, nonce, self.chain_id).await?
             } else {
-                make_signed_eip1559_tx(&self.signer, next_nonce, self.chain_id).await?
+                make_signed_eip1559_tx(signer, nonce, self.chain_id).await?
             };
 
             let tx_bytes = signed_tx.encoded_2718();
             let tx_bytes_len = tx_bytes.len() as u64;
             let payload = hex::encode(tx_bytes);
             batch_entries.push((vec![json!(payload)], tx_bytes_len));
-            next_nonce += 1;
         }
 
         Ok(batch_entries)

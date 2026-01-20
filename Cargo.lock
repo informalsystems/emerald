@@ -2599,6 +2599,7 @@ dependencies = [
  "clap",
  "color-eyre",
  "ethereum_serde_utils",
+ "futures",
  "hex",
  "jsonrpsee-core",
  "jsonrpsee-http-client",

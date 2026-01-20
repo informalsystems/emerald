@@ -39,8 +39,8 @@ pub(crate) fn make_signer(index: u64) -> PrivateKeySigner {
         .expect("Failed to create wallet")
 }
 
-pub(crate) fn make_signers() -> Vec<PrivateKeySigner> {
-    (0..10).map(make_signer).collect()
+pub fn make_signers_with_count(num_accounts: u64) -> Vec<PrivateKeySigner> {
+    (0..num_accounts).map(make_signer).collect()
 }
 
 pub(crate) fn generate_genesis(
@@ -48,6 +48,7 @@ pub(crate) fn generate_genesis(
     poa_address_owner: &Option<String>,
     testnet: &bool,
     testnet_balance: &u64,
+    num_accounts: &u64,
     chain_id: &u64,
     evm_genesis_output_file: &str,
     emerald_genesis_output_file: &str,
@@ -57,6 +58,7 @@ pub(crate) fn generate_genesis(
         poa_address_owner,
         testnet,
         testnet_balance,
+        num_accounts,
         chain_id,
         evm_genesis_output_file,
     )?;
@@ -71,11 +73,12 @@ pub(crate) fn generate_evm_genesis(
     poa_address_owner: &Option<String>,
     testnet: &bool,
     testnet_balance: &u64,
+    num_accounts: &u64,
     chain_id: &u64,
     genesis_output_file: &str,
 ) -> Result<()> {
     let mut alloc = BTreeMap::new();
-    let signers = make_signers();
+    let signers = make_signers_with_count(*num_accounts);
     // If test addresses are requested, create them and pre-fund them
     if *testnet {
         // Create signers and get their addresses

@@ -1,7 +1,7 @@
 use alloy_primitives::Address;
 use clap::{Parser, Subcommand, ValueHint};
 use color_eyre::eyre::Result;
-use genesis::{generate_genesis, make_signers};
+use genesis::generate_genesis;
 use reqwest::Url;
 use spammer::Spammer;
 
@@ -27,6 +27,7 @@ impl Cli {
                 poa_owner_address,
                 devnet,
                 devnet_balance,
+                num_accounts,
                 chain_id,
                 evm_genesis_output,
                 emerald_genesis_output,
@@ -35,6 +36,7 @@ impl Cli {
                 poa_owner_address,
                 devnet,
                 devnet_balance,
+                num_accounts,
                 chain_id,
                 evm_genesis_output,
                 emerald_genesis_output,
@@ -90,6 +92,14 @@ pub enum Commands {
             help = "Balance for each testnet wallet (default: 15000)"
         )]
         devnet_balance: u64,
+
+        #[clap(
+            long,
+            short = 'n',
+            default_value_t = 10,
+            help = "Number of pre-funded accounts to generate (default: 10)"
+        )]
+        num_accounts: u64,
 
         #[clap(
             long,
@@ -149,8 +159,32 @@ pub struct SpamCmd {
     #[clap(long, default_value = "0")]
     signer_index: usize,
 
+    /// Range of signer indexes to use for multi-signer mode
+    #[clap(long)]
+    signer_indexes: Option<String>,
+
     #[clap(long, short)]
     chain_id: u64,
+}
+
+/// Parse signer indexes from a string that represents range
+fn parse_signer_indexes(range: &str) -> Result<Vec<usize>> {
+    let parts: Vec<&str> = range.split('-').collect();
+    if parts.len() != 2 {
+        return Err(color_eyre::eyre::eyre!(
+            "Invalid signer_indexes format. Expected 'start-end'"
+        ));
+    }
+    let start: usize = parts[0].parse()?;
+    let end: usize = parts[1].parse()?;
+    if start > end {
+        return Err(color_eyre::eyre::eyre!(
+            "Invalid signer_indexes range: start ({}) must be <= end ({})",
+            start,
+            end
+        ));
+    }
+    Ok((start..=end).collect())
 }
 
 impl SpamCmd {
@@ -163,8 +197,15 @@ impl SpamCmd {
             time,
             blobs,
             signer_index,
+            signer_indexes,
             chain_id,
         } = self;
+
+        let signer_indexes_vec = if let Some(ref range) = signer_indexes {
+            parse_signer_indexes(range)?
+        } else {
+            vec![*signer_index]
+        };
 
         let url: Url = rpc_url.parse()?;
         let config = spammer::SpammerConfig {
@@ -174,8 +215,9 @@ impl SpamCmd {
             batch_interval: *interval,
             blobs: *blobs,
             chain_id: *chain_id,
+            signer_indexes: signer_indexes_vec,
         };
-        Spammer::new(url, *signer_index, config)?.run().await
+        Spammer::new(url, config)?.run().await
     }
 }
 
@@ -313,6 +355,12 @@ pub struct SpamContractCmd {
 
     #[clap(long, default_value_t = 0)]
     signer_index: usize,
+
+    /// Range of signer indexes to use for multi-signer mode
+    /// When specified, transactions will rotate through these signers
+    #[clap(long)]
+    signer_indexes: Option<String>,
+
     #[clap(long, short)]
     chain_id: u64,
 }
@@ -329,8 +377,16 @@ impl SpamContractCmd {
             interval,
             time,
             signer_index,
+            signer_indexes,
             chain_id,
         } = self;
+
+        let signer_indexes_vec = if let Some(ref range) = signer_indexes {
+            parse_signer_indexes(range)?
+        } else {
+            vec![*signer_index]
+        };
+
         let url = format!("http://{rpc_url}").parse()?;
         let config = spammer::SpammerConfig {
             max_num_txs: *num_txs,
@@ -339,8 +395,9 @@ impl SpamContractCmd {
             batch_interval: *interval,
             blobs: false,
             chain_id: *chain_id,
+            signer_indexes: signer_indexes_vec,
         };
-        Spammer::new_contract(url, *signer_index, config, contract, function, args)?
+        Spammer::new_contract(url, config, contract, function, args)?
             .run()
             .await
     }

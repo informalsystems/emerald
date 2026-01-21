@@ -1436,6 +1436,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
+          "interval": "1s",
           "expr": "reth_transaction_pool_pending_pool_size_bytes",
           "instant": false,
           "legendFormat": "{{job}}",
@@ -1927,6 +1928,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
+          "interval": "1s",
           "expr": "reth_transaction_pool_queued_pool_transactions",
           "instant": false,
           "legendFormat": "{{job}}",
@@ -2754,6 +2756,6 @@
   "timezone": "",
   "title": "Malachite + Reth",
   "uid": "fedj8b0c1htdsb",
-  "version": 3,
+  "version": 4,
   "weekStart": ""
 }

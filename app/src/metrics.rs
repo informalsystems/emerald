@@ -317,11 +317,74 @@ impl Default for TxStatsMetrics {
     }
 }
 
+/// Engine metrics for tracking execution engine performance
+#[derive(Clone, Debug)]
+pub struct EngineMetrics(Arc<EngineMetricsInner>);
+
+impl Deref for EngineMetrics {
+    type Target = EngineMetricsInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug)]
+pub struct EngineMetricsInner {
+    /// Time between forkchoice_updated and get_payload (seconds)
+    pub fcu_to_get_payload_time: Gauge,
+}
+
+impl EngineMetricsInner {
+    pub fn new() -> Self {
+        Self {
+            fcu_to_get_payload_time: Gauge::default(),
+        }
+    }
+}
+
+impl Default for EngineMetricsInner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EngineMetrics {
+    pub fn new() -> Self {
+        Self(Arc::new(EngineMetricsInner::new()))
+    }
+
+    pub fn register(registry: &SharedRegistry) -> Self {
+        let metrics = Self::new();
+
+        registry.with_prefix("app_channel", |registry| {
+            registry.register(
+                "engine_fcu_to_get_payload_time",
+                "Time between forkchoice_updated and get_payload (seconds)",
+                metrics.fcu_to_get_payload_time.clone(),
+            );
+        });
+
+        metrics
+    }
+
+    pub fn observe_fcu_to_get_payload_time(&self, duration: Duration) {
+        self.fcu_to_get_payload_time.set(duration.as_millis() as i64);
+    }
+}
+
+impl Default for EngineMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Unified metrics container for all application metrics
 #[derive(Clone, Debug)]
 pub struct Metrics {
     pub db: DbMetrics,
     pub tx_stats: TxStatsMetrics,
+    pub engine: EngineMetrics,
 }
 
 impl Metrics {
@@ -329,6 +392,7 @@ impl Metrics {
         Self {
             db: DbMetrics::new(),
             tx_stats: TxStatsMetrics::new(),
+            engine: EngineMetrics::new(),
         }
     }
 
@@ -336,6 +400,7 @@ impl Metrics {
         Self {
             db: DbMetrics::register(registry),
             tx_stats: TxStatsMetrics::register(registry),
+            engine: EngineMetrics::register(registry),
         }
     }
 }

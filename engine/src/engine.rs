@@ -125,7 +125,7 @@ impl Engine {
         retry_config: &RetryConfig,
         fee_recipient: &Address,
         fork: Fork,
-    ) -> eyre::Result<ExecutionPayloadV3> {
+    ) -> eyre::Result<(ExecutionPayloadV3, Duration)> {
         debug!("🟠 current fork is {:?}", fork);
 
         debug!("🟠 generate_block on top of {:?}", latest_block);
@@ -165,6 +165,7 @@ impl Engine {
             }
         }
 
+        let fcu_start = std::time::Instant::now();
         let ForkchoiceUpdated {
             payload_status,
             payload_id,
@@ -179,7 +180,9 @@ impl Engine {
                 assert!(payload_id.is_some(), "Payload ID should be Some!");
                 let payload_id = payload_id.unwrap();
                 // See how payload is constructed: https://github.com/ethereum/consensus-specs/blob/v1.1.5/specs/merge/validator.md#block-proposal
-                Ok(self.api.get_payload(payload_id, fork).await?)
+                let payload = self.api.get_payload(payload_id, fork).await?;
+                let fcu_to_get_payload_time = fcu_start.elapsed();
+                Ok((payload, fcu_to_get_payload_time))
             }
             status => Err(eyre::eyre!("Invalid payload status: {}", status)),
         }

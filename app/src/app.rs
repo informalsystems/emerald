@@ -482,7 +482,7 @@ pub async fn run(
                             let latest_block =
                                 state.latest_block.expect("Head block hash is not set");
 
-                            let execution_payload = engine
+                            let (execution_payload, fcu_to_get_payload_time) = engine
                                 .generate_block(
                                     &Some(latest_block),
                                     &emerald_config.retry_config,
@@ -490,6 +490,11 @@ pub async fn run(
                                     state.get_fork(latest_block.timestamp),
                                 )
                                 .await?;
+
+                            state
+                                .metrics
+                                .engine
+                                .observe_fcu_to_get_payload_time(fcu_to_get_payload_time);
 
                             debug!("🌈 Got execution payload: {:?}", execution_payload);
 

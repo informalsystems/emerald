@@ -7,6 +7,15 @@ members = [
   "engine",
   "utils",
   "types",
+  "tests/mbt",
+]
+
+default-members = [
+  "app",
+  "cli",
+  "engine",
+  "utils",
+  "types",
 ]
 
 [workspace.package]

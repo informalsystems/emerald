@@ -84,7 +84,7 @@ for ((i = 0; i < NODES_COUNT; i++)); do
 
     echo "Waiting for Reth node $i on ${NODE_IP}:${PORT} to be ready..."
     until cast rpc --rpc-url "${NODE_IP}:${PORT}" net_listening > /dev/null 2>&1; do
-        sleep 1
+        sleep .1 # 100ms
     done
 
     ENODE=$(cast rpc --rpc-url "${NODE_IP}:${PORT}" admin_nodeInfo | jq -r .enode)

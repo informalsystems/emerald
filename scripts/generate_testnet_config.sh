@@ -27,6 +27,8 @@ EOF
     exit 2
 }
 
+ROOT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )/../" &> /dev/null && pwd )
+
 nodes=""
 testnet_config_dir=""
 node_keys=()
@@ -238,11 +240,11 @@ for ((i = 0; i < nodes; i++)); do
 moniker = "test-$i"
 execution_authrpc_address = "http://$NODE_IP:$ENGINE_PORT"
 engine_authrpc_address = "http://$NODE_IP:$AUTH_PORT"
-jwt_token_path = "./assets/jwtsecret"
+jwt_token_path = "$ROOT_DIR/assets/jwtsecret"
 retry_config.initial_delay = "100ms"
 retry_config.max_delay = "2s"
 retry_config.max_elapsed_time = "20s"
-eth_genesis_path="./assets/genesis.json"
+eth_genesis_path="$ROOT_DIR/assets/genesis.json"
 EOF
  # Set max_retain_blocks for pruning nodes
       if [[ ${#PRUNING_NODES[@]} -gt 0 && " ${PRUNING_NODES[@]} " =~ " ${i} " ]]; then

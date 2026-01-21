@@ -1,0 +1,25 @@
+[package]
+name    = "emerald-mbt"
+version = { workspace = true }
+edition = { workspace = true }
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+emerald                     = { workspace = true }
+malachitebft-eth-types      = { workspace = true }
+malachitebft-eth-engine     = { workspace = true }
+malachitebft-eth-cli        = { workspace = true }
+malachitebft-app-channel    = { workspace = true }
+malachitebft-core-consensus = { workspace = true }
+
+serde = { workspace = true }
+itf   = { workspace = true }
+tokio = { workspace = true }
+
+quint-connect = "0.1"
+anyhow        = "1.0"
+bimap         = "0.6.3"
+tempfile      = "3.23.0"

@@ -918,6 +918,39 @@ pub async fn on_process_synced_value(
     Ok(())
 }
 
+/// Handle GetDecidedValue messages from the consensus engine
+///
+/// Requests a previously decided value from the application's storage.
+///
+/// The application MUST respond with that value if available, or `None` otherwise.
+pub async fn on_get_decided_value(
+    get_decided_value: AppMsg<EmeraldContext>,
+    state: &mut State,
+    engine: &Engine,
+) -> eyre::Result<()> {
+    let AppMsg::GetDecidedValue { height, reply } = get_decided_value else {
+        unreachable!("on_decided_value called with non-GetDecidedValue message");
+    };
+
+    info!(%height, "🟢🟢 GetDecidedValue");
+
+    let earliest_height_available = state.get_earliest_height().await;
+    // Check if requested height is beyond our current height
+    let raw_decided_value = if (earliest_height_available..state.current_height).contains(&height) {
+        let earliest_unpruned = state.get_earliest_unpruned_height().await;
+        get_decided_value_for_sync(&state.store, engine, height, earliest_unpruned).await?
+    } else {
+        info!(%height, current_height = %state.current_height, "Requested height is >= current height or < earliest_height_available.");
+        None
+    };
+
+    if reply.send(raw_decided_value).is_err() {
+        error!("Failed to send GetDecidedValue reply");
+    }
+
+    Ok(())
+}
+
 pub async fn process_consensus_message(
     msg: AppMsg<EmeraldContext>,
     state: &mut State,
@@ -977,24 +1010,8 @@ pub async fn process_consensus_message(
         // then the engine might ask the application to provide with the value
         // that was decided at some lower height. In that case, we fetch it from our store
         // and send it to consensus.
-        AppMsg::GetDecidedValue { height, reply } => {
-            info!(%height, "🟢🟢 GetDecidedValue");
-
-            let earliest_height_available = state.get_earliest_height().await;
-            // Check if requested height is beyond our current height
-            let raw_decided_value = if (earliest_height_available..state.current_height)
-                .contains(&height)
-            {
-                let earliest_unpruned = state.get_earliest_unpruned_height().await;
-                get_decided_value_for_sync(&state.store, engine, height, earliest_unpruned).await?
-            } else {
-                info!(%height, current_height = %state.current_height, "Requested height is >= current height or < earliest_height_available.");
-                None
-            };
-
-            if reply.send(raw_decided_value).is_err() {
-                error!("Failed to send GetDecidedValue reply");
-            }
+        msg @ AppMsg::GetDecidedValue { .. } => {
+            on_get_decided_value(msg, state, engine).await?;
         }
 
         // In order to figure out if we can help a peer that is lagging behind,

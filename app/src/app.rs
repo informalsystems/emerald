@@ -7,7 +7,7 @@ use malachitebft_app_channel::app::engine::host::Next;
 use malachitebft_app_channel::app::streaming::StreamContent;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
-use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg, Reply};
+use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
 use malachitebft_eth_cli::config::EmeraldConfig;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
@@ -283,8 +283,12 @@ pub async fn on_consensus_ready(
     state: &mut State,
     engine: &Engine,
     emerald_config: &EmeraldConfig,
-    reply: Reply<(Height, ValidatorSet)>,
+    consensus_ready: AppMsg<EmeraldContext>,
 ) -> eyre::Result<()> {
+    let AppMsg::ConsensusReady { reply } = consensus_ready else {
+        unreachable!("on_consensus_ready called with non-ConsensusReady message");
+    };
+
     info!("🟢🟢 Consensus is ready");
 
     // Node start-up: https://hackmd.io/@danielrachi/engine_api#Node-startup
@@ -330,6 +334,113 @@ pub async fn on_consensus_ready(
     Ok(())
 }
 
+/// Handle StartedRound messages from the consensus engine
+pub async fn on_started_round(
+    state: &mut State,
+    engine: &Engine,
+    emerald_config: &EmeraldConfig,
+    started_round: AppMsg<EmeraldContext>,
+) -> eyre::Result<()> {
+    let AppMsg::StartedRound {
+        height,
+        round,
+        proposer,
+        role,
+        reply_value,
+    } = started_round
+    else {
+        unreachable!("on_started_round called with non-StartedRound message");
+    };
+
+    info!(%height, %round, %proposer, ?role, "🟢🟢 Started round");
+
+    // We can use that opportunity to update our internal state
+    state.current_height = height;
+    state.current_round = round;
+    state.current_proposer = Some(proposer);
+
+    if state.current_round == Round::ZERO {
+        state.last_block_time = Instant::now();
+    }
+
+    let pending_parts = state
+        .store
+        .get_pending_proposal_parts(height, round)
+        .await?;
+    debug!(
+        %height,
+        %round,
+        "Found {} pending proposal parts, validating...",
+        pending_parts.len()
+    );
+
+    for parts in &pending_parts {
+        match state.validate_proposal_parts(parts) {
+            Ok(()) => {
+                // Validate execution payload with the execution engine before storing it as undecided proposal
+                let (value, data) = assemble_value_from_parts(parts.clone());
+
+                let validity = state
+                    .validate_execution_payload(
+                        &data,
+                        parts.height,
+                        parts.round,
+                        engine,
+                        &emerald_config.retry_config,
+                    )
+                    .await?;
+
+                if validity == Validity::Invalid {
+                    warn!(
+                        height = %parts.height,
+                        round = %parts.round,
+                        "Pending proposal has invalid execution payload, rejecting"
+                    );
+                    continue;
+                }
+
+                state.store.store_undecided_proposal(value.clone()).await?;
+
+                state
+                    .store
+                    .store_undecided_block_data(value.height, value.round, value.value.id(), data)
+                    .await?;
+                info!(
+                    height = %parts.height,
+                    round = %parts.round,
+                    proposer = %parts.proposer,
+                    "Moved valid pending proposal to undecided after validation"
+                );
+            }
+            Err(error) => {
+                // Validation failed, log error
+                error!(
+                    height = %parts.height,
+                    round = %parts.round,
+                    proposer = %parts.proposer,
+                    error = ?error,
+                    "Removed invalid pending proposal"
+                );
+            }
+        } // Remove the parts from pending
+        state
+            .store
+            .remove_pending_proposal_parts(parts.clone())
+            .await?;
+    }
+
+    // If we have already built or seen values for this height and round,
+    // send them all back to consensus. This may happen when we are restarting after a crash.
+    let proposals = state.store.get_undecided_proposals(height, round).await?;
+    debug!(%height, %round, "Found {} undecided proposals", proposals.len());
+
+    if reply_value.send(proposals).is_err() {
+        error!("Failed to send undecided proposals");
+    }
+
+    Ok(())
+}
+
 pub async fn process_consensus_message(
     msg: AppMsg<EmeraldContext>,
     state: &mut State,
@@ -340,104 +451,14 @@ pub async fn process_consensus_message(
     match msg {
         // The first message to handle is the `ConsensusReady` message, signaling to the app
         // that Malachite is ready to start consensus
-        AppMsg::ConsensusReady { reply } => {
-            on_consensus_ready(state, engine, emerald_config, reply).await?;
+        msg @ AppMsg::ConsensusReady { .. } => {
+            on_consensus_ready(state, engine, emerald_config, msg).await?;
         }
 
         // The next message to handle is the `StartRound` message, signaling to the app
         // that consensus has entered a new round (including the initial round 0)
-        AppMsg::StartedRound {
-            height,
-            round,
-            proposer,
-            role,
-            reply_value,
-        } => {
-            info!(%height, %round, %proposer, ?role, "🟢🟢 Started round");
-
-            // We can use that opportunity to update our internal state
-            state.current_height = height;
-            state.current_round = round;
-            state.current_proposer = Some(proposer);
-
-            if state.current_round == Round::ZERO {
-                state.last_block_time = Instant::now();
-            }
-
-            let pending_parts = state
-                .store
-                .get_pending_proposal_parts(height, round)
-                .await?;
-            debug!(%height, %round, "Found {} pending proposal parts, validating...", pending_parts.len());
-
-            for parts in &pending_parts {
-                match state.validate_proposal_parts(parts) {
-                    Ok(()) => {
-                        // Validate execution payload with the execution engine before storing it as undecided proposal
-                        let (value, data) = assemble_value_from_parts(parts.clone());
-
-                        let validity = state
-                            .validate_execution_payload(
-                                &data,
-                                parts.height,
-                                parts.round,
-                                engine,
-                                &emerald_config.retry_config,
-                            )
-                            .await?;
-
-                        if validity == Validity::Invalid {
-                            warn!(
-                                height = %parts.height,
-                                round = %parts.round,
-                                "Pending proposal has invalid execution payload, rejecting"
-                            );
-                            continue;
-                        }
-
-                        state.store.store_undecided_proposal(value.clone()).await?;
-
-                        state
-                            .store
-                            .store_undecided_block_data(
-                                value.height,
-                                value.round,
-                                value.value.id(),
-                                data,
-                            )
-                            .await?;
-                        info!(
-                            height = %parts.height,
-                            round = %parts.round,
-                            proposer = %parts.proposer,
-                            "Moved valid pending proposal to undecided after validation"
-                        );
-                    }
-                    Err(error) => {
-                        // Validation failed, log error
-                        error!(
-                            height = %parts.height,
-                            round = %parts.round,
-                            proposer = %parts.proposer,
-                            error = ?error,
-                            "Removed invalid pending proposal"
-                        );
-                    }
-                } // Remove the parts from pending
-                state
-                    .store
-                    .remove_pending_proposal_parts(parts.clone())
-                    .await?;
-            }
-
-            // If we have already built or seen values for this height and round,
-            // send them all back to consensus. This may happen when we are restarting after a crash.
-            let proposals = state.store.get_undecided_proposals(height, round).await?;
-            debug!(%height, %round, "Found {} undecided proposals", proposals.len());
-
-            if reply_value.send(proposals).is_err() {
-                error!("Failed to send undecided proposals");
-            }
+        msg @ AppMsg::StartedRound { .. } => {
+            on_started_round(state, engine, emerald_config, msg).await?;
         }
 
         // At some point, we may end up being the proposer for that round, and the consensus engine

@@ -265,6 +265,7 @@ impl Spammer {
                 // Check for nonce gaps for all signers (in batches to avoid rate limiting)
                 const NONCE_CHECK_BATCH_SIZE: usize = 100;
                 let mut nonce_results = Vec::new();
+                let mut nonce_check_failed = false;
 
                 for chunk in self.signers.chunks(NONCE_CHECK_BATCH_SIZE) {
                     let nonce_checks: Vec<_> = chunk
@@ -272,19 +273,32 @@ impl Spammer {
                         .map(|signer| {
                             let current_nonce = nonces.get(&signer.address()).copied().unwrap_or(0);
                             async move {
-                                let on_chain_nonce = self.get_next_nonce(signer.address()).await?;
-                                Ok::<_, eyre::Error>((signer.address(), current_nonce, on_chain_nonce))
+                                match self.get_next_nonce(signer.address()).await {
+                                    Ok(on_chain_nonce) => Some((signer.address(), current_nonce, on_chain_nonce)),
+                                    Err(_) => None, // Skip on timeout/error
+                                }
                             }
                         })
                         .collect();
 
                     let batch_results = futures::future::join_all(nonce_checks).await;
-                    nonce_results.extend(batch_results);
+                    let successful: Vec<_> = batch_results.into_iter().flatten().collect();
+                    if successful.len() < chunk.len() {
+                        nonce_check_failed = true;
+                    }
+                    nonce_results.extend(successful);
+                }
+
+                if nonce_check_failed {
+                    debug!("Some nonce checks timed out, skipping this interval");
+                    let _ = report_sender.send(interval_start).await;
+                    continue;
                 }
 
                 let mut recovery_performed = false;
-                for result in nonce_results {
-                    let (address, current_nonce, on_chain_nonce) = result?;
+                let mut skip_interval = false;
+
+                for (address, current_nonce, on_chain_nonce) in nonce_results {
                     let nonce_span = current_nonce.saturating_sub(on_chain_nonce);
                     if nonce_span > 0 {
                         info!("Signer {address}: current nonce={current_nonce}, on-chain nonce={on_chain_nonce}. Filling gap with {} txs", nonce_span);
@@ -293,32 +307,38 @@ impl Spammer {
                         if let Some(signer) = self.signers.iter().find(|s| s.address() == address) {
                             // Build txs specifically for this signer to fill the gap
                             // Send nonces from on_chain_nonce to current_nonce - 1
-                            let batch_entries = self.build_batch_entries_for_signer(signer, on_chain_nonce, current_nonce).await?;
-                            if let Some(results) = self.send_raw_batch(&batch_entries).await? {
-                                if results.len() != batch_entries.len() {
-                                    return Err(eyre::eyre!(
-                                        "Batch response count {} does not match request count {}",
-                                        results.len(),
-                                        batch_entries.len()
-                                    ));
+                            let batch_entries = match self.build_batch_entries_for_signer(signer, on_chain_nonce, current_nonce).await {
+                                Ok(entries) => entries,
+                                Err(e) => {
+                                    debug!("Failed to build recovery batch: {e}, skipping this interval");
+                                    skip_interval = true;
+                                    break;
                                 }
-
-                                // Report individual results
-                                for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
-                                    let mapped_result = result.map(|_| tx_bytes_len);
-                                    result_sender.send(mapped_result).await?;
+                            };
+                            match self.send_raw_batch(&batch_entries).await {
+                                Ok(Some(results)) => {
+                                    // Report individual results
+                                    for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
+                                        let mapped_result = result.map(|_| tx_bytes_len);
+                                        let _ = result_sender.send(mapped_result).await;
+                                    }
+                                    recovery_performed = true;
                                 }
-                                recovery_performed = true;
-                            } else {
-                                debug!("Batch eth_sendRawTransaction timed out; skipping this tick");
+                                Ok(None) | Err(_) => {
+                                    debug!("Recovery batch send failed/timed out, skipping this interval");
+                                    skip_interval = true;
+                                    break;
+                                }
                             }
                         }
                     }
                 }
 
-                // If recovery was performed, skip normal batch and wait for next interval
-                if recovery_performed {
-                    info!("Recovery performed, skipping normal batch for this interval");
+                // If recovery was performed or failed, skip normal batch
+                if recovery_performed || skip_interval {
+                    if recovery_performed {
+                        info!("Recovery performed, skipping normal batch for this interval");
+                    }
                     let _ = report_sender.send(interval_start).await;
                     continue;
                 }

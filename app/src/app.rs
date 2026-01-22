@@ -601,6 +601,323 @@ pub async fn on_received_proposal_part(
     Ok(())
 }
 
+/// Handle Decided messages from the consensus engine
+///
+/// Notifies the application that consensus has decided on a value.
+///
+/// This message includes a commit certificate containing the ID of
+/// the value that was decided on, the height and round at which it was decided,
+/// and the aggregated signatures of the validators that committed to it.
+/// It also includes to the vote extensions received for that height.
+///
+/// In response to this message, the application MUST send a [`Next`]
+/// message back to consensus, instructing it to either start the next height if
+/// the application was able to commit the decided value, or to restart the current height
+/// otherwise.
+///
+/// If the application does not reply, consensus will stall.
+pub async fn on_decided(
+    decided: AppMsg<EmeraldContext>,
+    state: &mut State,
+    engine: &Engine,
+    emerald_config: &EmeraldConfig,
+) -> eyre::Result<()> {
+    let AppMsg::Decided {
+        certificate, reply, ..
+    } = decided
+    else {
+        unreachable!("on_decided called with non-Decided message");
+    };
+
+    let height = certificate.height;
+    let round = certificate.round;
+    let value_id = certificate.value_id;
+    info!(
+        %height, %round, value = %certificate.value_id,
+        "🟢🟢 Consensus has decided on value"
+    );
+
+    let block_bytes = state
+        .get_block_data(height, round, value_id)
+        .await
+        .ok_or_eyre("app: certificate should have associated block data")?;
+    debug!("🎁 block size: {:?}, height: {}", block_bytes.len(), height);
+
+    // Decode bytes into execution payload (a block)
+    let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_bytes).unwrap();
+
+    let parent_block_hash = execution_payload.payload_inner.payload_inner.parent_hash;
+
+    let new_block_hash = execution_payload.payload_inner.payload_inner.block_hash;
+
+    assert_eq!(state.latest_block.unwrap().block_hash, parent_block_hash);
+
+    let new_block_timestamp = execution_payload.timestamp();
+    let new_block_number = execution_payload.payload_inner.payload_inner.block_number;
+
+    let new_block_prev_randao = execution_payload.payload_inner.payload_inner.prev_randao;
+
+    // Log stats
+    let tx_count = execution_payload
+        .payload_inner
+        .payload_inner
+        .transactions
+        .len();
+    state.txs_count += tx_count as u64;
+    state.chain_bytes += block_bytes.len() as u64;
+    let elapsed_time = state.start_time.elapsed();
+
+    state.metrics.tx_stats.add_txs(tx_count as u64);
+    state
+        .metrics
+        .tx_stats
+        .add_chain_bytes(block_bytes.len() as u64);
+    state
+        .metrics
+        .tx_stats
+        .set_txs_per_second(state.txs_count as f64 / elapsed_time.as_secs_f64());
+    state
+        .metrics
+        .tx_stats
+        .set_bytes_per_second(state.chain_bytes as f64 / elapsed_time.as_secs_f64());
+    state.metrics.tx_stats.set_block_tx_count(tx_count as u64);
+    state
+        .metrics
+        .tx_stats
+        .set_block_size(block_bytes.len() as u64);
+
+    // Persist cumulative metrics to database for crash recovery
+    state
+        .store
+        .store_cumulative_metrics(state.txs_count, state.chain_bytes, elapsed_time.as_secs())
+        .await?;
+
+    info!(
+        "👉 stats at height {}: #txs={}, txs/s={:.2}, chain_bytes={}, bytes/s={:.2}",
+        height,
+        state.txs_count,
+        state.txs_count as f64 / elapsed_time.as_secs_f64(),
+        state.chain_bytes,
+        state.chain_bytes as f64 / elapsed_time.as_secs_f64(),
+    );
+
+    let tx_count: usize = execution_payload
+        .payload_inner
+        .payload_inner
+        .transactions
+        .len();
+    debug!("🦄 Block at height {height} contains {tx_count} transactions");
+
+    // Extract block header
+    let block_header = extract_block_header(&execution_payload);
+    let block_header_bytes = Bytes::from(block_header.as_ssz_bytes());
+
+    // Collect hashes from blob transactions
+    let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
+        eyre::eyre!(
+            "Failed to convert decided ExecutionPayloadV3 to Block at height {}: {}",
+            height,
+            e
+        )
+    })?;
+    let versioned_hashes: Vec<BlockHash> =
+        block.body.blob_versioned_hashes_iter().copied().collect();
+
+    // Get validation status from cache or call newPayload
+    let validity = if let Some(cached) = state.validated_cache_mut().get(&new_block_hash) {
+        cached
+    } else {
+        let payload_status = engine
+            .notify_new_block(execution_payload, versioned_hashes)
+            .await?;
+
+        let validity = if payload_status.status.is_valid() {
+            Validity::Valid
+        } else {
+            Validity::Invalid
+        };
+
+        state.validated_cache_mut().insert(new_block_hash, validity);
+        validity
+    };
+
+    if validity == Validity::Invalid {
+        return Err(eyre!(
+            "Block validation failed for hash: {}",
+            new_block_hash
+        ));
+    }
+
+    debug!(
+        "💡 Block validated at height {} with hash: {}",
+        height, new_block_hash
+    );
+
+    // Notify the execution client (EL) of the new block.
+    // Update the execution head state to this block.
+    let latest_valid_hash = engine
+        .set_latest_forkchoice_state(new_block_hash, &emerald_config.retry_config)
+        .await?;
+    debug!(
+        "🚀 Forkchoice updated to height {} for block hash={} and latest_valid_hash={}",
+        height, new_block_hash, latest_valid_hash
+    );
+
+    // When that happens, we store the decided value in our store
+    // TODO: we should return an error reply if commit fails
+    state.commit(certificate, block_header_bytes).await?;
+    let old_hash = state
+        .latest_block
+        .ok_or_eyre("missing latest block in state")?
+        .block_hash;
+    // Save the latest block
+    state.latest_block = Some(ExecutionBlock {
+        block_hash: new_block_hash,
+        block_number: new_block_number,
+        parent_hash: old_hash,
+        timestamp: new_block_timestamp, // Note: This was a fix related to the sync reactor
+        prev_randao: new_block_prev_randao,
+    });
+
+    let new_validator_set =
+        read_validators_from_contract(engine.eth.url().as_ref(), &latest_valid_hash).await?;
+    debug!("🌈 Got validator set: {:?}", new_validator_set);
+    state.set_validator_set(state.current_height, new_validator_set);
+
+    // And then we instruct consensus to start the next height
+    if reply
+        .send(Next::Start(
+            state.current_height,
+            state
+                .get_validator_set(state.current_height)
+                .ok_or_eyre("Validator set not found for current height {state.current_height}")?
+                .clone(),
+        ))
+        .is_err()
+    {
+        error!("Failed to send Decided reply");
+    }
+
+    Ok(())
+}
+
+/// Handle ProcessSyncedValue messages from the consensus engine
+///
+/// Notifies the application that a value has been synced from the network.
+/// This may happen when the node is catching up with the network.
+///
+/// If a value can be decoded from the bytes provided, then the application MUST reply
+/// to this message with the decoded value. Otherwise, it MUST reply with `None`.
+pub async fn on_process_synced_value(
+    process_synced_value: AppMsg<EmeraldContext>,
+    state: &mut State,
+    engine: &Engine,
+    emerald_config: &EmeraldConfig,
+) -> eyre::Result<()> {
+    let AppMsg::ProcessSyncedValue {
+        height,
+        round,
+        proposer,
+        value_bytes,
+        reply,
+    } = process_synced_value
+    else {
+        unreachable!("on_process_synced_value called with non-ProcessSyncedValue message");
+    };
+
+    info!(%height, %round, "🟢🟢 Processing synced value");
+
+    let value = decode_value(value_bytes);
+
+    // Extract execution payload from the synced value for validation
+    let block_bytes = value.extensions.clone();
+    let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_bytes).map_err(|e| {
+        eyre::eyre!(
+            "Failed to decode synced ExecutionPayloadV3 at height {}: {:?}",
+            height,
+            e
+        )
+    })?;
+    let new_block_hash = execution_payload.payload_inner.payload_inner.block_hash;
+
+    // Collect hashes from blob transactions
+    let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
+        eyre::eyre!(
+            "Failed to convert synced ExecutionPayloadV3 to Block at height {}: {}",
+            height,
+            e
+        )
+    })?;
+    let versioned_hashes: Vec<BlockHash> =
+        block.body.blob_versioned_hashes_iter().copied().collect();
+
+    // Validate the synced block
+    let validity = validate_payload(
+        state.validated_cache_mut(),
+        engine,
+        &execution_payload,
+        &versioned_hashes,
+        &emerald_config.retry_config,
+        height,
+        round,
+    )
+    .await?;
+
+    if validity == Validity::Invalid {
+        // Reject invalid blocks - don't store or reply with them
+        if reply
+            .send(Some(ProposedValue {
+                height,
+                round,
+                valid_round: Round::Nil,
+                proposer,
+                value,
+                validity: Validity::Invalid,
+            }))
+            .is_err()
+        {
+            error!("Failed to send ProcessSyncedValue rejection reply");
+        }
+        return Ok(());
+    }
+
+    debug!(
+        "💡 Sync block validated at height {} with hash: {}",
+        height, new_block_hash
+    );
+    let proposed_value: ProposedValue<EmeraldContext> = ProposedValue {
+        height,
+        round,
+        valid_round: Round::Nil,
+        proposer,
+        value,
+        validity: Validity::Valid,
+    };
+
+    if let Err(e) = state
+        .store
+        .store_undecided_block_data(height, round, proposed_value.value.id(), block_bytes)
+        .await
+    {
+        error!(%height, %round, error = %e, "Failed to store synced block data");
+    }
+    // Store the synced value and block data
+    if let Err(e) = state
+        .store
+        .store_undecided_proposal(proposed_value.clone())
+        .await
+    {
+        error!(%height, %round, error = %e, "Failed to store synced value");
+    }
+
+    // Send to consensus to see if it has been decided on
+    if reply.send(Some(proposed_value)).is_err() {
+        error!(%height, %round, "Failed to send ProcessSyncedValue reply");
+    }
+
+    Ok(())
+}
+
 pub async fn process_consensus_message(
     msg: AppMsg<EmeraldContext>,
     state: &mut State,
@@ -641,184 +958,8 @@ pub async fn process_consensus_message(
         // providing it with a commit certificate which contains the ID of the value
         // that was decided on as well as the set of commits for that value,
         // ie. the precommits together with their (aggregated) signatures.
-        AppMsg::Decided {
-            certificate, reply, ..
-        } => {
-            let height = certificate.height;
-            let round = certificate.round;
-            let value_id = certificate.value_id;
-            info!(
-                %height, %round, value = %certificate.value_id,
-                "🟢🟢 Consensus has decided on value"
-            );
-
-            let block_bytes = state
-                .get_block_data(height, round, value_id)
-                .await
-                .ok_or_eyre("app: certificate should have associated block data")?;
-            debug!("🎁 block size: {:?}, height: {}", block_bytes.len(), height);
-
-            // Decode bytes into execution payload (a block)
-            let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_bytes).unwrap();
-
-            let parent_block_hash = execution_payload.payload_inner.payload_inner.parent_hash;
-
-            let new_block_hash = execution_payload.payload_inner.payload_inner.block_hash;
-
-            assert_eq!(state.latest_block.unwrap().block_hash, parent_block_hash);
-
-            let new_block_timestamp = execution_payload.timestamp();
-            let new_block_number = execution_payload.payload_inner.payload_inner.block_number;
-
-            let new_block_prev_randao = execution_payload.payload_inner.payload_inner.prev_randao;
-
-            // Log stats
-            let tx_count = execution_payload
-                .payload_inner
-                .payload_inner
-                .transactions
-                .len();
-            state.txs_count += tx_count as u64;
-            state.chain_bytes += block_bytes.len() as u64;
-            let elapsed_time = state.start_time.elapsed();
-
-            state.metrics.tx_stats.add_txs(tx_count as u64);
-            state
-                .metrics
-                .tx_stats
-                .add_chain_bytes(block_bytes.len() as u64);
-            state
-                .metrics
-                .tx_stats
-                .set_txs_per_second(state.txs_count as f64 / elapsed_time.as_secs_f64());
-            state
-                .metrics
-                .tx_stats
-                .set_bytes_per_second(state.chain_bytes as f64 / elapsed_time.as_secs_f64());
-            state.metrics.tx_stats.set_block_tx_count(tx_count as u64);
-            state
-                .metrics
-                .tx_stats
-                .set_block_size(block_bytes.len() as u64);
-
-            // Persist cumulative metrics to database for crash recovery
-            state
-                .store
-                .store_cumulative_metrics(
-                    state.txs_count,
-                    state.chain_bytes,
-                    elapsed_time.as_secs(),
-                )
-                .await?;
-
-            info!(
-                "👉 stats at height {}: #txs={}, txs/s={:.2}, chain_bytes={}, bytes/s={:.2}",
-                height,
-                state.txs_count,
-                state.txs_count as f64 / elapsed_time.as_secs_f64(),
-                state.chain_bytes,
-                state.chain_bytes as f64 / elapsed_time.as_secs_f64(),
-            );
-
-            let tx_count: usize = execution_payload
-                .payload_inner
-                .payload_inner
-                .transactions
-                .len();
-            debug!("🦄 Block at height {height} contains {tx_count} transactions");
-
-            // Extract block header
-            let block_header = extract_block_header(&execution_payload);
-            let block_header_bytes = Bytes::from(block_header.as_ssz_bytes());
-
-            // Collect hashes from blob transactions
-            let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
-                eyre::eyre!(
-                    "Failed to convert decided ExecutionPayloadV3 to Block at height {}: {}",
-                    height,
-                    e
-                )
-            })?;
-            let versioned_hashes: Vec<BlockHash> =
-                block.body.blob_versioned_hashes_iter().copied().collect();
-
-            // Get validation status from cache or call newPayload
-            let validity = if let Some(cached) = state.validated_cache_mut().get(&new_block_hash) {
-                cached
-            } else {
-                let payload_status = engine
-                    .notify_new_block(execution_payload, versioned_hashes)
-                    .await?;
-
-                let validity = if payload_status.status.is_valid() {
-                    Validity::Valid
-                } else {
-                    Validity::Invalid
-                };
-
-                state.validated_cache_mut().insert(new_block_hash, validity);
-                validity
-            };
-
-            if validity == Validity::Invalid {
-                return Err(eyre!(
-                    "Block validation failed for hash: {}",
-                    new_block_hash
-                ));
-            }
-
-            debug!(
-                "💡 Block validated at height {} with hash: {}",
-                height, new_block_hash
-            );
-
-            // Notify the execution client (EL) of the new block.
-            // Update the execution head state to this block.
-            let latest_valid_hash = engine
-                .set_latest_forkchoice_state(new_block_hash, &emerald_config.retry_config)
-                .await?;
-            debug!(
-                "🚀 Forkchoice updated to height {} for block hash={} and latest_valid_hash={}",
-                height, new_block_hash, latest_valid_hash
-            );
-
-            // When that happens, we store the decided value in our store
-            // TODO: we should return an error reply if commit fails
-            state.commit(certificate, block_header_bytes).await?;
-            let old_hash = state
-                .latest_block
-                .ok_or_eyre("missing latest block in state")?
-                .block_hash;
-            // Save the latest block
-            state.latest_block = Some(ExecutionBlock {
-                block_hash: new_block_hash,
-                block_number: new_block_number,
-                parent_hash: old_hash,
-                timestamp: new_block_timestamp, // Note: This was a fix related to the sync reactor
-                prev_randao: new_block_prev_randao,
-            });
-
-            let new_validator_set =
-                read_validators_from_contract(engine.eth.url().as_ref(), &latest_valid_hash)
-                    .await?;
-            debug!("🌈 Got validator set: {:?}", new_validator_set);
-            state.set_validator_set(state.current_height, new_validator_set);
-
-            // And then we instruct consensus to start the next height
-            if reply
-                .send(Next::Start(
-                    state.current_height,
-                    state
-                        .get_validator_set(state.current_height)
-                        .ok_or_eyre(
-                            "Validator set not found for current height {state.current_height}",
-                        )?
-                        .clone(),
-                ))
-                .is_err()
-            {
-                error!("Failed to send Decided reply");
-            }
+        msg @ AppMsg::Decided { .. } => {
+            on_decided(msg, state, engine, emerald_config).await?;
         }
 
         // It may happen that our node is lagging behind its peers. In that case,
@@ -827,103 +968,8 @@ pub async fn process_consensus_message(
         // for the heights in between the one we are currently at (included) and the one
         // that they are at. When the engine receives such a value, it will forward to the application
         // to decode it from its wire format and send back the decoded value to consensus.
-        AppMsg::ProcessSyncedValue {
-            height,
-            round,
-            proposer,
-            value_bytes,
-            reply,
-        } => {
-            info!(%height, %round, "🟢🟢 Processing synced value");
-
-            let value = decode_value(value_bytes);
-
-            // Extract execution payload from the synced value for validation
-            let block_bytes = value.extensions.clone();
-            let execution_payload =
-                ExecutionPayloadV3::from_ssz_bytes(&block_bytes).map_err(|e| {
-                    eyre::eyre!(
-                        "Failed to decode synced ExecutionPayloadV3 at height {}: {:?}",
-                        height,
-                        e
-                    )
-                })?;
-            let new_block_hash = execution_payload.payload_inner.payload_inner.block_hash;
-
-            // Collect hashes from blob transactions
-            let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
-                eyre::eyre!(
-                    "Failed to convert synced ExecutionPayloadV3 to Block at height {}: {}",
-                    height,
-                    e
-                )
-            })?;
-            let versioned_hashes: Vec<BlockHash> =
-                block.body.blob_versioned_hashes_iter().copied().collect();
-
-            // Validate the synced block
-            let validity = validate_payload(
-                state.validated_cache_mut(),
-                engine,
-                &execution_payload,
-                &versioned_hashes,
-                &emerald_config.retry_config,
-                height,
-                round,
-            )
-            .await?;
-
-            if validity == Validity::Invalid {
-                // Reject invalid blocks - don't store or reply with them
-                if reply
-                    .send(Some(ProposedValue {
-                        height,
-                        round,
-                        valid_round: Round::Nil,
-                        proposer,
-                        value,
-                        validity: Validity::Invalid,
-                    }))
-                    .is_err()
-                {
-                    error!("Failed to send ProcessSyncedValue rejection reply");
-                }
-                return Ok(());
-            }
-
-            debug!(
-                "💡 Sync block validated at height {} with hash: {}",
-                height, new_block_hash
-            );
-            let proposed_value: ProposedValue<EmeraldContext> = ProposedValue {
-                height,
-                round,
-                valid_round: Round::Nil,
-                proposer,
-                value,
-                validity: Validity::Valid,
-            };
-
-            if let Err(e) = state
-                .store
-                .store_undecided_block_data(height, round, proposed_value.value.id(), block_bytes)
-                .await
-            {
-                error!(%height, %round, error = %e, "Failed to store synced block data");
-            }
-            // Store the synced value and block data
-            if let Err(e) = state
-                .store
-                .store_undecided_proposal(proposed_value.clone())
-                .await
-            {
-                error!(%height, %round, error = %e, "Failed to store synced value");
-            }
-
-            // Send to consensus to see if it has been decided on
-            if reply.send(Some(proposed_value)).is_err() {
-                error!(%height, %round, "Failed to send ProcessSyncedValue reply");
-            }
+        msg @ AppMsg::ProcessSyncedValue { .. } => {
+            on_process_synced_value(msg, state, engine, emerald_config).await?;
         }
 
         // If, on the other hand, we are not lagging behind but are instead asked by one of

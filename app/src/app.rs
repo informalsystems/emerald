@@ -457,7 +457,7 @@ pub async fn on_started_round(
 pub async fn on_get_value(
     get_value: AppMsg<EmeraldContext>,
     state: &mut State,
-    channels: &mut Channels<EmeraldContext>,
+    channels: &Channels<EmeraldContext>,
     engine: &Engine,
     emerald_config: &EmeraldConfig,
 ) -> eyre::Result<()> {
@@ -925,7 +925,7 @@ pub async fn on_process_synced_value(
 /// The application MUST respond with that value if available, or `None` otherwise.
 pub async fn on_get_decided_value(
     get_decided_value: AppMsg<EmeraldContext>,
-    state: &mut State,
+    state: &State,
     engine: &Engine,
 ) -> eyre::Result<()> {
     let AppMsg::GetDecidedValue { height, reply } = get_decided_value else {
@@ -958,7 +958,7 @@ pub async fn on_get_decided_value(
 /// The application MUST respond with its earliest available height.
 pub async fn on_get_history_min_height(
     get_history_min_height: AppMsg<EmeraldContext>,
-    state: &mut State,
+    state: &State,
 ) -> eyre::Result<()> {
     let AppMsg::GetHistoryMinHeight { reply } = get_history_min_height else {
         unreachable!("on_get_history_min_height called with non-GetHistoryMinHeight message");

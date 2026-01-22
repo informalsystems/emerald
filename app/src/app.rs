@@ -279,11 +279,16 @@ pub async fn read_validators_from_contract(
 }
 
 /// Handle ConsensusReady messages from the consensus engine
+///
+/// Notifies the application that consensus is ready.
+///
+/// The application MUST reply with a message to instruct
+/// consensus to start at a given height.
 pub async fn on_consensus_ready(
+    consensus_ready: AppMsg<EmeraldContext>,
     state: &mut State,
     engine: &Engine,
     emerald_config: &EmeraldConfig,
-    consensus_ready: AppMsg<EmeraldContext>,
 ) -> eyre::Result<()> {
     let AppMsg::ConsensusReady { reply } = consensus_ready else {
         unreachable!("on_consensus_ready called with non-ConsensusReady message");
@@ -335,11 +340,13 @@ pub async fn on_consensus_ready(
 }
 
 /// Handle StartedRound messages from the consensus engine
+///
+/// Notifies the application that a new consensus round has begun.
 pub async fn on_started_round(
+    started_round: AppMsg<EmeraldContext>,
     state: &mut State,
     engine: &Engine,
     emerald_config: &EmeraldConfig,
-    started_round: AppMsg<EmeraldContext>,
 ) -> eyre::Result<()> {
     let AppMsg::StartedRound {
         height,
@@ -441,6 +448,114 @@ pub async fn on_started_round(
     Ok(())
 }
 
+/// Handle GetValue messages from the consensus engine
+///
+/// Requests the application to build a value for consensus to propose.
+///
+/// The application MUST reply to this message with the requested value
+/// within the specified timeout duration.
+pub async fn on_get_value(
+    get_value: AppMsg<EmeraldContext>,
+    state: &mut State,
+    channels: &mut Channels<EmeraldContext>,
+    engine: &Engine,
+    emerald_config: &EmeraldConfig,
+) -> eyre::Result<()> {
+    let AppMsg::GetValue {
+        height,
+        round,
+        timeout,
+        reply,
+    } = get_value
+    else {
+        unreachable!("on_get_value called with non-GetValue message");
+    };
+
+    // NOTE: We can ignore the timeout as we are building the value right away.
+    // If we were let's say reaping as many txes from a mempool and executing them,
+    // then we would need to respect the timeout and stop at a certain point.
+
+    info!(%height, %round, "🟢🟢 Consensus is requesting a value to propose");
+
+    // Here it is important that, if we have previously built a value for this height and round,
+    // we send back the very same value.
+    let (proposal, bytes) = match state.get_previously_built_value(height, round).await? {
+        Some(proposal) => {
+            info!(value = %proposal.value.id(), "Re-using previously built value");
+            // Fetch the block data for the previously built value
+            let bytes = state
+                .store
+                .get_block_data(height, round, proposal.value.id())
+                .await?
+                .ok_or_else(|| eyre!("Block data not found for previously built value"))?;
+            (proposal, bytes)
+        }
+        None => {
+            // Check if the execution client is syncing and behind the consensus height
+            let (is_syncing, highest_chain_height) = engine.is_syncing().await?;
+            if is_syncing && highest_chain_height >= height.as_u64() {
+                warn!(
+                                    "⚠️  Execution client is syncing (current: {}, target: {}), waiting for timeout",
+                                    highest_chain_height,
+                                    height.as_u64()
+                                );
+                tokio::time::sleep(timeout * 2).await; // Sleep long enough to trigger timeout_propose
+                return Ok(());
+            } else {
+                // If we have not previously built a value for that very same height and round,
+                // we need to create a new value to propose and send it back to consensus.
+                info!("Building a new value to propose");
+                // We need to ask the execution engine for a new value to
+                // propose. Then we send it back to consensus.
+
+                let latest_block = state.latest_block.expect("Head block hash is not set");
+
+                let execution_payload = engine
+                    .generate_block(
+                        &Some(latest_block),
+                        &emerald_config.retry_config,
+                        &emerald_config.fee_recipient,
+                        state.get_fork(latest_block.timestamp),
+                    )
+                    .await?;
+
+                debug!("🌈 Got execution payload: {:?}", execution_payload);
+
+                // Store block in state and propagate to peers.
+                let bytes = Bytes::from(execution_payload.as_ssz_bytes());
+                debug!("🎁 block size: {:?}, height: {}", bytes.len(), height);
+
+                // Prepare block proposal.
+                let proposal: LocallyProposedValue<EmeraldContext> =
+                    state.propose_value(height, round, bytes.clone()).await?;
+
+                (proposal, bytes)
+            }
+        }
+    };
+
+    // Send it to consensus
+    if reply.send(proposal.clone()).is_err() {
+        error!("Failed to send GetValue reply");
+    }
+
+    // The POL round is always nil when we propose a newly built value.
+    // See L15/L18 of the Tendermint algorithm.
+    let pol_round = Round::Nil;
+    // Now what's left to do is to break down the value to propose into parts,
+    // and send those parts over the network to our peers, for them to re-assemble the full value.
+    for stream_message in state.stream_proposal(proposal, bytes, pol_round) {
+        debug!(%height, %round, "Streaming proposal part: {stream_message:?}");
+        channels
+            .network
+            .send(NetworkMsg::PublishProposalPart(stream_message))
+            .await?;
+    }
+    debug!(%height, %round, "✅ Proposal sent");
+
+    Ok(())
+}
+
 pub async fn process_consensus_message(
     msg: AppMsg<EmeraldContext>,
     state: &mut State,
@@ -452,104 +567,19 @@ pub async fn process_consensus_message(
         // The first message to handle is the `ConsensusReady` message, signaling to the app
         // that Malachite is ready to start consensus
         msg @ AppMsg::ConsensusReady { .. } => {
-            on_consensus_ready(state, engine, emerald_config, msg).await?;
+            on_consensus_ready(msg, state, engine, emerald_config).await?;
         }
 
         // The next message to handle is the `StartRound` message, signaling to the app
         // that consensus has entered a new round (including the initial round 0)
         msg @ AppMsg::StartedRound { .. } => {
-            on_started_round(state, engine, emerald_config, msg).await?;
+            on_started_round(msg, state, engine, emerald_config).await?;
         }
 
         // At some point, we may end up being the proposer for that round, and the consensus engine
         // will then ask us for a value to propose to the other validators.
-        AppMsg::GetValue {
-            height,
-            round,
-            timeout,
-            reply,
-        } => {
-            // NOTE: We can ignore the timeout as we are building the value right away.
-            // If we were let's say reaping as many txes from a mempool and executing them,
-            // then we would need to respect the timeout and stop at a certain point.
-
-            info!(%height, %round, "🟢🟢 Consensus is requesting a value to propose");
-
-            // Here it is important that, if we have previously built a value for this height and round,
-            // we send back the very same value.
-            let (proposal, bytes) = match state.get_previously_built_value(height, round).await? {
-                Some(proposal) => {
-                    info!(value = %proposal.value.id(), "Re-using previously built value");
-                    // Fetch the block data for the previously built value
-                    let bytes = state
-                        .store
-                        .get_block_data(height, round, proposal.value.id())
-                        .await?
-                        .ok_or_else(|| eyre!("Block data not found for previously built value"))?;
-                    (proposal, bytes)
-                }
-                None => {
-                    // Check if the execution client is syncing and behind the consensus height
-                    let (is_syncing, highest_chain_height) = engine.is_syncing().await?;
-                    if is_syncing && highest_chain_height >= height.as_u64() {
-                        warn!(
-                                    "⚠️  Execution client is syncing (current: {}, target: {}), waiting for timeout",
-                                    highest_chain_height,
-                                    height.as_u64()
-                                );
-                        tokio::time::sleep(timeout * 2).await; // Sleep long enough to trigger timeout_propose
-                        return Ok(());
-                    } else {
-                        // If we have not previously built a value for that very same height and round,
-                        // we need to create a new value to propose and send it back to consensus.
-                        info!("Building a new value to propose");
-                        // We need to ask the execution engine for a new value to
-                        // propose. Then we send it back to consensus.
-
-                        let latest_block = state.latest_block.expect("Head block hash is not set");
-
-                        let execution_payload = engine
-                            .generate_block(
-                                &Some(latest_block),
-                                &emerald_config.retry_config,
-                                &emerald_config.fee_recipient,
-                                state.get_fork(latest_block.timestamp),
-                            )
-                            .await?;
-
-                        debug!("🌈 Got execution payload: {:?}", execution_payload);
-
-                        // Store block in state and propagate to peers.
-                        let bytes = Bytes::from(execution_payload.as_ssz_bytes());
-                        debug!("🎁 block size: {:?}, height: {}", bytes.len(), height);
-
-                        // Prepare block proposal.
-                        let proposal: LocallyProposedValue<EmeraldContext> =
-                            state.propose_value(height, round, bytes.clone()).await?;
-
-                        (proposal, bytes)
-                    }
-                }
-            };
-
-            // Send it to consensus
-            if reply.send(proposal.clone()).is_err() {
-                error!("Failed to send GetValue reply");
-            }
-
-            // The POL round is always nil when we propose a newly built value.
-            // See L15/L18 of the Tendermint algorithm.
-            let pol_round = Round::Nil;
-            // Now what's left to do is to break down the value to propose into parts,
-            // and send those parts over the network to our peers, for them to re-assemble the full value.
-            for stream_message in state.stream_proposal(proposal, bytes, pol_round) {
-                debug!(%height, %round, "Streaming proposal part: {stream_message:?}");
-                channels
-                    .network
-                    .send(NetworkMsg::PublishProposalPart(stream_message))
-                    .await?;
-            }
-            debug!(%height, %round, "✅ Proposal sent");
+        msg @ AppMsg::GetValue { .. } => {
+            on_get_value(msg, state, channels, engine, emerald_config).await?;
         }
 
         // On the receiving end of these proposal parts (ie. when we are not the proposer),

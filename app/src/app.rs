@@ -556,6 +556,51 @@ pub async fn on_get_value(
     Ok(())
 }
 
+/// Handle ReceivedProposalPart messages from the consensus engine
+///
+/// Notifies the application that consensus has received a proposal part over the network.
+///
+/// If this part completes the full proposal, the application MUST respond
+/// with the complete proposed value. Otherwise, it MUST respond with `None`.
+pub async fn on_received_proposal_part(
+    received_proposal_part: AppMsg<EmeraldContext>,
+    state: &mut State,
+    engine: &Engine,
+    emerald_config: &EmeraldConfig,
+) -> eyre::Result<()> {
+    let AppMsg::ReceivedProposalPart { from, part, reply } = received_proposal_part else {
+        unreachable!("on_received_proposal_part called with non-ReceivedProposalPart message");
+    };
+
+    let (part_type, part_size) = match &part.content {
+        StreamContent::Data(part) => (part.get_type(), part.size_bytes()),
+        StreamContent::Fin => ("end of stream", 0),
+    };
+
+    debug!(
+        %from, %part.sequence, part.type = %part_type, part.size = %part_size,
+        "Received proposal part"
+    );
+
+    // Try to reassemble the proposal from received parts. If present,
+    // validate it with the execution engine and mark invalid when
+    // parsing or validation fails. Keep the outer `Option` and send it
+    // back to the caller (consensus) regardless.
+    let proposed_value = state
+        .received_proposal_part(from, part, engine, &emerald_config.retry_config)
+        .await?;
+
+    if let Some(proposed_value) = proposed_value.clone() {
+        debug!("✅ Received complete proposal: {:?}", proposed_value);
+    }
+
+    if reply.send(proposed_value).is_err() {
+        error!("Failed to send ReceivedProposalPart reply");
+    }
+
+    Ok(())
+}
+
 pub async fn process_consensus_message(
     msg: AppMsg<EmeraldContext>,
     state: &mut State,
@@ -587,32 +632,8 @@ pub async fn process_consensus_message(
         // To this end, we store each part that we receive and assemble the full value once we
         // have all its constituent parts. Then we send that value back to consensus for it to
         // consider and vote for or against it (ie. vote `nil`), depending on its validity.
-        AppMsg::ReceivedProposalPart { from, part, reply } => {
-            let (part_type, part_size) = match &part.content {
-                StreamContent::Data(part) => (part.get_type(), part.size_bytes()),
-                StreamContent::Fin => ("end of stream", 0),
-            };
-
-            debug!(
-                %from, %part.sequence, part.type = %part_type, part.size = %part_size,
-                "Received proposal part"
-            );
-
-            // Try to reassemble the proposal from received parts. If present,
-            // validate it with the execution engine and mark invalid when
-            // parsing or validation fails. Keep the outer `Option` and send it
-            // back to the caller (consensus) regardless.
-            let proposed_value = state
-                .received_proposal_part(from, part, engine, &emerald_config.retry_config)
-                .await?;
-
-            if let Some(proposed_value) = proposed_value.clone() {
-                debug!("✅ Received complete proposal: {:?}", proposed_value);
-            }
-
-            if reply.send(proposed_value).is_err() {
-                error!("Failed to send ReceivedProposalPart reply");
-            }
+        msg @ AppMsg::ReceivedProposalPart { .. } => {
+            on_received_proposal_part(msg, state, engine, emerald_config).await?;
         }
 
         // After some time, consensus will finally reach a decision on the value

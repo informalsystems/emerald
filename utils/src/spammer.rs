@@ -200,7 +200,7 @@ impl Spammer {
             .client
             .rpc_request(
                 "eth_getTransactionCount",
-                vec![json!(address), json!("latest")],
+                vec![json!(address), json!("pending")],
             )
             .await?;
         // Convert hex string to integer.
@@ -255,46 +255,67 @@ impl Spammer {
             let _ = interval.tick().await;
             let interval_start = Instant::now();
 
-            // Check for nonce gaps for all signers
-            let nonce_checks: Vec<_> = self
-                .signers
-                .iter()
-                .map(|signer| {
-                    let current_nonce = nonces.get(&signer.address()).copied().unwrap_or(0);
-                    async move {
-                        let on_chain_nonce = self.get_next_nonce(signer.address()).await?;
-                        Ok::<_, eyre::Error>((signer.address(), current_nonce, on_chain_nonce))
-                    }
-                })
-                .collect();
+            // Check if there are queued transactions (indicating nonce gaps)
+            let txpool_status = self.get_txpool_status().await.ok();
+            let queued_count = txpool_status.as_ref().map(|s| s.queued).unwrap_or(0);
 
-            let nonce_results = futures::future::join_all(nonce_checks).await;
+            if queued_count > 0 {
+                info!("Detected {} queued transactions, checking for nonce gaps", queued_count);
 
-            for result in nonce_results {
-                let (address, current_nonce, on_chain_nonce) = result?;
-                let nonce_span = current_nonce.saturating_sub(on_chain_nonce);
-                if nonce_span > self.max_rate {
-                    info!("Signer {address}: current nonce={current_nonce}, on-chain nonce={on_chain_nonce}. Sending 10 txs");
-                    let batch_entries = self.build_batch_entries(10, &mut nonces).await?;
-                    if let Some(results) = self.send_raw_batch(&batch_entries).await? {
-                        if results.len() != batch_entries.len() {
-                            return Err(eyre::eyre!(
-                                "Batch response count {} does not match request count {}",
-                                results.len(),
-                                batch_entries.len()
-                            ));
+                // Check for nonce gaps for all signers
+                let nonce_checks: Vec<_> = self
+                    .signers
+                    .iter()
+                    .map(|signer| {
+                        let current_nonce = nonces.get(&signer.address()).copied().unwrap_or(0);
+                        async move {
+                            let on_chain_nonce = self.get_next_nonce(signer.address()).await?;
+                            Ok::<_, eyre::Error>((signer.address(), current_nonce, on_chain_nonce))
                         }
+                    })
+                    .collect();
 
-                        // Report individual results
-                        for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
-                            let mapped_result = result.map(|_| tx_bytes_len);
-                            result_sender.send(mapped_result).await?;
+                let nonce_results = futures::future::join_all(nonce_checks).await;
+
+                let mut recovery_performed = false;
+                for result in nonce_results {
+                    let (address, current_nonce, on_chain_nonce) = result?;
+                    let nonce_span = current_nonce.saturating_sub(on_chain_nonce);
+                    if nonce_span > 0 {
+                        info!("Signer {address}: current nonce={current_nonce}, on-chain nonce={on_chain_nonce}. Filling gap with {} txs", nonce_span);
+
+                        // Find the signer by address
+                        if let Some(signer) = self.signers.iter().find(|s| s.address() == address) {
+                            // Build txs specifically for this signer to fill the gap
+                            // Send nonces from on_chain_nonce to current_nonce - 1
+                            let batch_entries = self.build_batch_entries_for_signer(signer, on_chain_nonce, current_nonce).await?;
+                            if let Some(results) = self.send_raw_batch(&batch_entries).await? {
+                                if results.len() != batch_entries.len() {
+                                    return Err(eyre::eyre!(
+                                        "Batch response count {} does not match request count {}",
+                                        results.len(),
+                                        batch_entries.len()
+                                    ));
+                                }
+
+                                // Report individual results
+                                for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
+                                    let mapped_result = result.map(|_| tx_bytes_len);
+                                    result_sender.send(mapped_result).await?;
+                                }
+                                recovery_performed = true;
+                            } else {
+                                debug!("Batch eth_sendRawTransaction timed out; skipping this tick");
+                            }
                         }
-                    } else {
-                        debug!("Batch eth_sendRawTransaction timed out; skipping this tick");
-                        report_sender.send(interval_start).await?;
-                        continue;
                     }
+                }
+
+                // If recovery was performed, skip normal batch and wait for next interval
+                if recovery_performed {
+                    info!("Recovery performed, skipping normal batch for this interval");
+                    let _ = report_sender.send(interval_start).await;
+                    continue;
                 }
             }
 
@@ -393,6 +414,47 @@ impl Spammer {
 
             debug!(
                 "Adding tx to batch: signer={}, nonce={}",
+                signer.address(),
+                nonce
+            );
+
+            let signed_tx = if let Some(ref payload) = self.contract_payload {
+                make_signed_contract_call_tx(
+                    signer,
+                    nonce,
+                    payload.address,
+                    &payload.function_sig,
+                    payload.args.as_slice(),
+                    self.chain_id,
+                )
+                .await?
+            } else if self.blobs {
+                make_signed_eip4844_tx(signer, nonce, self.chain_id).await?
+            } else {
+                make_signed_eip1559_tx(signer, nonce, self.chain_id).await?
+            };
+
+            let tx_bytes = signed_tx.encoded_2718();
+            let tx_bytes_len = tx_bytes.len() as u64;
+            let payload = hex::encode(tx_bytes);
+            batch_entries.push((vec![json!(payload)], tx_bytes_len));
+        }
+
+        Ok(batch_entries)
+    }
+
+    async fn build_batch_entries_for_signer(
+        &self,
+        signer: &PrivateKeySigner,
+        start_nonce: u64,
+        end_nonce: u64,
+    ) -> Result<Vec<(Vec<serde_json::Value>, u64)>> {
+        let mut batch_entries = Vec::with_capacity((end_nonce - start_nonce) as usize);
+
+        // Send txs for nonces from start_nonce to end_nonce - 1
+        for nonce in start_nonce..end_nonce {
+            debug!(
+                "Adding recovery tx to batch: signer={}, nonce={}",
                 signer.address(),
                 nonce
             );

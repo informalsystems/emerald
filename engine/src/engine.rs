@@ -6,7 +6,7 @@ use alloy_rpc_types_engine::{
 };
 use color_eyre::eyre;
 use malachitebft_eth_types::{Address, BlockHash, RetryConfig, B256};
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 use crate::engine_rpc::{EngineRPC, Fork};
 use crate::ethereum_rpc::EthereumRPC;
@@ -112,11 +112,23 @@ impl Engine {
 
         debug!("➡️ payload_status: {:?}", payload_status);
 
-        payload_status
-            .status
-            .is_valid()
-            .then(|| payload_status.latest_valid_hash.unwrap())
-            .ok_or_else(|| eyre::eyre!("Invalid payload status: {}", payload_status.status))
+        match payload_status.status {
+            PayloadStatusEnum::Valid => Ok(payload_status.latest_valid_hash.unwrap()),
+            PayloadStatusEnum::Accepted => {
+                warn!(block_hash = ?head_block_hash, "⚠️  Forkchoice update ACCEPTED, this shouldn't happen");
+                Err(eyre::eyre!("Forkchoice update returned ACCEPTED status"))
+            }
+            PayloadStatusEnum::Invalid { validation_error } => {
+                error!(block_hash = ?head_block_hash, validation_error = ?validation_error, "🔴 Forkchoice update INVALID");
+                Err(eyre::eyre!(
+                    "Forkchoice update returned INVALID: {:?}",
+                    validation_error
+                ))
+            }
+            PayloadStatusEnum::Syncing => {
+                unreachable!("SYNCING status should be handled by forkchoice_updated_with_retry")
+            }
+        }
     }
 
     pub async fn generate_block(
@@ -181,7 +193,22 @@ impl Engine {
                 // See how payload is constructed: https://github.com/ethereum/consensus-specs/blob/v1.1.5/specs/merge/validator.md#block-proposal
                 Ok(self.api.get_payload(payload_id, fork).await?)
             }
-            status => Err(eyre::eyre!("Invalid payload status: {}", status)),
+            PayloadStatusEnum::Accepted => {
+                warn!(block_hash = ?block_hash, "⚠️  Block generation forkchoice update ACCEPTED, this shouldn't happen");
+                Err(eyre::eyre!(
+                    "Block generation forkchoice update returned ACCEPTED status"
+                ))
+            }
+            PayloadStatusEnum::Invalid { validation_error } => {
+                error!(block_hash = ?block_hash, validation_error = ?validation_error, "🔴 Block generation forkchoice update INVALID");
+                Err(eyre::eyre!(
+                    "Block generation forkchoice update returned INVALID: {:?}",
+                    validation_error
+                ))
+            }
+            PayloadStatusEnum::Syncing => {
+                unreachable!("SYNCING status should be handled by forkchoice_updated_with_retry")
+            }
         }
     }
 

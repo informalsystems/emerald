@@ -306,7 +306,7 @@ pub async fn on_consensus_ready(
         Some(s) => {
             initialize_state_from_existing_block(state, engine, s, emerald_config).await?;
             info!(
-                "Starting from existing block at height {:?}. Next height {:?} ",
+                "Starting from existing block at height {:?}. Next consensus height {:?} ",
                 state.current_height,
                 state.current_height.increment()
             );
@@ -315,7 +315,7 @@ pub async fn on_consensus_ready(
             // Get the genesis block from the execution engine
             initialize_state_from_genesis(state, engine).await?;
             info!(
-                "Starting from genesis. Next height {:?}",
+                "Starting from genesis. Next consensus height {:?}",
                 state.current_height.increment()
             );
         }

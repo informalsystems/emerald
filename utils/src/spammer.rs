@@ -262,20 +262,25 @@ impl Spammer {
             if queued_count > 0 {
                 info!("Detected {} queued transactions, checking for nonce gaps", queued_count);
 
-                // Check for nonce gaps for all signers
-                let nonce_checks: Vec<_> = self
-                    .signers
-                    .iter()
-                    .map(|signer| {
-                        let current_nonce = nonces.get(&signer.address()).copied().unwrap_or(0);
-                        async move {
-                            let on_chain_nonce = self.get_next_nonce(signer.address()).await?;
-                            Ok::<_, eyre::Error>((signer.address(), current_nonce, on_chain_nonce))
-                        }
-                    })
-                    .collect();
+                // Check for nonce gaps for all signers (in batches to avoid rate limiting)
+                const NONCE_CHECK_BATCH_SIZE: usize = 100;
+                let mut nonce_results = Vec::new();
 
-                let nonce_results = futures::future::join_all(nonce_checks).await;
+                for chunk in self.signers.chunks(NONCE_CHECK_BATCH_SIZE) {
+                    let nonce_checks: Vec<_> = chunk
+                        .iter()
+                        .map(|signer| {
+                            let current_nonce = nonces.get(&signer.address()).copied().unwrap_or(0);
+                            async move {
+                                let on_chain_nonce = self.get_next_nonce(signer.address()).await?;
+                                Ok::<_, eyre::Error>((signer.address(), current_nonce, on_chain_nonce))
+                            }
+                        })
+                        .collect();
+
+                    let batch_results = futures::future::join_all(nonce_checks).await;
+                    nonce_results.extend(batch_results);
+                }
 
                 let mut recovery_performed = false;
                 for result in nonce_results {

@@ -8,6 +8,7 @@ use color_eyre::eyre::{Context, Result};
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::PublicKey;
 use reqwest::Url;
+use tracing::info;
 
 // Define the Solidity contract ABI
 alloy_sol_types::sol!(
@@ -107,33 +108,37 @@ pub async fn list_validators(rpc_url: &Url, contract_address: &Address) -> Resul
     let contract = ValidatorManager::new(*contract_address, &provider);
 
     let poa_owner_address = contract.owner().call().await?.0;
-    println!("POA Owner Address: 0x{poa_owner_address:x}");
-    println!();
+    info!("POA Owner Address: 0x{poa_owner_address:x}");
 
     let validators = contract.getValidators().call().await?;
-
-    println!("Total validators: {}", validators.len());
-    println!();
 
     // sort validators by power descending
     let mut validators = validators;
     validators.sort_by(|a, b| b.power.cmp(&a.power));
 
+    info!(
+        poa_owner=%format!("0x{poa_owner_address:x}"),
+        total_validators=validators.len(),
+        "POA Validator Status"
+    );
+
     for (i, validator) in validators.iter().enumerate() {
-        println!("Validator #{}:", i + 1);
-        println!("  Power: {}", validator.power);
         // validator pubkey in hex
         let mut pubkey_bytes = Vec::with_capacity(65);
         pubkey_bytes.push(0x04); // uncompressed prefix
         pubkey_bytes.extend_from_slice(&validator.validatorKey.x.to_be_bytes::<32>());
         pubkey_bytes.extend_from_slice(&validator.validatorKey.y.to_be_bytes::<32>());
-        println!("  Pubkey: {}", hex::encode(&pubkey_bytes));
+
         // print validator address 0x
         let pubkey = PublicKey::from_sec1_bytes(&pubkey_bytes)
             .map_err(|e| color_eyre::eyre::eyre!("Invalid public key bytes: {}", e))?;
         let address = raw_public_key_to_address(&pubkey.to_encoded_point(false).as_bytes()[1..]);
-        println!("Validator address: 0x{address:x}");
-        println!();
+
+        info!(
+            power=validator.power,
+            pubkey=%hex::encode(&pubkey_bytes),
+            address=%format!("0x{address:x}"),
+            "Validator {} Info", i+1);
     }
 
     Ok(())
@@ -185,8 +190,11 @@ pub async fn add_validator(
     let contract = ValidatorManager::new(*contract_address, &provider);
 
     // Call the register function
-    println!("Adding validator with pubkey: {validator_identifier}");
-    println!("  Power: {power}");
+    info!(
+        pubkey=%validator_identifier,
+        power=power,
+        "Adding validator"
+    );
 
     let tx = contract
         .register(validator_public_key_bytes.into(), power)
@@ -194,15 +202,19 @@ pub async fn add_validator(
         .await
         .context("Failed to send register transaction")?;
 
-    println!("Transaction sent: {:?}", tx.tx_hash());
+    let tx_hash = tx.tx_hash();
+    info!(tx_hash=?tx_hash, "Transaction sent");
 
     let receipt = tx
         .get_receipt()
         .await
         .context("Failed to get transaction receipt")?;
 
-    println!("Transaction confirmed in block: {:?}", receipt.block_number);
-    println!("Gas used: {}", receipt.gas_used);
+    info!(
+        block_number=?receipt.block_number,
+        gas_used=receipt.gas_used,
+        "Transaction confirmed"
+    );
 
     Ok(())
 }
@@ -232,8 +244,11 @@ pub async fn remove_validator(
     let addr = parse_validator_identifier(validator_identifier)?;
 
     // Call the unregister function
-    println!("Removing validator: {validator_identifier}");
-    println!("  Validator address: {addr:?}");
+    info!(
+        validator=%validator_identifier,
+        address=%format!("{addr:?}"),
+        "Removing validator"
+    );
 
     let tx = contract
         .unregister(addr)
@@ -241,16 +256,17 @@ pub async fn remove_validator(
         .await
         .context("Failed to send unregister transaction")?;
 
-    println!("Transaction sent: {:?}", tx.tx_hash());
+    let tx_hash = tx.tx_hash();
+    info!(tx_hash=?tx_hash, "Transaction sent");
 
     let receipt = tx
         .get_receipt()
         .await
         .context("Failed to get transaction receipt")?;
 
-    println!(
-        "Transaction confirmed in block: {:?}",
-        receipt.block_number.unwrap()
+    info!(
+        block_number=?receipt.block_number,
+        "Transaction confirmed"
     );
 
     Ok(())
@@ -282,9 +298,12 @@ pub async fn update_validator_power(
     let validator_address = parse_validator_identifier(validator_identifier)?;
 
     // Call the updatePower function
-    println!("Updating validator power: {validator_identifier}");
-    println!("  Validator address: {validator_address:?}");
-    println!("  New power: {new_power}");
+    info!(
+        validator=%validator_identifier,
+        address=%validator_address,
+        new_power=new_power,
+        "Updating validator power"
+    );
 
     let tx = contract
         .updatePower(validator_address, new_power)
@@ -292,15 +311,19 @@ pub async fn update_validator_power(
         .await
         .context("Failed to send updatePower transaction")?;
 
-    println!("Transaction sent: {:?}", tx.tx_hash());
+    let tx_hash = tx.tx_hash();
+    info!(tx_hash=?tx_hash, "Transaction sent");
 
     let receipt = tx
         .get_receipt()
         .await
         .context("Failed to get transaction receipt")?;
 
-    println!("Transaction confirmed in block: {receipt:?}");
-    println!("Gas used: {}", receipt.gas_used);
+    info!(
+        block_number=?receipt.block_number,
+        gas_used=receipt.gas_used,
+        "Transaction confirmed"
+    );
 
     Ok(())
 }

@@ -7,7 +7,7 @@ use malachitebft_app_channel::app::engine::host::Next;
 use malachitebft_app_channel::app::streaming::StreamContent;
 use malachitebft_app_channel::app::types::core::{Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, ProposedValue};
-use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
+use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg, Reply};
 use malachitebft_eth_cli::config::EmeraldConfig;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
@@ -278,6 +278,58 @@ pub async fn read_validators_from_contract(
     Ok(ValidatorSet::new(validators))
 }
 
+/// Handle ConsensusReady messages from the consensus engine
+pub async fn on_consensus_ready(
+    state: &mut State,
+    engine: &Engine,
+    emerald_config: &EmeraldConfig,
+    reply: Reply<(Height, ValidatorSet)>,
+) -> eyre::Result<()> {
+    info!("🟢🟢 Consensus is ready");
+
+    // Node start-up: https://hackmd.io/@danielrachi/engine_api#Node-startup
+    // Check compatibility with execution client
+    engine.check_capabilities().await?;
+
+    // Get latest state from local store
+    let start_height_from_store = state.store.max_decided_value_height().await;
+
+    let mut start_height: Height = Height::default();
+    match start_height_from_store {
+        Some(s) => {
+            initialize_state_from_existing_block(state, engine, s, emerald_config).await?;
+            start_height = state.current_height.increment();
+            debug!(
+                "Start height in state set to: {:?}; height in store is {:?} ",
+                start_height, state.current_height
+            );
+        }
+        None => {
+            info!("Starting from genesis");
+            // Get the genesis block from the execution engine
+            initialize_state_from_genesis(state, engine).await?;
+        }
+    }
+    // We can simply respond by telling the engine to start consensus
+    // at the start_height
+    if reply
+        .send((
+            start_height,
+            state
+                .get_validator_set(start_height)
+                .ok_or_eyre(format!(
+                    "Validator set not found for start height {start_height}"
+                ))?
+                .clone(),
+        ))
+        .is_err()
+    {
+        error!("Failed to send ConsensusReady reply");
+    }
+
+    Ok(())
+}
+
 pub async fn process_consensus_message(
     msg: AppMsg<EmeraldContext>,
     state: &mut State,
@@ -289,47 +341,7 @@ pub async fn process_consensus_message(
         // The first message to handle is the `ConsensusReady` message, signaling to the app
         // that Malachite is ready to start consensus
         AppMsg::ConsensusReady { reply } => {
-            info!("🟢🟢 Consensus is ready");
-
-            // Node start-up: https://hackmd.io/@danielrachi/engine_api#Node-startup
-            // Check compatibility with execution client
-            engine.check_capabilities().await?;
-
-            // Get latest state from local store
-            let start_height_from_store = state.store.max_decided_value_height().await;
-
-            let mut start_height: Height = Height::default();
-            match start_height_from_store {
-                Some(s) => {
-                    initialize_state_from_existing_block(state, engine, s, emerald_config).await?;
-                    start_height = state.current_height.increment();
-                    debug!(
-                        "Start height in state set to: {:?}; height in store is {:?} ",
-                        start_height, state.current_height
-                    );
-                }
-                None => {
-                    info!("Starting from genesis");
-                    // Get the genesis block from the execution engine
-                    initialize_state_from_genesis(state, engine).await?;
-                }
-            }
-            // We can simply respond by telling the engine to start consensus
-            // at the current height, which is initially 1
-            if reply
-                .send((
-                    start_height,
-                    state
-                        .get_validator_set(start_height)
-                        .ok_or_eyre(format!(
-                            "Validator set not found for start height {start_height}"
-                        ))?
-                        .clone(),
-                ))
-                .is_err()
-            {
-                error!("Failed to send ConsensusReady reply");
-            }
+            on_consensus_ready(state, engine, emerald_config, reply).await?;
         }
 
         // The next message to handle is the `StartRound` message, signaling to the app

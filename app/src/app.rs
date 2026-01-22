@@ -951,6 +951,132 @@ pub async fn on_get_decided_value(
     Ok(())
 }
 
+/// Handle GetHistoryMinHeight messages from the consensus engine
+///
+/// Requests the earliest height available in the history maintained by the application.
+///
+/// The application MUST respond with its earliest available height.
+pub async fn on_get_history_min_height(
+    get_history_min_height: AppMsg<EmeraldContext>,
+    state: &mut State,
+) -> eyre::Result<()> {
+    let AppMsg::GetHistoryMinHeight { reply } = get_history_min_height else {
+        unreachable!("on_get_history_min_height called with non-GetHistoryMinHeight message");
+    };
+
+    let min_height = state.get_earliest_height().await;
+
+    if reply.send(min_height).is_err() {
+        error!("Failed to send GetHistoryMinHeight reply");
+    }
+
+    Ok(())
+}
+
+/// Handle RestreamProposal messages from the consensus engine
+///
+/// Requests the application to re-stream a proposal that it has already seen.
+///
+/// The application MUST re-publish again all the proposal parts pertaining
+/// to that value by sending [`NetworkMsg::PublishProposalPart`] messages through
+/// the [`Channels::network`] channel.
+pub async fn on_restream_proposal(
+    restream_proposal: AppMsg<EmeraldContext>,
+    state: &mut State,
+    channels: &mut Channels<EmeraldContext>,
+) -> eyre::Result<()> {
+    let AppMsg::RestreamProposal {
+        height,
+        round,
+        valid_round,
+        address,
+        value_id,
+    } = restream_proposal
+    else {
+        unreachable!("on_restream_proposal called with non-RestreamProposal message");
+    };
+
+    //  Look for a proposal at valid_round or round(should be already stored)
+    let proposal_round = if valid_round == Round::Nil {
+        round
+    } else {
+        valid_round
+    };
+    info!(%height, %proposal_round, "Restreaming existing proposal...");
+
+    //let (proposal, bytes) =
+    match state
+        .get_previous_proposal_by_value_and_proposer(height, round, value_id, address)
+        .await?
+    {
+        Some(proposal) => {
+            info!(value = %proposal.value.id(), "Re-using previously built value");
+            // Fetch the block data for the previously built value
+            let bytes = state
+                .store
+                .get_block_data(height, round, proposal.value.id())
+                .await?
+                .ok_or_else(|| eyre!("Block data not found for previously built value"))?;
+            // Now what's left to do is to break down the value to propose into parts,
+            // and send those parts over the network to our peers, for them to re-assemble the full value.
+            for stream_message in state.stream_proposal(proposal, bytes, proposal_round) {
+                debug!(%height, %round, "Streaming proposal part: {stream_message:?}");
+                channels
+                    .network
+                    .send(NetworkMsg::PublishProposalPart(stream_message))
+                    .await?;
+            }
+
+            debug!(%height, %round, "✅ Re-sent proposal");
+        }
+        None => {
+            debug!(%height, %round, "✅ No proposal to re-send");
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle ExtendVote messages from the consensus engine
+///
+/// ExtendVote allows the application to extend the pre-commit vote with arbitrary data.
+///
+/// When consensus is preparing to send a pre-commit vote, it first calls `ExtendVote`.
+/// The application then returns a blob of data called a vote extension.
+/// This data is opaque to the consensus algorithm but can contain application-specific information.
+/// The proposer of the next block will receive all vote extensions along with the commit certificate.
+pub async fn on_extended_vote(extended_vote: AppMsg<EmeraldContext>) -> eyre::Result<()> {
+    let AppMsg::ExtendVote { reply, .. } = extended_vote else {
+        unreachable!("on_extended_vote called with non-ExtendVote message");
+    };
+
+    if reply.send(None).is_err() {
+        error!("🔴 Failed to send ExtendVote reply");
+    }
+
+    Ok(())
+}
+
+/// Handle VerifyVoteExtension messages from the consensus engine
+///
+/// Verify a vote extension
+///
+/// If the vote extension is deemed invalid, the vote it was part of
+/// will be discarded altogether.
+pub async fn on_verify_vote_extention(
+    verify_vote_extenstion: AppMsg<EmeraldContext>,
+) -> eyre::Result<()> {
+    let AppMsg::VerifyVoteExtension { reply, .. } = verify_vote_extenstion else {
+        unreachable!("on_verify_vote_extention called with non-VerifyVoteExtension message");
+    };
+
+    if reply.send(Ok(())).is_err() {
+        error!("🔴 Failed to send VerifyVoteExtension reply");
+    }
+
+    Ok(())
+}
+
 pub async fn process_consensus_message(
     msg: AppMsg<EmeraldContext>,
     state: &mut State,
@@ -1016,70 +1142,20 @@ pub async fn process_consensus_message(
 
         // In order to figure out if we can help a peer that is lagging behind,
         // the engine may ask us for the height of the earliest available value in our store.
-        AppMsg::GetHistoryMinHeight { reply } => {
-            let min_height = state.get_earliest_height().await;
-
-            if reply.send(min_height).is_err() {
-                error!("Failed to send GetHistoryMinHeight reply");
-            }
+        msg @ AppMsg::GetHistoryMinHeight { .. } => {
+            on_get_history_min_height(msg, state).await?;
         }
 
-        AppMsg::RestreamProposal {
-            height,
-            round,
-            valid_round,
-            address,
-            value_id,
-        } => {
-            //  Look for a proposal at valid_round or round(should be already stored)
-            let proposal_round = if valid_round == Round::Nil {
-                round
-            } else {
-                valid_round
-            };
-            info!(%height, %proposal_round, "Restreaming existing proposal...");
-
-            //let (proposal, bytes) =
-            match state
-                .get_previous_proposal_by_value_and_proposer(height, round, value_id, address)
-                .await?
-            {
-                Some(proposal) => {
-                    info!(value = %proposal.value.id(), "Re-using previously built value");
-                    // Fetch the block data for the previously built value
-                    let bytes = state
-                        .store
-                        .get_block_data(height, round, proposal.value.id())
-                        .await?
-                        .ok_or_else(|| eyre!("Block data not found for previously built value"))?;
-                    // Now what's left to do is to break down the value to propose into parts,
-                    // and send those parts over the network to our peers, for them to re-assemble the full value.
-                    for stream_message in state.stream_proposal(proposal, bytes, proposal_round) {
-                        debug!(%height, %round, "Streaming proposal part: {stream_message:?}");
-                        channels
-                            .network
-                            .send(NetworkMsg::PublishProposalPart(stream_message))
-                            .await?;
-                    }
-
-                    debug!(%height, %round, "✅ Re-sent proposal");
-                }
-                None => {
-                    debug!(%height, %round, "✅ No proposal to re-send");
-                }
-            }
+        msg @ AppMsg::RestreamProposal { .. } => {
+            on_restream_proposal(msg, state, channels).await?;
         }
 
-        AppMsg::ExtendVote { reply, .. } => {
-            if reply.send(None).is_err() {
-                error!("🔴 Failed to send ExtendVote reply");
-            }
+        msg @ AppMsg::ExtendVote { .. } => {
+            on_extended_vote(msg).await?;
         }
 
-        AppMsg::VerifyVoteExtension { reply, .. } => {
-            if reply.send(Ok(())).is_err() {
-                error!("🔴 Failed to send VerifyVoteExtension reply");
-            }
+        msg @ AppMsg::VerifyVoteExtension { .. } => {
+            on_verify_vote_extention(msg).await?;
         }
     }
 

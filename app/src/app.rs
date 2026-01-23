@@ -43,7 +43,7 @@ pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -
         read_validators_from_contract(engine.eth.url().as_ref(), &genesis_block.block_hash).await?;
     debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
     state.current_height = Height::new(genesis_block.block_number);
-    state.set_validator_set(state.current_height, genesis_validator_set);
+    state.set_validator_set(state.current_height.increment(), genesis_validator_set);
     Ok(())
 }
 

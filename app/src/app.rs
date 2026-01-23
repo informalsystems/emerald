@@ -42,8 +42,8 @@ pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -
     let genesis_validator_set =
         read_validators_from_contract(engine.eth.url().as_ref(), &genesis_block.block_hash).await?;
     debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
-    state.current_height = Height::default();
-    state.set_validator_set(state.current_height, genesis_validator_set);
+    state.current_height = Height::new(genesis_block.block_number);
+    state.set_validator_set(state.current_height.increment(), genesis_validator_set);
     Ok(())
 }
 
@@ -300,35 +300,36 @@ pub async fn on_consensus_ready(
     // Check compatibility with execution client
     engine.check_capabilities().await?;
 
-    // Get latest state from local store
+    // Get latest decided height from local store
     let start_height_from_store = state.store.max_decided_value_height().await;
-
-    let mut start_height: Height = Height::default();
     match start_height_from_store {
         Some(s) => {
             initialize_state_from_existing_block(state, engine, s, emerald_config).await?;
-            start_height = state.current_height.increment();
-            debug!(
-                "Start height in state set to: {:?}; height in store is {:?} ",
-                start_height, state.current_height
+            info!(
+                "Starting from existing block at height {:?}. Next consensus height {:?} ",
+                state.current_height,
+                state.current_height.increment()
             );
         }
         None => {
-            info!("Starting from genesis");
             // Get the genesis block from the execution engine
             initialize_state_from_genesis(state, engine).await?;
+            info!(
+                "Starting from genesis. Next consensus height {:?}",
+                state.current_height.increment()
+            );
         }
     }
+
     // We can simply respond by telling the engine to start consensus
-    // at the start_height
+    // at the next height (current height + 1)
+    let next_height = state.current_height.increment();
     if reply
         .send((
-            start_height,
+            next_height,
             state
-                .get_validator_set(start_height)
-                .ok_or_eyre(format!(
-                    "Validator set not found for start height {start_height}"
-                ))?
+                .get_validator_set(next_height)
+                .ok_or_eyre(format!("Validator set not found for height {next_height}"))?
                 .clone(),
         ))
         .is_err()

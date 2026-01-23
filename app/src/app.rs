@@ -710,21 +710,22 @@ pub async fn on_decided(
     let block_header = extract_block_header(&execution_payload);
     let block_header_bytes = Bytes::from(block_header.as_ssz_bytes());
 
-    // Collect hashes from blob transactions
-    let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
-        eyre::eyre!(
-            "Failed to convert decided ExecutionPayloadV3 to Block at height {}: {}",
-            height,
-            e
-        )
-    })?;
-    let versioned_hashes: Vec<BlockHash> =
-        block.body.blob_versioned_hashes_iter().copied().collect();
-
     // Get validation status from cache or call newPayload
     let validity = if let Some(cached) = state.validated_cache_mut().get(&block_hash) {
         cached
     } else {
+        // Collect hashes from blob transactions
+        let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
+            eyre::eyre!(
+                "Failed to convert decided ExecutionPayloadV3 to Block at height {}: {}",
+                height,
+                e
+            )
+        })?;
+        let versioned_hashes: Vec<BlockHash> =
+            block.body.blob_versioned_hashes_iter().copied().collect();
+
+        // Ask the EL to validate the execution payload
         let payload_status = engine
             .notify_new_block(execution_payload, versioned_hashes)
             .await?;
@@ -735,6 +736,7 @@ pub async fn on_decided(
             Validity::Invalid
         };
 
+        // TODO: insert validation outcome into cache also when calling notify_new_block_with_retry in validate_payload
         state.validated_cache_mut().insert(block_hash, validity);
         validity
     };
@@ -748,7 +750,7 @@ pub async fn on_decided(
         height, block_hash
     );
 
-    // Notify the execution client (EL) of the new block.
+    // Notify the EL of the new block.
     // Update the execution head state to this block.
     let latest_valid_hash = engine
         .set_latest_forkchoice_state(block_hash, &emerald_config.retry_config)
@@ -771,6 +773,7 @@ pub async fn on_decided(
         prev_randao: block_prev_randao,
     });
 
+    // Get the new validator set and update the local state
     let new_validator_set =
         read_validators_from_contract(engine.eth.url().as_ref(), &latest_valid_hash).await?;
     debug!("🌈 Got validator set: {:?}", new_validator_set);

@@ -644,70 +644,67 @@ pub async fn on_decided(
         .ok_or_eyre("app: certificate should have associated block data")?;
     debug!("🎁 block size: {:?}, height: {}", block_bytes.len(), height);
 
-    // Decode bytes into execution payload (a block)
+    // Decode bytes into execution payload (a block) and get relevant fields
     let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_bytes).unwrap();
-
+    let block_hash = execution_payload.payload_inner.payload_inner.block_hash;
+    let block_timestamp = execution_payload.timestamp();
+    let block_number = execution_payload.payload_inner.payload_inner.block_number;
+    let block_prev_randao = execution_payload.payload_inner.payload_inner.prev_randao;
     let parent_block_hash = execution_payload.payload_inner.payload_inner.parent_hash;
-
-    let new_block_hash = execution_payload.payload_inner.payload_inner.block_hash;
-
-    assert_eq!(state.latest_block.unwrap().block_hash, parent_block_hash);
-
-    let new_block_timestamp = execution_payload.timestamp();
-    let new_block_number = execution_payload.payload_inner.payload_inner.block_number;
-
-    let new_block_prev_randao = execution_payload.payload_inner.payload_inner.prev_randao;
-
-    // Log stats
     let tx_count = execution_payload
         .payload_inner
         .payload_inner
         .transactions
         .len();
-    state.txs_count += tx_count as u64;
-    state.chain_bytes += block_bytes.len() as u64;
-    let elapsed_time = state.start_time.elapsed();
-
-    state.metrics.tx_stats.add_txs(tx_count as u64);
-    state
-        .metrics
-        .tx_stats
-        .add_chain_bytes(block_bytes.len() as u64);
-    state
-        .metrics
-        .tx_stats
-        .set_txs_per_second(state.txs_count as f64 / elapsed_time.as_secs_f64());
-    state
-        .metrics
-        .tx_stats
-        .set_bytes_per_second(state.chain_bytes as f64 / elapsed_time.as_secs_f64());
-    state.metrics.tx_stats.set_block_tx_count(tx_count as u64);
-    state
-        .metrics
-        .tx_stats
-        .set_block_size(block_bytes.len() as u64);
-
-    // Persist cumulative metrics to database for crash recovery
-    state
-        .store
-        .store_cumulative_metrics(state.txs_count, state.chain_bytes, elapsed_time.as_secs())
-        .await?;
-
-    info!(
-        "👉 stats at height {}: #txs={}, txs/s={:.2}, chain_bytes={}, bytes/s={:.2}",
-        height,
-        state.txs_count,
-        state.txs_count as f64 / elapsed_time.as_secs_f64(),
-        state.chain_bytes,
-        state.chain_bytes as f64 / elapsed_time.as_secs_f64(),
-    );
-
-    let tx_count: usize = execution_payload
-        .payload_inner
-        .payload_inner
-        .transactions
-        .len();
     debug!("🦄 Block at height {height} contains {tx_count} transactions");
+
+    // Sanity check: verify payload.parent_hash == state.latest_block.block_hash
+    let latest_block_hash = state
+        .latest_block
+        .ok_or_eyre("missing latest block in state")?
+        .block_hash;
+    assert_eq!(latest_block_hash, parent_block_hash);
+
+    // Log stats
+    {
+        state.txs_count += tx_count as u64;
+        state.chain_bytes += block_bytes.len() as u64;
+        let elapsed_time = state.start_time.elapsed();
+
+        state.metrics.tx_stats.add_txs(tx_count as u64);
+        state
+            .metrics
+            .tx_stats
+            .add_chain_bytes(block_bytes.len() as u64);
+        state
+            .metrics
+            .tx_stats
+            .set_txs_per_second(state.txs_count as f64 / elapsed_time.as_secs_f64());
+        state
+            .metrics
+            .tx_stats
+            .set_bytes_per_second(state.chain_bytes as f64 / elapsed_time.as_secs_f64());
+        state.metrics.tx_stats.set_block_tx_count(tx_count as u64);
+        state
+            .metrics
+            .tx_stats
+            .set_block_size(block_bytes.len() as u64);
+
+        // Persist cumulative metrics to database for crash recovery
+        state
+            .store
+            .store_cumulative_metrics(state.txs_count, state.chain_bytes, elapsed_time.as_secs())
+            .await?;
+
+        info!(
+            "👉 stats at height {}: #txs={}, txs/s={:.2}, chain_bytes={}, bytes/s={:.2}",
+            height,
+            state.txs_count,
+            state.txs_count as f64 / elapsed_time.as_secs_f64(),
+            state.chain_bytes,
+            state.chain_bytes as f64 / elapsed_time.as_secs_f64(),
+        );
+    }
 
     // Extract block header
     let block_header = extract_block_header(&execution_payload);
@@ -725,7 +722,7 @@ pub async fn on_decided(
         block.body.blob_versioned_hashes_iter().copied().collect();
 
     // Get validation status from cache or call newPayload
-    let validity = if let Some(cached) = state.validated_cache_mut().get(&new_block_hash) {
+    let validity = if let Some(cached) = state.validated_cache_mut().get(&block_hash) {
         cached
     } else {
         let payload_status = engine
@@ -738,46 +735,40 @@ pub async fn on_decided(
             Validity::Invalid
         };
 
-        state.validated_cache_mut().insert(new_block_hash, validity);
+        state.validated_cache_mut().insert(block_hash, validity);
         validity
     };
 
     if validity == Validity::Invalid {
-        return Err(eyre!(
-            "Block validation failed for hash: {}",
-            new_block_hash
-        ));
+        return Err(eyre!("Block validation failed for hash: {}", block_hash));
     }
 
     debug!(
         "💡 Block validated at height {} with hash: {}",
-        height, new_block_hash
+        height, block_hash
     );
 
     // Notify the execution client (EL) of the new block.
     // Update the execution head state to this block.
     let latest_valid_hash = engine
-        .set_latest_forkchoice_state(new_block_hash, &emerald_config.retry_config)
+        .set_latest_forkchoice_state(block_hash, &emerald_config.retry_config)
         .await?;
     debug!(
         "🚀 Forkchoice updated to height {} for block hash={} and latest_valid_hash={}",
-        height, new_block_hash, latest_valid_hash
+        height, block_hash, latest_valid_hash
     );
 
     // When that happens, we store the decided value in our store
     // TODO: we should return an error reply if commit fails
     state.commit(certificate, block_header_bytes).await?;
-    let old_hash = state
-        .latest_block
-        .ok_or_eyre("missing latest block in state")?
-        .block_hash;
+
     // Save the latest block
     state.latest_block = Some(ExecutionBlock {
-        block_hash: new_block_hash,
-        block_number: new_block_number,
-        parent_hash: old_hash,
-        timestamp: new_block_timestamp, // Note: This was a fix related to the sync reactor
-        prev_randao: new_block_prev_randao,
+        block_hash: block_hash,
+        block_number: block_number,
+        parent_hash: latest_block_hash,
+        timestamp: block_timestamp, // Note: This was a fix related to the sync reactor
+        prev_randao: block_prev_randao,
     });
 
     let new_validator_set =

@@ -3,6 +3,7 @@
 
 use std::fmt;
 
+use alloy_genesis::ChainConfig;
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use caches::lru::AdaptiveCache;
@@ -13,12 +14,13 @@ use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Context, Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
 use malachitebft_eth_engine::engine::Engine;
+use malachitebft_eth_engine::engine_rpc::Fork;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::secp256k1::K256Provider;
 use malachitebft_eth_types::{
-    Address, Block, BlockHash, EmeraldContext, Genesis, Height, ProposalData, ProposalFin,
-    ProposalInit, ProposalPart, RetryConfig, ValidatorSet, Value, ValueId,
+    Address, Block, BlockHash, BlockTimestamp, EmeraldContext, Genesis, Height, ProposalData,
+    ProposalFin, ProposalInit, ProposalPart, RetryConfig, ValidatorSet, Value, ValueId,
 };
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -76,7 +78,7 @@ const CHUNK_SIZE: usize = 128 * 1024; // 128 KiB
 pub struct State {
     #[allow(dead_code)]
     ctx: EmeraldContext,
-    signing_provider: K256Provider,
+    pub signing_provider: K256Provider,
     address: Address,
     pub store: Store,
     stream_nonce: u32,
@@ -90,7 +92,7 @@ pub struct State {
 
     pub latest_block: Option<ExecutionBlock>,
 
-    validator_set: Option<ValidatorSet>,
+    validator_set: Option<(Height, ValidatorSet)>,
 
     // Cache for tracking recently validated payloads to avoid duplicate validation
     validated_payload_cache: ValidatedPayloadCache,
@@ -106,6 +108,8 @@ pub struct State {
     pub min_block_time: Duration,
 
     pub last_block_time: Instant,
+
+    pub eth_chain_config: ChainConfig,
 }
 
 /// Represents errors that can occur during the verification of a proposal's signature.
@@ -119,6 +123,8 @@ pub enum SignatureVerificationError {
     ProposerNotFound,
     /// Indicates that the signature in the `Fin` part is invalid.
     InvalidSignature,
+    /// Validator set not found for the given height
+    ValidatorSetNotFound { _height: Height },
 }
 
 /// Represents errors that can occur during proposal validation.
@@ -128,6 +134,8 @@ pub enum ProposalValidationError {
     WrongProposer { actual: Address, expected: Address },
     /// Signature verification errors
     Signature(SignatureVerificationError),
+    /// Validator set not found for the given height
+    ValidatorSetNotFound { height: Height },
 }
 
 impl fmt::Display for ProposalValidationError {
@@ -138,6 +146,9 @@ impl fmt::Display for ProposalValidationError {
             }
             Self::Signature(err) => {
                 write!(f, "Signature verification failed: {err:?}")
+            }
+            Self::ValidatorSetNotFound { height } => {
+                write!(f, "Validator set not found for height {height}")
             }
         }
     }
@@ -181,6 +192,7 @@ impl State {
         max_retain_blocks: u64,
         prune_at_interval: u64,
         min_block_time: Duration,
+        eth_chain_config: ChainConfig,
     ) -> Self {
         // Calculate start_time by subtracting elapsed_seconds from now.
         // It represents the start time of measuring metrics, not the actual node start time.
@@ -213,7 +225,26 @@ impl State {
             prune_at_block_interval: prune_at_interval,
             min_block_time,
             last_block_time: Instant::now(),
+            eth_chain_config,
         }
+    }
+
+    pub fn get_fork(&self, block_timestamp: BlockTimestamp) -> Fork {
+        let is_osaka = self
+            .eth_chain_config
+            .osaka_time
+            .is_some_and(|time| time <= block_timestamp);
+        if is_osaka {
+            return Fork::Osaka;
+        }
+        let is_prague = self
+            .eth_chain_config
+            .prague_time
+            .is_some_and(|time| time <= block_timestamp);
+        if is_prague {
+            return Fork::Prague;
+        }
+        Fork::Unsupported
     }
 
     pub fn validated_cache_mut(&mut self) -> &mut ValidatedPayloadCache {
@@ -262,7 +293,9 @@ impl State {
         let round = parts.round;
 
         // Get the expected proposer for this height and round
-        let validator_set = self.get_validator_set(); // TODO: Should pass height as a parameter
+        let validator_set = self
+            .get_validator_set(height)
+            .ok_or(ProposalValidationError::ValidatorSetNotFound { height })?;
         let expected_proposer = self
             .ctx
             .select_proposer(validator_set, height, round)
@@ -312,7 +345,11 @@ impl State {
         };
 
         // Retrieve the proposer from the validator set for the given height
-        let validator_set = self.get_validator_set(); // TODO: Should pass height as a parameter
+        let validator_set = self.get_validator_set(parts.height).ok_or(
+            SignatureVerificationError::ValidatorSetNotFound {
+                _height: parts.height,
+            },
+        )?;
         let proposer = validator_set
             .get_by_address(&parts.proposer)
             .ok_or(SignatureVerificationError::ProposerNotFound)?;
@@ -781,16 +818,17 @@ impl State {
         parts
     }
 
-    /// Returns the set of validators.
-    pub fn get_validator_set(&self) -> &ValidatorSet {
+    /// Returns the set of validators for the given consensus height.
+    /// Returns None if the height doesn't match the stored validator set height.
+    pub fn get_validator_set(&self, height: Height) -> Option<&ValidatorSet> {
         self.validator_set
             .as_ref()
-            .expect("Validator set must be initialized before use")
+            .and_then(|(h, vs)| if *h == height { Some(vs) } else { None })
     }
 
-    /// Sets the validator set.
-    pub fn set_validator_set(&mut self, validator_set: ValidatorSet) {
-        self.validator_set = Some(validator_set);
+    /// Sets the validator set for the given consensus height.
+    pub fn set_validator_set(&mut self, height: Height, validator_set: ValidatorSet) {
+        self.validator_set = Some((height, validator_set));
     }
 }
 

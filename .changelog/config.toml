@@ -1,0 +1,7 @@
+project_url = "https://github.com/informalsystems/emerald"
+
+# The number of spaces to inject before each component-related entry.
+entry_indent = 2
+
+[change_set_sections]
+sort_entries_by = "entry-text"

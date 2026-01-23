@@ -32,7 +32,7 @@ signature       = { workspace = true }
 
 alloy-consensus  = { workspace = true }
 alloy-primitives = { workspace = true, default-features = false, features = [ "serde" ] }
-k256             = "0.13"
+k256             = { workspace = true }
 
 [build-dependencies]
 prost-build = { workspace = true }

@@ -1,12 +1,14 @@
 use core::time::Duration;
 use std::collections::HashSet;
+use std::fmt;
 use std::path::Path;
 
 use alloy_rpc_types_engine::{
-    ExecutionPayloadEnvelopeV3, ExecutionPayloadEnvelopeV5, ExecutionPayloadV3, ForkchoiceState,
+    ExecutionPayloadEnvelopeV4, ExecutionPayloadEnvelopeV5, ExecutionPayloadV3, ForkchoiceState,
     ForkchoiceUpdated, PayloadAttributes, PayloadId as AlloyPayloadId, PayloadStatus,
 };
 use color_eyre::eyre;
+use eyre::eyre;
 use malachitebft_eth_types::{BlockHash, B256};
 use reqwest::header::CONTENT_TYPE;
 use reqwest::{Client, Url};
@@ -90,9 +92,21 @@ pub struct EngineCapabilities {
     pub get_blobs_v2: bool,
 }
 
+#[derive(Debug)]
 pub enum Fork {
     Osaka,
     Prague,
+    Unsupported,
+}
+
+impl fmt::Display for Fork {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Osaka => write!(f, "Osaka"),
+            Self::Prague => write!(f, "Prague"),
+            Self::Unsupported => write!(f, "Unsupported fork"),
+        }
+    }
 }
 
 // RPC client for connecting to Engine RPC endpoint with JWT authentication.
@@ -205,6 +219,10 @@ impl EngineRPC {
         .await
     }
 
+    // Note that we take only the execution payload from the nevelopes.
+    // The consensus client currently does not have support for processing
+    // items like blobs or execution requests.
+    // TODO Support handling of all fields from the response
     pub async fn get_payload(
         &self,
         payload_id: AlloyPayloadId,
@@ -222,15 +240,16 @@ impl EngineRPC {
                 Ok(response.execution_payload)
             }
             Fork::Prague => {
-                let response: ExecutionPayloadEnvelopeV3 = self
+                let response: ExecutionPayloadEnvelopeV4 = self
                     .rpc_request(
                         ENGINE_GET_PAYLOAD_V4,
                         json!([payload_id]),
                         ENGINE_GET_PAYLOAD_TIMEOUT,
                     )
                     .await?;
-                Ok(response.execution_payload)
+                Ok(response.envelope_inner.execution_payload)
             }
+            Fork::Unsupported => Err(eyre!("Unsupported fork")),
         }
     }
 

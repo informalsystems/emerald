@@ -1,4 +1,4 @@
-.PHONY: all build release test docs docs-serve testnet-start sync testnet-node-stop testnet-node-restart testnet-stop testnet-clean clean-volumes clean-prometheus spam spam-contract
+.PHONY: all build release test docs docs-serve testnet-config testnet-reth-recreate testnet-reth-restart testnet-start sync testnet-node-stop testnet-node-restart testnet-stop testnet-clean clean-volumes clean-prometheus spam spam-contract
 
 all: build
 
@@ -24,35 +24,35 @@ docs-serve:
 	cd docs/operational-docs && mdbook serve --open
 
 # Testnet (local deployment)
-testnet-setup: testnet-clean build
-	./scripts/generate_testnet_config.sh --nodes 3 --testnet-config-dir .testnet
+
+RETH_NODES ?= reth0 reth1 reth2 reth3
+
+testnet-config: testnet-clean build
+	./scripts/generate_testnet_config.sh --nodes $(words $(RETH_NODES)) --testnet-config-dir .testnet
 	cargo run --bin emerald -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt
 	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
 	bash scripts/start_ethrex.sh
 
-testnet-start: testnet-clean build
-# 	./scripts/generate_testnet_config.sh --nodes 3 --testnet-config-dir .testnet
-# 	cargo run --bin emerald -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
-# 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt
-# 	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
-# 	bash scripts/start_ethrex.sh
+testnet-reth-recreate:
+	docker compose down -v $(RETH_NODES)
+	docker compose up -d $(RETH_NODES)
+	./scripts/add_peers.sh --nodes $(words $(RETH_NODES))
 
-# 	bash scripts/add_peers.sh --nodes 4
+testnet-reth-restart:
+	docker compose restart $(RETH_NODES)
+
+testnet-start: testnet-config testnet-reth-recreate
+	docker compose up -d prometheus grafana otterscan
 	@echo 👉 Grafana dashboard is available at http://localhost:4000
-	bash scripts/spawn.bash --nodes 3 --home nodes --no-delay
+# 	bash scripts/spawn.bash --nodes $(words $(RETH_NODES)) --home nodes --no-delay
 
-sync: testnet-clean build
-	./scripts/generate_testnet_config.sh --nodes 4 --testnet-config-dir .testnet
-	cargo run --bin emerald -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
-	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt
-	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
-	docker compose up -d
-	./scripts/add_peers.sh --nodes 4
+sync: testnet-config testnet-reth-recreate
+	docker compose up -d prometheus grafana otterscan
 	@echo 👉 Grafana dashboard is available at http://localhost:4000
 	cp monitoring/prometheus-syncing.yml monitoring/prometheus.yml
 	docker compose restart prometheus
-	bash scripts/spawn.bash --nodes 4 --home nodes
+	bash scripts/spawn.bash --nodes $(words $(RETH_NODES)) --home nodes
 
 NODE ?= 0# default node 0
 
@@ -72,6 +72,7 @@ testnet-stop:
 testnet-clean: clean-prometheus clean-volumes
 	rm -rf ./.testnet
 	rm -rf ./assets/genesis.json
+	rm -rf ./assets/emerald_genesis.json
 	rm -rf ./nodes
 	rm -rf ./monitoring/data-grafana
 

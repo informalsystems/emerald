@@ -228,14 +228,14 @@ pub(crate) fn generate_evm_genesis(
             ..Default::default()
         },
     );
-
-    // The Ethereum Prague-Electra (Pectra) upgrade was activated on the mainnet
-    // on May 7, 2025, at epoch 364,032.
-    let date = NaiveDate::from_ymd_opt(2025, 5, 7).expect("Failed to create date for May 7, 2025");
+    // The Ethereum Fulu-Osaka (Fusaka) upgrade was activated on the mainnet
+    // on Dec 3, 2025.
+    let date =
+        NaiveDate::from_ymd_opt(2025, 12, 3).expect("Failed to create date for December 3, 2025");
     let datetime = date
-        .and_hms_opt(0, 0, 0)
-        .expect("Failed to create datetime with 00:00:00");
-    let valid_pectra_timestamp = datetime.and_utc().timestamp() as u64;
+        .and_hms_opt(21, 49, 11)
+        .expect("Failed to create datetime with 21:49:01");
+    let valid_fusaka_timestamp = datetime.and_utc().timestamp() as u64;
 
     // Create genesis configuration
     let genesis = Genesis {
@@ -254,7 +254,7 @@ pub(crate) fn generate_evm_genesis(
             shanghai_time: Some(0),
             cancun_time: Some(0),
             prague_time: Some(0),
-            // osaka_time: Some(0),
+            osaka_time: Some(0),
             terminal_total_difficulty: Some(U256::ZERO),
             terminal_total_difficulty_passed: true,
             // This was added only because Ethrex requires this to exist
@@ -265,8 +265,8 @@ pub(crate) fn generate_evm_genesis(
         alloc,
         ..Default::default()
     }
-    .with_gas_limit(30_000_000)
-    .with_timestamp(valid_pectra_timestamp);
+    .with_gas_limit(60_000_000) // Fusaka default gas limit
+    .with_timestamp(valid_fusaka_timestamp);
 
     // Create data directory if it doesn't exist
     std::fs::create_dir_all("./assets")?;

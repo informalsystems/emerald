@@ -1,0 +1,1 @@
+- `[config]` Command to perform a bulk update to malachite and emerald config ([#143](https://github.com/informalsystems/emerald/pull/143))

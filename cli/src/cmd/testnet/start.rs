@@ -270,8 +270,9 @@ impl TestnetStartCmd {
 execution_authrpc_address = "http://localhost:{}"
 engine_authrpc_address = "http://localhost:{}"
 jwt_token_path = "{}"
-sync_timeout_ms = 120000
-sync_initial_delay_ms = 100
+retry_config.initial_delay = "100ms"
+retry_config.max_delay = "2s"
+retry_config.max_elapsed_time = "20s"
 el_node_type = "archive"
 min_block_time = "500ms"
 fee_recipient = "{}"

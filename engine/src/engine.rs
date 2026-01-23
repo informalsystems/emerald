@@ -24,7 +24,7 @@ impl Engine {
     }
 
     pub async fn check_capabilities(&self) -> eyre::Result<()> {
-        let cap = self.api.exchange_capabilities().await?;
+        let cap: crate::engine_rpc::EngineCapabilities = self.api.exchange_capabilities().await?;
         if !cap.forkchoice_updated_v3
             || !cap.get_payload_v3
             || !cap.new_payload_v3
@@ -126,6 +126,8 @@ impl Engine {
         fee_recipient: &Address,
         fork: Fork,
     ) -> eyre::Result<ExecutionPayloadV3> {
+        debug!("🟠 current fork is {:?}", fork);
+
         debug!("🟠 generate_block on top of {:?}", latest_block);
         let payload_attributes: PayloadAttributes;
         let block_hash: BlockHash;
@@ -290,6 +292,15 @@ impl Engine {
                 Ok((false, 0)) // Note we do not need the actual height here.
             }
         }
+    }
+
+    /// Get the latest block number from the execution client.
+    /// Returns None if the client has no blocks (genesis case).
+    pub async fn get_latest_block_number(&self) -> eyre::Result<Option<u64>> {
+        debug!("🟠 get_latest_block_number");
+
+        let block = self.eth.get_block_by_number("latest").await?;
+        Ok(block.map(|b| b.block_number))
     }
 
     /// Returns the duration since the unix epoch.

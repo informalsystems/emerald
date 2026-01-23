@@ -25,7 +25,7 @@ use malachitebft_eth_types::{
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sha3::Digest;
-use ssz::Decode;
+use ssz::{Decode, Encode};
 use tokio::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
@@ -543,7 +543,6 @@ impl State {
     pub async fn commit(
         &mut self,
         certificate: CommitCertificate<EmeraldContext>,
-        block_header_bytes: Bytes,
     ) -> eyre::Result<()> {
         info!(
             height = %certificate.height,
@@ -570,11 +569,7 @@ impl State {
             Err(e) => return Err(e.into()),
         };
 
-        self.store
-            .store_decided_value(&certificate, proposal.value, block_header_bytes)
-            .await?;
-
-        // Store block data for decided value
+        // Get block data for decided value
         let block_data = self
             .store
             .get_block_data(certificate.height, certificate.round, certificate.value_id)
@@ -588,6 +583,15 @@ impl State {
         }
 
         if let Some(data) = block_data {
+            // Store decided value and the block header
+            let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&data).unwrap();
+            let block_header = extract_block_header(&execution_payload);
+            let block_header_bytes = Bytes::from(block_header.as_ssz_bytes());
+            self.store
+                .store_decided_value(&certificate, proposal.value, block_header_bytes)
+                .await?;
+
+            // Store decided block data
             self.store
                 .store_decided_block_data(certificate.height, data)
                 .await?;

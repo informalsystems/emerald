@@ -638,6 +638,8 @@ pub async fn on_decided(
         "🟢🟢 Consensus has decided on value"
     );
 
+    // The consensus engine only sends Decided messages for values (proposals)
+    // that were completely received by the local node
     let block_bytes = state
         .get_block_data(height, round, value_id)
         .await
@@ -706,10 +708,6 @@ pub async fn on_decided(
         );
     }
 
-    // Extract block header
-    let block_header = extract_block_header(&execution_payload);
-    let block_header_bytes = Bytes::from(block_header.as_ssz_bytes());
-
     // Get validation status from cache or call newPayload
     let validity = if let Some(cached) = state.validated_cache_mut().get(&block_hash) {
         cached
@@ -762,7 +760,7 @@ pub async fn on_decided(
 
     // When that happens, we store the decided value in our store
     // TODO: we should return an error reply if commit fails
-    state.commit(certificate, block_header_bytes).await?;
+    state.commit(certificate).await?;
 
     // Save the latest block
     state.latest_block = Some(ExecutionBlock {

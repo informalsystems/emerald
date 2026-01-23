@@ -27,7 +27,7 @@ alloy_sol_types::sol!(
     "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
 );
 
-use crate::state::{assemble_value_from_parts, decode_value, extract_block_header, State};
+use crate::state::{assemble_value_from_parts, decode_value, State};
 use crate::sync_handler::{get_decided_value_for_sync, validate_payload};
 
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {

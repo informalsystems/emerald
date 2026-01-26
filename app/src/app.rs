@@ -764,8 +764,8 @@ pub async fn on_decided(
 
     // Save the latest block
     state.latest_block = Some(ExecutionBlock {
-        block_hash: block_hash,
-        block_number: block_number,
+        block_hash,
+        block_number,
         parent_hash: latest_block_hash,
         timestamp: block_timestamp, // Note: This was a fix related to the sync reactor
         prev_randao: block_prev_randao,

@@ -42,8 +42,9 @@ pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -
     let genesis_validator_set =
         read_validators_from_contract(engine.eth.url().as_ref(), &genesis_block.block_hash).await?;
     debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
-    state.current_height = Height::new(genesis_block.block_number);
-    state.set_validator_set(state.current_height.increment(), genesis_validator_set);
+    // Set current_height to the next height where consensus will work (the tip)
+    state.current_height = Height::new(genesis_block.block_number).increment();
+    state.set_validator_set(state.current_height, genesis_validator_set);
     Ok(())
 }
 
@@ -202,7 +203,8 @@ pub async fn initialize_state_from_existing_block(
         .await?;
     match payload_status.status {
         PayloadStatusEnum::Valid => {
-            state.current_height = start_height;
+            // Set current_height to the next height where consensus will work (the tip)
+            state.current_height = start_height.increment();
             state.latest_block = Some(latest_block_candidate_from_store);
             // From the Engine API spec:
             // 8. Client software MUST respond to this method call in the
@@ -223,10 +225,9 @@ pub async fn initialize_state_from_existing_block(
             )
             .await?;
 
-            // Consensus will start at the next height, so we set the validator set for that height
-            let next_height = start_height.increment();
-            debug!("🌈 Got validator set: {:?} for height {}", block_validator_set, next_height);
-            state.set_validator_set(next_height, block_validator_set);
+            // Consensus will start at current_height, so we set the validator set for that height
+            debug!("🌈 Got validator set: {:?} for height {}", block_validator_set, state.current_height);
+            state.set_validator_set(state.current_height, block_validator_set);
 
             Ok(())
         }
@@ -306,30 +307,29 @@ pub async fn on_consensus_ready(
         Some(s) => {
             initialize_state_from_existing_block(state, engine, s, emerald_config).await?;
             info!(
-                "Starting from existing block at height {:?}. Next consensus height {:?} ",
-                state.current_height,
-                state.current_height.increment()
+                "Starting from existing block at height {:?}. Current tip (consensus height): {:?} ",
+                s,
+                state.current_height
             );
         }
         None => {
             // Get the genesis block from the execution engine
             initialize_state_from_genesis(state, engine).await?;
             info!(
-                "Starting from genesis. Next consensus height {:?}",
-                state.current_height.increment()
+                "Starting from genesis. Current tip (consensus height): {:?}",
+                state.current_height
             );
         }
     }
 
     // We can simply respond by telling the engine to start consensus
-    // at the next height (current height + 1)
-    let next_height = state.current_height.increment();
+    // at current_height (which tracks the tip where consensus will work)
     if reply
         .send((
-            next_height,
+            state.current_height,
             state
-                .get_validator_set(next_height)
-                .ok_or_eyre(format!("Validator set not found for height {next_height}"))?
+                .get_validator_set(state.current_height)
+                .ok_or_eyre(format!("Validator set not found for height {}", state.current_height))?
                 .clone(),
         ))
         .is_err()
@@ -771,7 +771,12 @@ pub async fn on_decided(
         prev_randao: block_prev_randao,
     });
 
-    // Get the new validator set and update the local state
+    // Update current_height and current_round to track the tip of the blockchain
+    // After committing height H, the tip advances to H+1 where consensus will work next
+    state.current_height = height.increment();
+    state.current_round = Round::ZERO;
+
+    // Get the new validator set for the current height and update the local state
     let new_validator_set =
         read_validators_from_contract(engine.eth.url().as_ref(), &latest_valid_hash).await?;
     debug!("🌈 Got validator set: {:?}", new_validator_set);

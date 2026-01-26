@@ -86,7 +86,12 @@ pub struct State {
     #[allow(dead_code)]
     rng: StdRng,
 
+    /// The current height where consensus is working (the tip of the blockchain).
+    /// After deciding on height H, this is set to H+1.
+    /// This represents the next height where consensus will propose, vote, and commit.
     pub current_height: Height,
+    /// The current round of consensus at current_height.
+    /// Reset to 0 when advancing to a new height.
     pub current_round: Round,
     pub current_proposer: Option<Address>,
 
@@ -616,9 +621,8 @@ impl State {
             .prune(retain_height, certificate.height, prune_certificates)
             .await?;
 
-        // Move to next height
-        self.current_height = self.current_height.increment();
-        self.current_round = Round::new(0);
+        // Note: current_height and current_round are updated in on_decided to track the tip
+        // They are not updated here to avoid duplication
 
         // Sleep to reduce the block speed, if set via config.
         debug!(timeout_commit = ?self.min_block_time);

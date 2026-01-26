@@ -148,17 +148,20 @@ async fn replay_heights_to_engine(
     Ok(())
 }
 
+/// Initialize state from a previously decided block stored locally by catching the
+/// execution client up to that height, updating forkchoice, and loading the validator
+/// set for the next consensus height.
 pub async fn initialize_state_from_existing_block(
     state: &mut State,
     engine: &Engine,
-    start_height: Height,
+    height: Height,
     emerald_config: &EmeraldConfig,
 ) -> eyre::Result<()> {
     // If there was somethign stored in the store for height, we should be able to retrieve
     // block data as well.
 
     let latest_block_candidate_from_store = state
-        .get_latest_block_candidate(start_height)
+        .get_latest_block_candidate(height)
         .await
         .ok_or_eyre("we have not atomically stored the last block, database corrupted")?;
 
@@ -166,32 +169,30 @@ pub async fn initialize_state_from_existing_block(
     let reth_latest_height = engine.get_latest_block_number().await?;
 
     match reth_latest_height {
-        Some(reth_height) if reth_height < start_height.as_u64() => {
+        Some(reth_height) if reth_height < height.as_u64() => {
             // Reth is behind - we need to replay blocks
             warn!(
                 "⚠️  Execution client is at height {} but Emerald has blocks up to height {}. Starting height replay.",
-                reth_height, start_height
+                reth_height, height
             );
 
             // Replay from Reth's next height to Emerald's stored height
             let replay_start = Height::new(reth_height + 1);
-            replay_heights_to_engine(state, engine, replay_start, start_height, emerald_config)
-                .await?;
+            replay_heights_to_engine(state, engine, replay_start, height, emerald_config).await?;
 
             info!("✅ Height replay completed successfully");
         }
         Some(reth_height) => {
             debug!(
                 "Execution client at height {} is aligned with or ahead of Emerald's stored height {}",
-                reth_height, start_height
+                reth_height, height
             );
         }
         None => {
             // No blocks in Reth yet (genesis case) - this shouldn't happen here
             // but handle it gracefully
             warn!("⚠️  Execution client has no blocks, replaying from genesis");
-            replay_heights_to_engine(state, engine, Height::new(1), start_height, emerald_config)
-                .await?;
+            replay_heights_to_engine(state, engine, Height::new(1), height, emerald_config).await?;
         }
     }
 
@@ -204,7 +205,7 @@ pub async fn initialize_state_from_existing_block(
     match payload_status.status {
         PayloadStatusEnum::Valid => {
             // Set current_height to the next height where consensus will work (the tip)
-            state.current_height = start_height.increment();
+            state.current_height = height.increment();
             state.latest_block = Some(latest_block_candidate_from_store);
             // From the Engine API spec:
             // 8. Client software MUST respond to this method call in the
@@ -302,13 +303,13 @@ pub async fn on_consensus_ready(
     engine.check_capabilities().await?;
 
     // Get latest decided height from local store
-    let start_height_from_store = state.store.max_decided_value_height().await;
-    match start_height_from_store {
-        Some(s) => {
-            initialize_state_from_existing_block(state, engine, s, emerald_config).await?;
+    let latest_height_from_store = state.store.max_decided_value_height().await;
+    match latest_height_from_store {
+        Some(h) => {
+            initialize_state_from_existing_block(state, engine, h, emerald_config).await?;
             info!(
                 "Starting from existing block at height {:?}. Current tip (consensus height): {:?} ",
-                s,
+                h,
                 state.current_height
             );
         }
@@ -329,7 +330,10 @@ pub async fn on_consensus_ready(
             state.current_height,
             state
                 .get_validator_set(state.current_height)
-                .ok_or_eyre(format!("Validator set not found for height {}", state.current_height))?
+                .ok_or_eyre(format!(
+                    "Validator set not found for height {}",
+                    state.current_height
+                ))?
                 .clone(),
         ))
         .is_err()
@@ -361,6 +365,15 @@ pub async fn on_started_round(
     };
 
     info!(%height, %round, %proposer, ?role, "🟢🟢 Started round");
+
+    // The current_height stored in state should match the one in the StartedRound message
+    if state.current_height != height {
+        warn!(
+            current_height = %state.current_height,
+            new_height = %height,
+            "Started round mismatch between state and message"
+        );
+    }
 
     // We can use that opportunity to update our internal state
     state.current_height = height;

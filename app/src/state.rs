@@ -86,14 +86,13 @@ pub struct State {
     #[allow(dead_code)]
     rng: StdRng,
 
-    /// The current height where consensus is working (the tip of the blockchain).
+    /// The height where consensus is working (the tip of the blockchain).
     /// After deciding on height H, this is set to H+1.
     /// This represents the next height where consensus will propose, vote, and commit.
-    pub current_height: Height,
-    /// The current round of consensus at current_height.
+    pub consensus_height: Height,
+    /// The round of consensus at consensus_height.
     /// Reset to 0 when advancing to a new height.
-    pub current_round: Round,
-    pub current_proposer: Option<Address>,
+    pub consensus_round: Round,
 
     pub latest_block: Option<ExecutionBlock>,
 
@@ -208,9 +207,8 @@ impl State {
         Self {
             ctx,
             signing_provider,
-            current_height: height,
-            current_round: Round::new(0),
-            current_proposer: None,
+            consensus_height: height,
+            consensus_round: Round::new(0),
             address,
             store,
             stream_nonce: 0,
@@ -440,10 +438,10 @@ impl State {
         };
 
         // Check if the proposal is outdated
-        if parts.height < self.current_height {
+        if parts.height < self.consensus_height {
             debug!(
-                height = %self.current_height,
-                round = %self.current_round,
+                height = %self.consensus_height,
+                round = %self.consensus_round,
                 part.height = %parts.height,
                 part.round = %parts.round,
                 part.sequence = %sequence,
@@ -454,7 +452,7 @@ impl State {
         }
 
         // Store future proposals parts in pending without validation
-        if parts.height > self.current_height {
+        if parts.height > self.consensus_height {
             info!(%parts.height, %parts.round, "Storing proposal parts for a future height in pending");
             self.store.store_pending_proposal_parts(parts).await?;
             return Ok(None);
@@ -490,8 +488,8 @@ impl State {
 
                 if validity == Validity::Invalid {
                     warn!(
-                        height = %self.current_height,
-                        round = %self.current_round,
+                        height = %self.consensus_height,
+                        round = %self.consensus_round,
                         "Received proposal with invalid execution payload, ignoring"
                     );
                     return Ok(None);
@@ -621,9 +619,6 @@ impl State {
             .prune(retain_height, certificate.height, prune_certificates)
             .await?;
 
-        // Note: current_height and current_round are updated in on_decided to track the tip
-        // They are not updated here to avoid duplication
-
         // Sleep to reduce the block speed, if set via config.
         debug!(timeout_commit = ?self.min_block_time);
         let elapsed_height_time = self.last_block_time.elapsed();
@@ -720,8 +715,8 @@ impl State {
         round: Round,
         data: Bytes,
     ) -> eyre::Result<LocallyProposedValue<EmeraldContext>> {
-        assert_eq!(height, self.current_height);
-        assert_eq!(round, self.current_round);
+        assert_eq!(height, self.consensus_height);
+        assert_eq!(round, self.consensus_round);
 
         // We create a new value.
         let value = Value::new(data.clone());
@@ -754,8 +749,8 @@ impl State {
 
     fn stream_id(&mut self) -> StreamId {
         let mut bytes = Vec::with_capacity(size_of::<u64>() + size_of::<u32>());
-        bytes.extend_from_slice(&self.current_height.as_u64().to_be_bytes());
-        bytes.extend_from_slice(&self.current_round.as_u32().unwrap().to_be_bytes());
+        bytes.extend_from_slice(&self.consensus_height.as_u64().to_be_bytes());
+        bytes.extend_from_slice(&self.consensus_round.as_u32().unwrap().to_be_bytes());
         bytes.extend_from_slice(&self.stream_nonce.to_be_bytes());
         self.stream_nonce += 1;
         StreamId::new(bytes.into())

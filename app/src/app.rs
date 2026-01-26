@@ -42,9 +42,9 @@ pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -
     let genesis_validator_set =
         read_validators_from_contract(engine.eth.url().as_ref(), &genesis_block.block_hash).await?;
     debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
-    // Set current_height to the next height where consensus will work (the tip)
-    state.current_height = Height::new(genesis_block.block_number).increment();
-    state.set_validator_set(state.current_height, genesis_validator_set);
+    // Set consensus_height to the next height where consensus will work (the tip)
+    state.consensus_height = Height::new(genesis_block.block_number).increment();
+    state.set_validator_set(state.consensus_height, genesis_validator_set);
     Ok(())
 }
 
@@ -204,8 +204,8 @@ pub async fn initialize_state_from_existing_block(
         .await?;
     match payload_status.status {
         PayloadStatusEnum::Valid => {
-            // Set current_height to the next height where consensus will work (the tip)
-            state.current_height = height.increment();
+            // Set consensus_height to the next height where consensus will work (the tip)
+            state.consensus_height = height.increment();
             state.latest_block = Some(latest_block_candidate_from_store);
             // From the Engine API spec:
             // 8. Client software MUST respond to this method call in the
@@ -226,9 +226,9 @@ pub async fn initialize_state_from_existing_block(
             )
             .await?;
 
-            // Consensus will start at current_height, so we set the validator set for that height
-            debug!("🌈 Got validator set: {:?} for height {}", block_validator_set, state.current_height);
-            state.set_validator_set(state.current_height, block_validator_set);
+            // Consensus will start at consensus_height, so we set the validator set for that height
+            debug!("🌈 Got validator set: {:?} for height {}", block_validator_set, state.consensus_height);
+            state.set_validator_set(state.consensus_height, block_validator_set);
 
             Ok(())
         }
@@ -310,7 +310,7 @@ pub async fn on_consensus_ready(
             info!(
                 "Starting from existing block at height {:?}. Current tip (consensus height): {:?} ",
                 h,
-                state.current_height
+                state.consensus_height
             );
         }
         None => {
@@ -318,21 +318,21 @@ pub async fn on_consensus_ready(
             initialize_state_from_genesis(state, engine).await?;
             info!(
                 "Starting from genesis. Current tip (consensus height): {:?}",
-                state.current_height
+                state.consensus_height
             );
         }
     }
 
     // We can simply respond by telling the engine to start consensus
-    // at current_height (which tracks the tip where consensus will work)
+    // at consensus_height (which tracks the tip where consensus will work)
     if reply
         .send((
-            state.current_height,
+            state.consensus_height,
             state
-                .get_validator_set(state.current_height)
+                .get_validator_set(state.consensus_height)
                 .ok_or_eyre(format!(
                     "Validator set not found for height {}",
-                    state.current_height
+                    state.consensus_height
                 ))?
                 .clone(),
         ))
@@ -366,21 +366,21 @@ pub async fn on_started_round(
 
     info!(%height, %round, %proposer, ?role, "🟢🟢 Started round");
 
-    // The current_height stored in state should match the one in the StartedRound message
-    if state.current_height != height {
+    // The consensus_height stored in state should match
+    // the one in the StartedRound message
+    if state.consensus_height != height {
         warn!(
-            current_height = %state.current_height,
+            consensus_height = %state.consensus_height,
             new_height = %height,
             "Started round mismatch between state and message"
         );
     }
 
     // We can use that opportunity to update our internal state
-    state.current_height = height;
-    state.current_round = round;
-    state.current_proposer = Some(proposer);
+    state.consensus_height = height;
+    state.consensus_round = round;
 
-    if state.current_round == Round::ZERO {
+    if state.consensus_round == Round::ZERO {
         state.last_block_time = Instant::now();
     }
 
@@ -784,24 +784,24 @@ pub async fn on_decided(
         prev_randao: block_prev_randao,
     });
 
-    // Update current_height and current_round to track the tip of the blockchain
+    // Update consensus_height and consensus_round to track the tip of the blockchain
     // After committing height H, the tip advances to H+1 where consensus will work next
-    state.current_height = height.increment();
-    state.current_round = Round::ZERO;
+    state.consensus_height = height.increment();
+    state.consensus_round = Round::ZERO;
 
-    // Get the new validator set for the current height and update the local state
+    // Get the new validator set for the next height and update the local state
     let new_validator_set =
         read_validators_from_contract(engine.eth.url().as_ref(), &latest_valid_hash).await?;
     debug!("🌈 Got validator set: {:?}", new_validator_set);
-    state.set_validator_set(state.current_height, new_validator_set);
+    state.set_validator_set(state.consensus_height, new_validator_set);
 
     // And then we instruct consensus to start the next height
     if reply
         .send(Next::Start(
-            state.current_height,
+            state.consensus_height,
             state
-                .get_validator_set(state.current_height)
-                .ok_or_eyre("Validator set not found for current height {state.current_height}")?
+                .get_validator_set(state.consensus_height)
+                .ok_or_eyre("Validator set not found for height {state.consensus_height}")?
                 .clone(),
         ))
         .is_err()
@@ -946,12 +946,13 @@ pub async fn on_get_decided_value(
     info!(%height, "🟢🟢 GetDecidedValue");
 
     let earliest_height_available = state.get_earliest_height().await;
-    // Check if requested height is beyond our current height
-    let raw_decided_value = if (earliest_height_available..state.current_height).contains(&height) {
+    // Check if requested height is beyond our consensus height
+    let raw_decided_value = if (earliest_height_available..state.consensus_height).contains(&height)
+    {
         let earliest_unpruned = state.get_earliest_unpruned_height().await;
         get_decided_value_for_sync(&state.store, engine, height, earliest_unpruned).await?
     } else {
-        info!(%height, current_height = %state.current_height, "Requested height is >= current height or < earliest_height_available.");
+        info!(%height, consensus_height = %state.consensus_height, "Requested height is >= consensus height or < earliest_height_available.");
         None
     };
 
@@ -1124,7 +1125,7 @@ pub async fn process_consensus_message(
         }
 
         // After some time, consensus will finally reach a decision on the value
-        // to commit for the current height, and will notify the application,
+        // to commit for the consensus_height, and will notify the application,
         // providing it with a commit certificate which contains the ID of the value
         // that was decided on as well as the set of commits for that value,
         // ie. the precommits together with their (aggregated) signatures.

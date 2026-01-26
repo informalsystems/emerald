@@ -680,46 +680,11 @@ pub async fn on_decided(
         .block_hash;
     assert_eq!(latest_block_hash, parent_block_hash);
 
-    // Log stats
-    {
-        state.txs_count += tx_count as u64;
-        state.chain_bytes += block_bytes.len() as u64;
-        let elapsed_time = state.start_time.elapsed();
-
-        state.metrics.tx_stats.add_txs(tx_count as u64);
-        state
-            .metrics
-            .tx_stats
-            .add_chain_bytes(block_bytes.len() as u64);
-        state
-            .metrics
-            .tx_stats
-            .set_txs_per_second(state.txs_count as f64 / elapsed_time.as_secs_f64());
-        state
-            .metrics
-            .tx_stats
-            .set_bytes_per_second(state.chain_bytes as f64 / elapsed_time.as_secs_f64());
-        state.metrics.tx_stats.set_block_tx_count(tx_count as u64);
-        state
-            .metrics
-            .tx_stats
-            .set_block_size(block_bytes.len() as u64);
-
-        // Persist cumulative metrics to database for crash recovery
-        state
-            .store
-            .store_cumulative_metrics(state.txs_count, state.chain_bytes, elapsed_time.as_secs())
-            .await?;
-
-        info!(
-            "👉 stats at height {}: #txs={}, txs/s={:.2}, chain_bytes={}, bytes/s={:.2}",
-            height,
-            state.txs_count,
-            state.txs_count as f64 / elapsed_time.as_secs_f64(),
-            state.chain_bytes,
-            state.chain_bytes as f64 / elapsed_time.as_secs_f64(),
-        );
-    }
+    // Calculate and log per-block statistics
+    let block_time_secs = state.previous_block_commit_time.elapsed().as_secs_f64();
+    state
+        .log_block_stats(height, tx_count, block_bytes.len(), block_time_secs)
+        .await?;
 
     // Get validation status from cache or call newPayload
     let validity = if let Some(cached) = state.validated_cache_mut().get(&block_hash) {
@@ -774,6 +739,10 @@ pub async fn on_decided(
     // When that happens, we store the decided value in our store
     // TODO: we should return an error reply if commit fails
     state.commit(certificate).await?;
+
+    // Update previous_block_commit_time to track when this block was committed
+    // This is used to calculate per-block TPS for the next block
+    state.previous_block_commit_time = Instant::now();
 
     // Save the latest block
     state.latest_block = Some(ExecutionBlock {

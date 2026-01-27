@@ -140,37 +140,37 @@ services:
       # - "--blobpool.pricebump=1"
       # - "--txpool.pending-max-count=50000" # default=10000
       # - "--txpool.queued-max-count=50000" # default=10000
-  reth3:
-    network_mode: host
-    image: ethrex:local
-    container_name: reth3
-    volumes:
-      - reth3:/data
-      - ./assets:/root/assets/
-    environment:
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      RUST_LOG: info
-    command:
-      - "node"
-      - "-vvvvv"
-      - "-d"
-      - "--datadir=/data/reth/execution-data"
-      - "--chain=/root/assets/genesis.json"
-      - "--http"
-      - "--http.port=8945"
-      - "--http.addr=0.0.0.0"
-      # - "--http.corsdomain=*"
-      - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
-      - "--ws"
-      - "--ws.port=8946"
-      - "--ws.addr=0.0.0.0"
-      - "--authrpc.addr=0.0.0.0"
-      - "--authrpc.port=11551"
-      - "--authrpc.jwtsecret=/root/assets/jwtsecret"
-      - "--metrics=127.0.0.1:9003"
-      - "--discovery.port=34303"
-      - "--port=34303"
-      - "--nat=extip:127.0.0.1"
+  # reth3:
+  #   network_mode: host
+  #   image: ethrex:local
+  #   container_name: reth3
+  #   volumes:
+  #     - reth3:/data
+  #     - ./assets:/root/assets/
+  #   environment:
+  #     PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  #     RUST_LOG: info
+  #   command:
+  #     - "node"
+  #     - "-vvvvv"
+  #     - "-d"
+  #     - "--datadir=/data/reth/execution-data"
+  #     - "--chain=/root/assets/genesis.json"
+  #     - "--http"
+  #     - "--http.port=8945"
+  #     - "--http.addr=0.0.0.0"
+  #     # - "--http.corsdomain=*"
+  #     - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+  #     - "--ws"
+  #     - "--ws.port=8946"
+  #     - "--ws.addr=0.0.0.0"
+  #     - "--authrpc.addr=0.0.0.0"
+  #     - "--authrpc.port=11551"
+  #     - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+  #     - "--metrics=127.0.0.1:9003"
+  #     - "--discovery.port=34303"
+  #     - "--port=34303"
+  #     - "--nat=extip:127.0.0.1"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve

@@ -54,6 +54,8 @@ impl Engine {
 
                 match result {
                     Ok(forkchoice_updated) => {
+                        debug!("*** {:?}", forkchoice_updated.payload_status.is_valid());
+
                         if forkchoice_updated.payload_status.status.is_syncing() {
                             warn!(
                                 "⚠️  Execution client SYNCING, retrying in {:?}",
@@ -137,10 +139,11 @@ impl Engine {
 
                 payload_attributes = PayloadAttributes {
                     // Use current time to enable sub-second block production.
-                    timestamp: std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs(),
+                    timestamp: lb.timestamp + 1, // We did not yet modify Ethrex to accept subsecond TS
+                    // std::time::SystemTime::now()
+                    // .duration_since(std::time::UNIX_EPOCH)
+                    // .unwrap()
+                    // .as_secs(),
 
                     // prev_randao comes from the previous beacon block and influences the proposer selection mechanism.
                     // prev_randao is derived from the RANDAO mix (randomness accumulator) of the parent beacon block.

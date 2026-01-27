@@ -96,6 +96,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+
+echo "NUM NODES $nodes"
 # If node_keys are provided, infer the number of nodes
 if [[ ${#node_keys[@]} -gt 0 ]]; then
     nodes="${#node_keys[@]}"
@@ -233,6 +235,7 @@ PRUNING_NODES=() #list of nodes who we want pruned. Note that you need to set th
 
 for ((i = 0; i < nodes; i++)); do
     mkdir -p "$TESTNET_DIR/config/$i"
+    echo "Making testnet config"
     ENGINE_PORT=$(get_engine_port $i)
     AUTH_PORT=$(get_auth_port $i)
     NODE_IP=$(get_node_ip $i "$custom_config_path")

@@ -243,7 +243,7 @@ pub async fn initialize_state_from_existing_block(
 
 pub async fn read_validators_from_contract(
     eth_url: &str,
-    block_hash: &BlockHash,
+    _block_hash: &BlockHash,
 ) -> eyre::Result<ValidatorSet> {
     let provider = ProviderBuilder::new().connect(eth_url).await?;
 
@@ -252,7 +252,7 @@ pub async fn read_validators_from_contract(
 
     let genesis_validator_set_sol = validator_manager_contract
         .getValidators()
-        .block((*block_hash).into())
+        .block(0.into()) //*block_hash).into()) // ALWAYS FETCH VALSET at 0
         .call()
         .await?;
 

@@ -25,19 +25,23 @@ docs-serve:
 
 # Testnet (local deployment)
 
-RETH_NODES ?= reth0 reth1 reth2 reth3
+RETH_NODES ?= reth0 reth1 reth2
 
-testnet-config: testnet-clean build
-	./scripts/generate_testnet_config.sh --nodes $(words $(RETH_NODES)) --testnet-config-dir .testnet
+testnet-config:
+	./scripts/generate_testnet_config.sh --nodes 3 --testnet-config-dir .testnet
 	cargo run --bin emerald -- testnet --home nodes --testnet-config .testnet/testnet_config.toml
 	ls nodes/*/config/priv_validator_key.json | xargs -I{} cargo run --bin emerald show-pubkey {} > nodes/validator_public_keys.txt
 	cargo run --bin emerald-utils genesis --public-keys-file ./nodes/validator_public_keys.txt --devnet
-	bash scripts/start_ethrex.sh
 
 testnet-reth-recreate:
 	docker compose down -v $(RETH_NODES)
 	docker compose up -d $(RETH_NODES)
 	./scripts/add_peers.sh --nodes $(words $(RETH_NODES))
+
+testnet-ethrex-recreate:
+	docker compose -f compose_ethrex.yaml up -d ethrex0
+	./scripts/start_ethrex.sh
+
 
 testnet-reth-restart:
 	docker compose restart $(RETH_NODES)
@@ -45,7 +49,12 @@ testnet-reth-restart:
 testnet-start: testnet-config testnet-reth-recreate
 	docker compose up -d prometheus grafana otterscan
 	@echo 👉 Grafana dashboard is available at http://localhost:4000
-# 	bash scripts/spawn.bash --nodes $(words $(RETH_NODES)) --home nodes --no-delay
+	bash scripts/spawn.bash --nodes 3 --home nodes --no-delay
+
+testnet-start-ethrex: testnet-config testnet-ethrex-recreate
+# 	docker compose up -d prometheus grafana otterscan
+# 	@echo 👉 Grafana dashboard is available at http://localhost:4000
+	bash scripts/spawn.bash --nodes 3 --home nodes --no-delay
 
 sync: testnet-config testnet-reth-recreate
 	docker compose up -d prometheus grafana otterscan
@@ -75,6 +84,15 @@ testnet-clean: clean-prometheus clean-volumes
 	rm -rf ./assets/emerald_genesis.json
 	rm -rf ./nodes
 	rm -rf ./monitoring/data-grafana
+
+testnet-clean-ethrex: clean-prometheus
+	docker compose -f compose_ethrex.yaml down ethrex0 ethrex1 ethrex2
+	rm -rf ./.testnet
+	rm -rf ./assets/genesis.json
+	rm -rf ./assets/emerald_genesis.json
+	rm -rf ./nodes
+	rm -rf ./monitoring/data-grafana
+	docker volume ls --format '{{.Name}}' | grep -E 'ethrex' | xargs -r docker volume rm || true
 
 clean-volumes:
 	docker volume ls --format '{{.Name}}' | grep -E 'reth' | xargs -r docker volume rm || true

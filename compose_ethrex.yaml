@@ -1,0 +1,332 @@
+volumes:
+  ethrex0:
+  ethrex1:
+  ethrex2:
+
+services:
+  ethrex0:
+    network_mode: host
+    image: ghcr.io/lambdaclass/ethrex:main
+    container_name: ethrex0
+    volumes:
+      - ethrex0:/data/ethrex
+      - ./assets:/root/assets/
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      RUST_LOG: debug
+    command:
+      #- "node"
+      #- "-vvvvv"
+      #- "-d"
+      - "--datadir=/data/ethrex"
+      - "--network=/root/assets/genesis.json"
+      #- "--http"
+      - "--http.port=8645"
+      - "--http.addr=0.0.0.0"
+      #- "--http.corsdomain=*"
+      #- "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+      - "--ws.enabled"
+      - "--ws.port=8646"
+      - "--ws.addr=0.0.0.0"
+      - "--authrpc.addr=0.0.0.0"
+      - "--authrpc.port=8551"
+      - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+      - "--metrics"
+      - "--metrics.addr=127.0.0.1"
+      - "--metrics.port=9000"
+      - "--discovery.port=31303"
+      - "--p2p.port=31303"
+      - "--log.level=trace"
+      #- "--nat=extip:127.0.0.1"
+      # - "--builder.gaslimit=3600000000" # default * 100
+      # - "--builder.interval=10ms"
+      # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
+      # - "--builder.max-tasks=10" # default=3
+      # - "--txpool.gas-limit=300000000" # default * 10
+      # - "--blobpool.pricebump=1"
+      # - "--txpool.pending-max-count=50000" # default=10000
+      # - "--txpool.queued-max-count=50000" # default=10000
+  ethrex1:
+    network_mode: host
+    image: ghcr.io/lambdaclass/ethrex:main
+    container_name: ethrex1
+    volumes:
+      - ethrex1:/data/ethrex
+      - ./assets:/root/assets/
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      RUST_LOG: debug
+    command:
+      # - "node"
+      # - "-vvvvv"
+      # - "-d"
+      - "--datadir=/data/ethrex"
+      - "--log.level=trace"
+      - "--network=/root/assets/genesis.json"
+      # - "--http"
+      - "--http.port=8745"
+      - "--http.addr=0.0.0.0"
+      # - "--http.corsdomain=*"
+      # - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+      - "--ws.enabled"
+      - "--ws.port=8746"
+      - "--ws.addr=0.0.0.0"
+      - "--authrpc.addr=0.0.0.0"
+      - "--authrpc.port=9551"
+      - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+      # If node pruning is to be enabled - uncomment this
+      # - "--prune.receipts.distance=10064"
+      # - "--prune.account-history.distance=10064"
+      # - "--prune.storage-history.distance=10064"
+      # - "--prune.transaction-lookup.distance=10064"
+      # - "--prune.sender-recovery.distance=10064"
+      # - "--prune.block-interval=5"
+      # - "--prune.bodies.distance=10064"
+      - "--metrics"
+      - "--metrics.addr=127.0.0.1"
+      - "--metrics.port=9001"
+      - "--discovery.port=32303"
+      - "--p2p.port=32303"
+      - "--bootnodes=${BOOTNODE_ENODE}"
+      # - "--nat=extip:127.0.0.1"
+      # - "--builder.gaslimit=3600000000" # default * 100
+      # - "--builder.interval=10ms"
+      # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
+      # - "--builder.max-tasks=10" # default=3
+      # - "--txpool.gas-limit=300000000" # default * 10
+      # - "--blobpool.pricebump=1"
+      # - "--txpool.pending-max-count=50000" # default=10000
+      # - "--txpool.queued-max-count=50000" # default=10000
+  ethrex2:
+    network_mode: host
+    image: ghcr.io/lambdaclass/ethrex:main
+    container_name: ethrex2
+    volumes:
+      - ethrex2:/data/ethrex
+      - ./assets:/root/assets/
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      RUST_LOG: debug
+    command:
+      # - "node"
+      # - "-vvvvv"
+      # - "-d"
+      - "--datadir=/data/ethrex"
+      - "--log.level=trace"
+      - "--network=/root/assets/genesis.json"
+      # - "--http"
+      - "--http.port=8845"
+      - "--http.addr=0.0.0.0"
+      # - "--http.corsdomain=*"
+      # - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+      - "--ws.enabled"
+      - "--ws.port=8846"
+      - "--ws.addr=0.0.0.0"
+      - "--authrpc.addr=0.0.0.0"
+      - "--authrpc.port=10551"
+      - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+      - "--metrics"
+      - "--metrics.addr=127.0.0.1"
+      - "--metrics.port=9002"
+      - "--discovery.port=33303"
+      - "--p2p.port=33303"
+      - "--bootnodes=${BOOTNODE_ENODE},${BOOTNODE_ENODE2}"
+      # - "--nat=extip:127.0.0.1"
+      # - "--builder.gaslimit=3600000000" # default * 100
+      # - "--builder.interval=10ms"
+      # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
+      # - "--builder.max-tasks=10" # default=3
+      # - "--txpool.gas-limit=300000000" # default * 10
+      # - "--blobpool.pricebump=1"
+      # - "--txpool.pending-max-count=50000" # default=10000
+      # - "--txpool.queued-max-count=50000" # default=10000
+  reth3:
+    network_mode: host
+    image: ethrex:local
+    container_name: reth3
+    volumes:
+      - reth3:/data
+      - ./assets:/root/assets/
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      RUST_LOG: info
+    command:
+      - "node"
+      - "-vvvvv"
+      - "-d"
+      - "--datadir=/data/reth/execution-data"
+      - "--chain=/root/assets/genesis.json"
+      - "--http"
+      - "--http.port=8945"
+      - "--http.addr=0.0.0.0"
+      # - "--http.corsdomain=*"
+      - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+      - "--ws"
+      - "--ws.port=8946"
+      - "--ws.addr=0.0.0.0"
+      - "--authrpc.addr=0.0.0.0"
+      - "--authrpc.port=11551"
+      - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+      - "--metrics=127.0.0.1:9003"
+      - "--discovery.port=34303"
+      - "--port=34303"
+      - "--nat=extip:127.0.0.1"
+      # - "--builder.gaslimit=3600000000" # default * 100
+      # - "--builder.interval=10ms"
+      # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
+      # - "--builder.max-tasks=10" # default=3
+      # - "--txpool.gas-limit=300000000" # default * 10
+      # - "--blobpool.pricebump=1"
+      # - "--txpool.pending-max-count=50000" # default=10000
+      # - "--txpool.queued-max-count=50000" # default=10000
+  # reth4:
+  #   network_mode: host
+  #   image: ethrex:local
+  #   container_name: reth4
+  #   volumes:
+  #     - reth4:/data
+  #     - ./assets:/root/assets/
+  #   environment:
+  #     PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  #     RUST_LOG: info
+  #   command:
+  #     - "node"
+  #     - "-vvvvv"
+  #     - "-d"
+  #     - "--datadir=/data/reth/execution-data"
+  #     - "--chain=/root/assets/genesis.json"
+  #     - "--http"
+  #     - "--http.port=9045"
+  #     - "--http.addr=0.0.0.0"
+  #     - "--http.corsdomain=*"
+  #     - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+  #     - "--ws"
+  #     - "--ws.port=9046"
+  #     - "--ws.addr=0.0.0.0"
+  #     - "--authrpc.addr=0.0.0.0"
+  #     - "--authrpc.port=12551"
+  #     - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+  #     - "--metrics=127.0.0.1:9004"
+  #     - "--discovery.port=35303"
+  #     - "--port=35303"
+  #     - "--nat=extip:127.0.0.1"
+  #     # - "--builder.gaslimit=3600000000" # default * 100
+  #     # - "--builder.interval=10ms"
+  #     # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
+  #     # - "--builder.max-tasks=10" # default=3
+  #     # - "--txpool.gas-limit=300000000" # default * 10
+  #     # - "--blobpool.pricebump=1"
+  #     # - "--txpool.pending-max-count=50000" # default=10000
+  #     # - "--txpool.queued-max-count=50000" # default=10000
+  # reth5:
+  #   network_mode: host
+  #   image: ethrex:local
+  #   container_name: reth5
+  #   volumes:
+  #     - reth5:/data
+  #     - ./assets:/root/assets/
+  #   environment:
+  #     PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  #     RUST_LOG: info
+  #   command:
+  #     - "node"
+  #     - "-vvvvv"
+  #     - "-d"
+  #     - "--datadir=/data/reth/execution-data"
+  #     - "--chain=/root/assets/genesis.json"
+  #     - "--http"
+  #     - "--http.port=9145"
+  #     - "--http.addr=0.0.0.0"
+  #     - "--http.corsdomain=*"
+  #     - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+  #     - "--ws"
+  #     - "--ws.port=9146"
+  #     - "--ws.addr=0.0.0.0"
+  #     - "--authrpc.addr=0.0.0.0"
+  #     - "--authrpc.port=13551"
+  #     - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+  #     - "--metrics=127.0.0.1:9005"
+  #     - "--discovery.port=36303"
+  #     - "--port=36303"
+  #     - "--nat=extip:127.0.0.1"
+  #     # - "--builder.gaslimit=3600000000" # default * 100
+  #     # - "--builder.interval=10ms"
+  #     # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
+  #     # - "--builder.max-tasks=10" # default=3
+  #     # - "--txpool.gas-limit=300000000" # default * 10
+  #     # - "--blobpool.pricebump=1"
+  #     # - "--txpool.pending-max-count=50000" # default=10000
+  #     # - "--txpool.queued-max-count=50000" # default=10000
+  # reth6:
+  #   network_mode: host
+  #   image: ethrex:local
+  #   container_name: reth6
+  #   volumes:
+  #     - reth6:/data
+  #     - ./assets:/root/assets/
+  #   environment:
+  #     PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  #     RUST_LOG: info
+  #   command:
+  #     - "node"
+  #     - "-vvvvv"
+  #     - "-d"
+  #     - "--datadir=/data/reth/execution-data"
+  #     - "--chain=/root/assets/genesis.json"
+  #     - "--http"
+  #     - "--http.port=9245"
+  #     - "--http.addr=0.0.0.0"
+  #     - "--http.corsdomain=*"
+  #     - "--http.api=admin,net,eth,web3,debug,txpool,trace,ots"
+  #     - "--ws"
+  #     - "--ws.port=9246"
+  #     - "--ws.addr=0.0.0.0"
+  #     - "--authrpc.addr=0.0.0.0"
+  #     - "--authrpc.port=14551"
+  #     - "--authrpc.jwtsecret=/root/assets/jwtsecret"
+  #     - "--metrics=127.0.0.1:9006"
+  #     - "--discovery.port=37303"
+  #     - "--port=37303"
+  #     - "--nat=extip:127.0.0.1"
+  #     # - "--builder.gaslimit=3600000000" # default * 100
+  #     # - "--builder.interval=10ms"
+  #     # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
+  #     # - "--builder.max-tasks=10" # default=3
+  #     # - "--txpool.gas-limit=300000000" # default * 10
+  #     # - "--blobpool.pricebump=1"
+  #     # - "--txpool.pending-max-count=50000" # default=10000
+  #     # - "--txpool.queued-max-count=50000" # default=10000
+  prometheus:
+    network_mode: host
+    build:
+      dockerfile: Dockerfile.prometheus
+    user: "65534"
+  grafana:
+    network_mode: host
+    build:
+      dockerfile: Dockerfile.grafana
+    user: "501"
+    environment:
+      GF_LOG_LEVEL: info
+      GF_SERVER_HTTP_PORT: 4000
+      GF_SERVER_HTTP_ADDR: 0.0.0.0
+      GF_ANALYTICS_ENABLED: false
+      GF_ANALYTICS_REPORTING_ENABLED: false
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: false
+      GF_ANALYTICS_CHECK_FOR_UPDATES: false
+      GF_ANALYTICS_FEEDBACK_LINKS_ENABLED: false
+      GF_SECURITY_DISABLE_GRAVATAR: true
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards-data/default.json
+      GF_USERS_DEFAULT_THEME: system
+      GF_USERS_EDITORS_CAN_ADMIN: true
+      GF_AUTH_ANONYMOUS_ENABLED: true
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Editor
+      GF_AUTH_BASIC_ENABLED: false
+      GF_NEWS_NEWS_FEED_ENABLED: false
+  otterscan:
+    image: otterscan/otterscan:develop
+    depends_on:
+      - ethrex0
+    network_mode: host # frontend is at http://127.0.0.1:80
+    environment:
+      ERIGON_URL: "http://127.0.0.1:8645"

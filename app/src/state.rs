@@ -865,7 +865,9 @@ impl State {
 
         // Update metrics
         self.metrics.tx_stats.add_txs(tx_count as u64);
-        self.metrics.tx_stats.add_chain_bytes(block_bytes_len as u64);
+        self.metrics
+            .tx_stats
+            .add_chain_bytes(block_bytes_len as u64);
         self.metrics.tx_stats.set_txs_per_second(txs_per_second);
         self.metrics.tx_stats.set_bytes_per_second(bytes_per_second);
         self.metrics.tx_stats.set_block_tx_count(tx_count as u64);

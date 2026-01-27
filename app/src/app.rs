@@ -680,12 +680,6 @@ pub async fn on_decided(
         .block_hash;
     assert_eq!(latest_block_hash, parent_block_hash);
 
-    // Calculate and log per-block statistics
-    let block_time_secs = state.previous_block_commit_time.elapsed().as_secs_f64();
-    state
-        .log_block_stats(height, tx_count, block_bytes.len(), block_time_secs)
-        .await?;
-
     // Get validation status from cache or call newPayload
     let validity = if let Some(cached) = state.validated_cache_mut().get(&block_hash) {
         cached
@@ -739,6 +733,12 @@ pub async fn on_decided(
     // When that happens, we store the decided value in our store
     // TODO: we should return an error reply if commit fails
     state.commit(certificate).await?;
+
+    // Calculate and log per-block statistics
+    let block_time_secs = state.previous_block_commit_time.elapsed().as_secs_f64();
+    state
+        .log_block_stats(height, tx_count, block_bytes.len(), block_time_secs)
+        .await?;
 
     // Update previous_block_commit_time to track when this block was committed
     // This is used to calculate per-block TPS for the next block

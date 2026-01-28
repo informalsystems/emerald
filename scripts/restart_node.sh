@@ -10,6 +10,7 @@ NODE=$1
 NODES_HOME="nodes"
 APP_BINARY="emerald"
 # docker compose start reth$NODE
+docker comppose start ethrex$NODE
 export RUST_BACKTRACE=full
 
 echo "[Node $NODE] Restarting node..."

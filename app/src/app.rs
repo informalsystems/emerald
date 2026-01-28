@@ -39,8 +39,12 @@ pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -
         .ok_or_eyre("Genesis block does not exist")?;
     debug!("👉 genesis_block: {:?}", genesis_block);
     state.latest_block = Some(genesis_block);
-    let genesis_validator_set =
-        read_validators_from_contract(engine.eth.url().as_ref(), &genesis_block.block_hash).await?;
+    let genesis_validator_set = read_validators_from_contract(
+        engine.eth.url().as_ref(),
+        &genesis_block.block_hash,
+        genesis_block.block_number,
+    )
+    .await?;
     debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
     state.current_height = Height::new(genesis_block.block_number);
     state.set_validator_set(state.current_height.increment(), genesis_validator_set);
@@ -220,6 +224,7 @@ pub async fn initialize_state_from_existing_block(
             let block_validator_set = read_validators_from_contract(
                 engine.eth.url().as_ref(),
                 &latest_block_candidate_from_store.block_hash,
+                latest_block_candidate_from_store.block_number,
             )
             .await?;
 
@@ -244,6 +249,7 @@ pub async fn initialize_state_from_existing_block(
 pub async fn read_validators_from_contract(
     eth_url: &str,
     _block_hash: &BlockHash,
+    block_number: u64,
 ) -> eyre::Result<ValidatorSet> {
     let provider = ProviderBuilder::new().connect(eth_url).await?;
 
@@ -252,7 +258,7 @@ pub async fn read_validators_from_contract(
 
     let genesis_validator_set_sol = validator_manager_contract
         .getValidators()
-        .block(0.into()) //*block_hash).into()) // ALWAYS FETCH VALSET at 0
+        .block(block_number.into()) //*block_hash).into()) // ALWAYS FETCH VALSET at 0
         .call()
         .await?;
 
@@ -772,6 +778,7 @@ pub async fn on_decided(
         .ok_or_eyre("missing latest block in state")?
         .block_hash;
     // Save the latest block
+    debug!("Committed block to store");
     state.latest_block = Some(ExecutionBlock {
         block_hash: new_block_hash,
         block_number: new_block_number,
@@ -780,8 +787,13 @@ pub async fn on_decided(
         prev_randao: new_block_prev_randao,
     });
 
-    let new_validator_set =
-        read_validators_from_contract(engine.eth.url().as_ref(), &latest_valid_hash).await?;
+    debug!("Getting validator set");
+    let new_validator_set = read_validators_from_contract(
+        engine.eth.url().as_ref(),
+        &latest_valid_hash,
+        state.current_height.as_u64() - 1, // TODO this has to be fixed to fetch the valset of the current block
+    )
+    .await?;
     debug!("🌈 Got validator set: {:?}", new_validator_set);
     state.set_validator_set(state.current_height, new_validator_set);
 

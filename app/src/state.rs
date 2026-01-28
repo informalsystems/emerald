@@ -113,6 +113,9 @@ pub struct State {
 
     pub last_block_time: Instant,
 
+    /// Tracks when the previous block was committed (for per-block TPS calculation)
+    pub previous_block_commit_time: Instant,
+
     pub eth_chain_config: ChainConfig,
 }
 
@@ -228,6 +231,7 @@ impl State {
             prune_at_block_interval: prune_at_interval,
             min_block_time,
             last_block_time: Instant::now(),
+            previous_block_commit_time: Instant::now(),
             eth_chain_config,
         }
     }
@@ -832,6 +836,61 @@ impl State {
     /// Sets the validator set for the given consensus height.
     pub fn set_validator_set(&mut self, height: Height, validator_set: ValidatorSet) {
         self.validator_set = Some((height, validator_set));
+    }
+
+    /// Update and log per-block statistics
+    pub async fn log_block_stats(
+        &mut self,
+        height: Height,
+        tx_count: usize,
+        block_bytes_len: usize,
+        block_time_secs: f64,
+    ) -> eyre::Result<()> {
+        // Calculate per-block metrics
+        let txs_per_second = if block_time_secs > 0.0 {
+            tx_count as f64 / block_time_secs
+        } else {
+            0.0
+        };
+        let bytes_per_second = if block_time_secs > 0.0 {
+            block_bytes_len as f64 / block_time_secs
+        } else {
+            0.0
+        };
+
+        // Update cumulative counters
+        self.txs_count += tx_count as u64;
+        self.chain_bytes += block_bytes_len as u64;
+        let elapsed_time = self.start_time.elapsed();
+
+        // Update metrics
+        self.metrics.tx_stats.add_txs(tx_count as u64);
+        self.metrics
+            .tx_stats
+            .add_chain_bytes(block_bytes_len as u64);
+        self.metrics.tx_stats.set_txs_per_second(txs_per_second);
+        self.metrics.tx_stats.set_bytes_per_second(bytes_per_second);
+        self.metrics.tx_stats.set_block_tx_count(tx_count as u64);
+        self.metrics.tx_stats.set_block_size(block_bytes_len as u64);
+
+        // Persist cumulative metrics to database for crash recovery
+        self.store
+            .store_cumulative_metrics(self.txs_count, self.chain_bytes, elapsed_time.as_secs())
+            .await?;
+
+        info!(
+            "👉 stats at height {}: block_time={:.3}s, #txs={}, txs/s={:.2}, block_bytes={}, bytes/s={:.2}, total_txs={}, total_bytes={}",
+            height,
+            block_time_secs,
+            tx_count,
+            txs_per_second,
+            block_bytes_len,
+            bytes_per_second,
+            self.txs_count,
+            self.chain_bytes,
+        );
+
+        Ok(())
     }
 }
 

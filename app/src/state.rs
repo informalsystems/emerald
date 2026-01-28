@@ -472,7 +472,8 @@ impl State {
 
         // Store as undecided
         info!(%value.height, %value.round, %value.proposer, "Storing validated proposal as undecided");
-        self.store_undecided_block_data(value.height, value.round, value.value.id(), data)
+        self.store
+            .store_undecided_block_data(value.height, value.round, value.value.id(), data)
             .await?;
         self.store.store_undecided_proposal(value.clone()).await?;
 
@@ -523,19 +524,6 @@ impl State {
 
         // For current height, return parts for validation
         Ok(Some(parts))
-    }
-
-    pub async fn store_undecided_block_data(
-        &mut self,
-        height: Height,
-        round: Round,
-        value_id: ValueId,
-        data: Bytes,
-    ) -> eyre::Result<()> {
-        self.store
-            .store_undecided_block_data(height, round, value_id, data)
-            .await
-            .map_err(|e| eyre::Report::new(e))
     }
 
     /// Retrieves a decided block data at the given height
@@ -743,7 +731,8 @@ impl State {
         // Store the block data at the proposal's height/round,
         // which will be passed to the execution client (EL) on commit.
         // WARN: THE ORDER OF THE FOLLOWING TWO OPERATIONS IS IMPORTANT.
-        self.store_undecided_block_data(height, round, proposal.value.id(), data.clone())
+        self.store
+            .store_undecided_block_data(height, round, proposal.value.id(), data.clone())
             .await?;
 
         // Insert the new proposal into the undecided proposals.

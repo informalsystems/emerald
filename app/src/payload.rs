@@ -5,11 +5,11 @@ use bytes::Bytes;
 use caches::lru::AdaptiveCache;
 use caches::Cache;
 use color_eyre::eyre::{self, eyre};
+use malachitebft_app_channel::app::types::core::Round;
 use malachitebft_app_channel::app::types::core::Validity;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionPayloadBodyV1;
 use malachitebft_eth_types::{Block, BlockHash, Height, RetryConfig};
-use malachitebft_app_channel::app::types::core::Round;
 use ssz::Decode;
 use tracing::{debug, error, warn};
 
@@ -95,11 +95,7 @@ pub async fn validate_execution_payload(
 
     // Validate with execution engine
     let payload_status = engine
-        .notify_new_block_with_retry(
-            execution_payload,
-            versioned_hashes,
-            retry_config,
-        )
+        .notify_new_block_with_retry(execution_payload, versioned_hashes, retry_config)
         .await
         .map_err(|e| {
             eyre!(

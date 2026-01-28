@@ -368,9 +368,10 @@ impl State {
         Ok(())
     }
 
-    /// Validates execution payload with the execution engine
-    /// Returns Ok(Validity) - Invalid if decoding fails or payload is invalid
-    async fn validate_execution_payload(
+    /// Validates execution payload with the execution engine.
+    /// Returns `Ok(Validity::Invalid)` if decoding fails or payload is invalid,
+    /// `Ok(Validity::Valid)` if valid, or `Err` for engine communication failures.
+    pub async fn validate_execution_payload(
         &mut self,
         data: &Bytes,
         height: Height,

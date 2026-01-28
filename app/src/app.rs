@@ -28,7 +28,7 @@ alloy_sol_types::sol!(
 );
 
 use crate::state::{decode_value, State};
-use crate::sync_handler::{get_decided_value_for_sync, validate_payload};
+use crate::sync_handler::get_decided_value_for_sync;
 
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
     // Get the genesis block from the execution engine
@@ -811,40 +811,18 @@ pub async fn on_process_synced_value(
     info!(%height, %round, "🟢🟢 Processing synced value");
 
     let value = decode_value(value_bytes);
-
-    // Extract execution payload from the synced value for validation
     let block_bytes = value.extensions.clone();
-    let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_bytes).map_err(|e| {
-        eyre::eyre!(
-            "Failed to decode synced ExecutionPayloadV3 at height {}: {:?}",
-            height,
-            e
-        )
-    })?;
-    let new_block_hash = execution_payload.payload_inner.payload_inner.block_hash;
-
-    // Collect hashes from blob transactions
-    let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
-        eyre::eyre!(
-            "Failed to convert synced ExecutionPayloadV3 to Block at height {}: {}",
-            height,
-            e
-        )
-    })?;
-    let versioned_hashes: Vec<BlockHash> =
-        block.body.blob_versioned_hashes_iter().copied().collect();
 
     // Validate the synced block
-    let validity = validate_payload(
-        state.validated_cache_mut(),
-        engine,
-        &execution_payload,
-        &versioned_hashes,
-        &emerald_config.retry_config,
-        height,
-        round,
-    )
-    .await?;
+    let validity = state
+        .validate_execution_payload(
+            &block_bytes,
+            height,
+            round,
+            engine,
+            &emerald_config.retry_config,
+        )
+        .await?;
 
     if validity == Validity::Invalid {
         // Reject invalid blocks - don't store or reply with them
@@ -864,10 +842,7 @@ pub async fn on_process_synced_value(
         return Ok(());
     }
 
-    debug!(
-        "💡 Sync block validated at height {} with hash: {}",
-        height, new_block_hash
-    );
+    debug!(%height, "💡 Sync block validated");
     let proposed_value: ProposedValue<EmeraldContext> = ProposedValue {
         height,
         round,

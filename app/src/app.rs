@@ -27,7 +27,7 @@ alloy_sol_types::sol!(
     "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
 );
 
-use crate::state::{assemble_value_from_parts, decode_value, State};
+use crate::state::{decode_value, State};
 use crate::sync_handler::{get_decided_value_for_sync, validate_payload};
 
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
@@ -396,54 +396,21 @@ pub async fn on_started_round(
     );
 
     for parts in &pending_parts {
-        match state.validate_proposal_parts(parts) {
-            Ok(()) => {
-                // Validate execution payload with the execution engine before storing it as undecided proposal
-                let (value, data) = assemble_value_from_parts(parts.clone());
+        // Validate and store the pending proposal
+        let result = state
+            .process_complete_proposal_parts(parts, engine, &emerald_config.retry_config)
+            .await?;
 
-                let validity = state
-                    .validate_execution_payload(
-                        &data,
-                        parts.height,
-                        parts.round,
-                        engine,
-                        &emerald_config.retry_config,
-                    )
-                    .await?;
+        if result.is_some() {
+            info!(
+                height = %parts.height,
+                round = %parts.round,
+                proposer = %parts.proposer,
+                "Moved valid pending proposal to undecided after validation"
+            );
+        }
 
-                if validity == Validity::Invalid {
-                    warn!(
-                        height = %parts.height,
-                        round = %parts.round,
-                        "Pending proposal has invalid execution payload, rejecting"
-                    );
-                    continue;
-                }
-
-                state.store.store_undecided_proposal(value.clone()).await?;
-
-                state
-                    .store
-                    .store_undecided_block_data(value.height, value.round, value.value.id(), data)
-                    .await?;
-                info!(
-                    height = %parts.height,
-                    round = %parts.round,
-                    proposer = %parts.proposer,
-                    "Moved valid pending proposal to undecided after validation"
-                );
-            }
-            Err(error) => {
-                // Validation failed, log error
-                error!(
-                    height = %parts.height,
-                    round = %parts.round,
-                    proposer = %parts.proposer,
-                    error = ?error,
-                    "Removed invalid pending proposal"
-                );
-            }
-        } // Remove the parts from pending
+        // Remove the parts from pending regardless of validation outcome
         state
             .store
             .remove_pending_proposal_parts(parts.clone())
@@ -596,15 +563,20 @@ pub async fn on_received_proposal_part(
         "Received proposal part"
     );
 
-    // Try to reassemble the proposal from received parts. If present,
-    // validate it with the execution engine and mark invalid when
-    // parsing or validation fails. Keep the outer `Option` and send it
-    // back to the caller (consensus) regardless.
-    let proposed_value = state
-        .received_proposal_part(from, part, engine, &emerald_config.retry_config)
-        .await?;
+    // Try to reassemble the proposal from received parts
+    let parts = state.reassemble_proposal(from, part).await?;
 
-    if let Some(proposed_value) = proposed_value.clone() {
+    // If we have complete parts, validate and store the proposal
+    let proposed_value = match parts {
+        Some(parts) => {
+            state
+                .process_complete_proposal_parts(&parts, engine, &emerald_config.retry_config)
+                .await?
+        }
+        None => None,
+    };
+
+    if let Some(ref proposed_value) = proposed_value {
         debug!("✅ Received complete proposal: {:?}", proposed_value);
     }
 

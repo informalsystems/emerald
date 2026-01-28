@@ -370,7 +370,7 @@ impl State {
 
     /// Validates execution payload with the execution engine
     /// Returns Ok(Validity) - Invalid if decoding fails or payload is invalid
-    pub async fn validate_execution_payload(
+    async fn validate_execution_payload(
         &mut self,
         data: &Bytes,
         height: Height,
@@ -421,15 +421,78 @@ impl State {
         .await
     }
 
-    /// Processes and adds a new proposal to the state if it's valid
-    /// Returns Some(ProposedValue) if the proposal was accepted, None otherwise
-    pub async fn received_proposal_part(
+    /// Processes complete proposal parts: validates, stores, and returns the proposed value.
+    ///
+    /// Returns `Ok(Some(ProposedValue))` if the proposal is valid and stored,
+    /// `Ok(None)` if validation fails, or an error for storage/engine failures.
+    pub async fn process_complete_proposal_parts(
         &mut self,
-        from: PeerId,
-        part: StreamMessage<ProposalPart>,
+        parts: &ProposalParts,
         engine: &Engine,
         retry_config: &RetryConfig,
     ) -> eyre::Result<Option<ProposedValue<EmeraldContext>>> {
+        // Validate proposal (proposer + signature)
+        if let Err(error) = self.validate_proposal_parts(parts) {
+            error!(
+                height = %parts.height,
+                round = %parts.round,
+                proposer = %parts.proposer,
+                error = ?error,
+                "Rejecting invalid proposal"
+            );
+            return Ok(None);
+        }
+
+        // Assemble the proposal from its parts
+        let (value, data) = assemble_value_from_parts(parts.clone());
+
+        // Log first 32 bytes of proposal data and total size
+        if data.len() >= 32 {
+            info!(
+                "Proposal data[0..32]: {}, total_size: {} bytes, id: {:x}",
+                hex::encode(&data[..32]),
+                data.len(),
+                value.value.id().as_u64()
+            );
+        }
+
+        // Validate the execution payload with the execution engine
+        let validity = self
+            .validate_execution_payload(&data, value.height, value.round, engine, retry_config)
+            .await?;
+
+        if validity == Validity::Invalid {
+            warn!(
+                height = %parts.height,
+                round = %parts.round,
+                "Proposal has invalid execution payload, rejecting"
+            );
+            return Ok(None);
+        }
+
+        // Store as undecided
+        info!(%value.height, %value.round, %value.proposer, "Storing validated proposal as undecided");
+        self.store_undecided_block_data(value.height, value.round, value.value.id(), data)
+            .await?;
+        self.store.store_undecided_proposal(value.clone()).await?;
+
+        Ok(Some(value))
+    }
+
+    /// Reassembles proposal parts from streamed messages.
+    ///
+    /// Handles height filtering:
+    /// - Outdated proposals (height < current) are dropped
+    /// - Future proposals (height > current) are stored as pending
+    /// - Current height proposals are returned for validation
+    ///
+    /// Returns `Some(ProposalParts)` when a complete proposal is ready for validation,
+    /// `None` if the proposal is incomplete, outdated, or stored for later.
+    pub async fn reassemble_proposal(
+        &mut self,
+        from: PeerId,
+        part: StreamMessage<ProposalPart>,
+    ) -> eyre::Result<Option<ProposalParts>> {
         let sequence = part.sequence;
 
         // Check if we have a full proposal
@@ -458,62 +521,10 @@ impl State {
             return Ok(None);
         }
 
-        // For current height, validate proposal (proposer + signature)
-        match self.validate_proposal_parts(&parts) {
-            Ok(()) => {
-                // Validation passed - assemble and store as undecided
-                // Re-assemble the proposal from its parts
-                let (value, data) = assemble_value_from_parts(parts);
-
-                // Log first 32 bytes of proposal data and total size
-                if data.len() >= 32 {
-                    info!(
-                        "Proposal data[0..32]: {}, total_size: {} bytes, id: {:x}",
-                        hex::encode(&data[..32]),
-                        data.len(),
-                        value.value.id().as_u64()
-                    );
-                }
-
-                // Validate the execution payload with the execution engine
-                let validity = self
-                    .validate_execution_payload(
-                        &data,
-                        value.height,
-                        value.round,
-                        engine,
-                        retry_config,
-                    )
-                    .await?;
-
-                if validity == Validity::Invalid {
-                    warn!(
-                        height = %self.consensus_height,
-                        round = %self.consensus_round,
-                        "Received proposal with invalid execution payload, ignoring"
-                    );
-                    return Ok(None);
-                }
-                info!(%value.height, %value.round, %value.proposer, "Storing validated proposal as undecided");
-                self.store_undecided_block_data(value.height, value.round, value.value.id(), data)
-                    .await?;
-                self.store.store_undecided_proposal(value.clone()).await?;
-
-                Ok(Some(value))
-            }
-            Err(error) => {
-                // Any validation error indicates invalid proposal - log and reject
-                error!(
-                    height = %parts.height,
-                    round = %parts.round,
-                    proposer = %parts.proposer,
-                    error = ?error,
-                    "Rejecting invalid proposal"
-                );
-                Ok(None)
-            }
-        }
+        // For current height, return parts for validation
+        Ok(Some(parts))
     }
+
     pub async fn store_undecided_block_data(
         &mut self,
         height: Height,

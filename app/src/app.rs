@@ -27,6 +27,7 @@ alloy_sol_types::sol!(
     "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
 );
 
+use crate::payload::validate_execution_payload;
 use crate::state::{decode_value, State};
 use crate::sync_handler::get_decided_value_for_sync;
 
@@ -694,15 +695,15 @@ pub async fn on_decided(
     }
 
     // Validate the execution payload (uses cache internally)
-    let validity = state
-        .validate_execution_payload(
-            &block_bytes,
-            height,
-            round,
-            engine,
-            &emerald_config.retry_config,
-        )
-        .await?;
+    let validity = validate_execution_payload(
+        state.validated_cache_mut(),
+        &block_bytes,
+        height,
+        round,
+        engine,
+        &emerald_config.retry_config,
+    )
+    .await?;
 
     if validity == Validity::Invalid {
         return Err(eyre!("Block validation failed for hash: {}", block_hash));
@@ -794,15 +795,15 @@ pub async fn on_process_synced_value(
     let block_bytes = value.extensions.clone();
 
     // Validate the synced block
-    let validity = state
-        .validate_execution_payload(
-            &block_bytes,
-            height,
-            round,
-            engine,
-            &emerald_config.retry_config,
-        )
-        .await?;
+    let validity = validate_execution_payload(
+        state.validated_cache_mut(),
+        &block_bytes,
+        height,
+        round,
+        engine,
+        &emerald_config.retry_config,
+    )
+    .await?;
 
     if validity == Validity::Invalid {
         // Reject invalid blocks - don't store or reply with them

@@ -1,0 +1,8 @@
+# Devnet run directories (contain logs, configs, and data from each run)
+scripts/runs/
+
+# Deno cache
+.deno/
+
+# Build artifacts
+target/

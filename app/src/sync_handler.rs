@@ -54,15 +54,18 @@ pub async fn validate_payload(
             )
         })?;
 
-    if payload_status.status.is_valid() {
-        Ok(Validity::Valid)
+    let validity = if payload_status.status.is_valid() {
+        Validity::Valid
     } else {
         // INVALID or ACCEPTED - both are treated as invalid
         // INVALID: malicious block
         // ACCEPTED: Non-canonical payload - should not happen with instant finality
-        error!(%height, %round, "🔴 Synced block validation failed: {}", payload_status.status);
-        Ok(Validity::Invalid)
-    }
+        error!(%height, %round, "🔴 Block validation failed: {}", payload_status.status);
+        Validity::Invalid
+    };
+
+    cache.insert(block_hash, validity);
+    Ok(validity)
 }
 
 /// Retrieves a decided value for sync at the given height.

@@ -693,36 +693,16 @@ pub async fn on_decided(
         );
     }
 
-    // Get validation status from cache or call newPayload
-    let validity = if let Some(cached) = state.validated_cache_mut().get(&block_hash) {
-        cached
-    } else {
-        // Collect hashes from blob transactions
-        let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
-            eyre::eyre!(
-                "Failed to convert decided ExecutionPayloadV3 to Block at height {}: {}",
-                height,
-                e
-            )
-        })?;
-        let versioned_hashes: Vec<BlockHash> =
-            block.body.blob_versioned_hashes_iter().copied().collect();
-
-        // Ask the EL to validate the execution payload
-        let payload_status = engine
-            .notify_new_block(execution_payload, versioned_hashes)
-            .await?;
-
-        let validity = if payload_status.status.is_valid() {
-            Validity::Valid
-        } else {
-            Validity::Invalid
-        };
-
-        // TODO: insert validation outcome into cache also when calling notify_new_block_with_retry in validate_payload
-        state.validated_cache_mut().insert(block_hash, validity);
-        validity
-    };
+    // Validate the execution payload (uses cache internally)
+    let validity = state
+        .validate_execution_payload(
+            &block_bytes,
+            height,
+            round,
+            engine,
+            &emerald_config.retry_config,
+        )
+        .await?;
 
     if validity == Validity::Invalid {
         return Err(eyre!("Block validation failed for hash: {}", block_hash));

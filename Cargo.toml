@@ -7,6 +7,7 @@ members = [
   "contracts",
   "crates/core",
   "engine",
+  "simplex",
   "utils",
   "types",
 ]
@@ -53,6 +54,7 @@ std_instead_of_core           = "deny"
 emerald                 = { version = "0.0.1", path = "app" }
 emerald-contracts       = { version = "0.0.1", path = "contracts" }
 emerald-core            = { version = "0.0.1", path = "crates/core" }
+emerald-simplex         = { version = "0.0.1", path = "simplex" }
 malachitebft-eth-cli    = { version = "0.0.1", path = "cli" }
 malachitebft-eth-engine = { version = "0.0.1", path = "engine" }
 malachitebft-eth-types  = { version = "0.0.1", path = "types" }

@@ -402,10 +402,7 @@ impl State {
 
         // Store as undecided
         info!(%value.height, %value.round, %value.proposer, "Storing validated proposal as undecided");
-        self.store
-            .store_undecided_block_data(value.height, value.round, value.value.id(), data)
-            .await?;
-        self.store.store_undecided_proposal(value.clone()).await?;
+        self.store_undecided_value(&value, data).await?;
 
         Ok(Some(value))
     }
@@ -468,6 +465,22 @@ impl State {
             .await
             .ok()
             .flatten()
+    }
+
+    /// Stores an undecided proposal along with its block data.
+    ///
+    /// WARN: The order of the two storage operations is important.
+    /// TODO: Add more context on why the order is important.
+    pub async fn store_undecided_value(
+        &self,
+        value: &ProposedValue<EmeraldContext>,
+        data: Bytes,
+    ) -> eyre::Result<()> {
+        self.store
+            .store_undecided_block_data(value.height, value.round, value.value.id(), data)
+            .await?;
+        self.store.store_undecided_proposal(value.clone()).await?;
+        Ok(())
     }
 
     /// Commits a value with the given certificate, updating internal state
@@ -658,17 +671,9 @@ impl State {
             value,
             validity: Validity::Valid, // Our proposals are de facto valid
         };
-        // Store the block data at the proposal's height/round,
-        // which will be passed to the execution client (EL) on commit.
-        // WARN: THE ORDER OF THE FOLLOWING TWO OPERATIONS IS IMPORTANT.
-        self.store
-            .store_undecided_block_data(height, round, proposal.value.id(), data.clone())
-            .await?;
 
-        // Insert the new proposal into the undecided proposals.
-        self.store
-            .store_undecided_proposal(proposal.clone())
-            .await?;
+        // Store the proposal and its block data
+        self.store_undecided_value(&proposal, data).await?;
 
         Ok(LocallyProposedValue::new(
             proposal.height,

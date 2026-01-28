@@ -802,19 +802,7 @@ pub async fn on_process_synced_value(
         validity: Validity::Valid,
     };
 
-    if let Err(e) = state
-        .store
-        .store_undecided_block_data(height, round, proposed_value.value.id(), block_bytes)
-        .await
-    {
-        error!(%height, %round, error = %e, "Failed to store synced block data");
-    }
-    // Store the synced value and block data
-    if let Err(e) = state
-        .store
-        .store_undecided_proposal(proposed_value.clone())
-        .await
-    {
+    if let Err(e) = state.store_undecided_value(&proposed_value, block_bytes).await {
         error!(%height, %round, error = %e, "Failed to store synced value");
     }
 

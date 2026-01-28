@@ -24,7 +24,7 @@
 
 4. Check emerald logs
    ```bash
-   tail -f nodes/0/emerald.log
+   tail -f nodes/0/logs/node.log
    ```
 
 ## Validator Operations Fail

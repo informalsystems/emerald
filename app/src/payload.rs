@@ -38,63 +38,9 @@ impl ValidatedPayloadCache {
     }
 }
 
-/// Validates an already-decoded execution payload with the execution engine.
-/// Uses cache to avoid duplicate validation calls.
-///
-/// Returns `Ok(Validity::Valid)` if valid, `Ok(Validity::Invalid)` if invalid,
-/// or `Err` for engine communication failures.
-pub async fn validate_payload(
-    cache: &mut ValidatedPayloadCache,
-    engine: &Engine,
-    execution_payload: &ExecutionPayloadV3,
-    versioned_hashes: &[BlockHash],
-    retry_config: &RetryConfig,
-    height: Height,
-    round: Round,
-) -> eyre::Result<Validity> {
-    let block_hash = execution_payload.payload_inner.payload_inner.block_hash;
-
-    // Check if we've already called newPayload for this block
-    if let Some(cached_validity) = cache.get(&block_hash) {
-        debug!(
-            %height, %round, %block_hash, validity = ?cached_validity,
-            "Skipping duplicate newPayload call, returning cached result"
-        );
-        return Ok(cached_validity);
-    }
-
-    let payload_status = engine
-        .notify_new_block_with_retry(
-            execution_payload.clone(),
-            versioned_hashes.to_vec(),
-            retry_config,
-        )
-        .await
-        .map_err(|e| {
-            eyre!(
-                "Execution client stuck in SYNCING for {:?} at height {}: {}",
-                retry_config.max_elapsed_time,
-                height,
-                e
-            )
-        })?;
-
-    let validity = if payload_status.status.is_valid() {
-        Validity::Valid
-    } else {
-        // INVALID or ACCEPTED - both are treated as invalid
-        // INVALID: malicious block
-        // ACCEPTED: Non-canonical payload - should not happen with instant finality
-        error!(%height, %round, "Block validation failed: {}", payload_status.status);
-        Validity::Invalid
-    };
-
-    cache.insert(block_hash, validity);
-    Ok(validity)
-}
-
 /// Validates execution payload bytes with the execution engine.
 /// Decodes the payload, extracts versioned hashes, and validates.
+/// Uses cache to avoid duplicate validation calls.
 ///
 /// Returns `Ok(Validity::Invalid)` if decoding fails or payload is invalid,
 /// `Ok(Validity::Valid)` if valid, or `Err` for engine communication failures.
@@ -120,6 +66,17 @@ pub async fn validate_execution_payload(
         }
     };
 
+    let block_hash = execution_payload.payload_inner.payload_inner.block_hash;
+
+    // Check if we've already validated this block
+    if let Some(cached_validity) = cache.get(&block_hash) {
+        debug!(
+            %height, %round, %block_hash, validity = ?cached_validity,
+            "Skipping duplicate newPayload call, returning cached result"
+        );
+        return Ok(cached_validity);
+    }
+
     // Extract versioned hashes for blob transactions
     let block: Block = match execution_payload.clone().try_into_block() {
         Ok(block) => block,
@@ -137,16 +94,34 @@ pub async fn validate_execution_payload(
         block.body.blob_versioned_hashes_iter().copied().collect();
 
     // Validate with execution engine
-    validate_payload(
-        cache,
-        engine,
-        &execution_payload,
-        &versioned_hashes,
-        retry_config,
-        height,
-        round,
-    )
-    .await
+    let payload_status = engine
+        .notify_new_block_with_retry(
+            execution_payload,
+            versioned_hashes,
+            retry_config,
+        )
+        .await
+        .map_err(|e| {
+            eyre!(
+                "Execution client stuck in SYNCING for {:?} at height {}: {}",
+                retry_config.max_elapsed_time,
+                height,
+                e
+            )
+        })?;
+
+    let validity = if payload_status.status.is_valid() {
+        Validity::Valid
+    } else {
+        // INVALID or ACCEPTED - both are treated as invalid
+        // INVALID: malicious block
+        // ACCEPTED: Non-canonical payload - should not happen with instant finality
+        error!(%height, %round, "Block validation failed: {}", payload_status.status);
+        Validity::Invalid
+    };
+
+    cache.insert(block_hash, validity);
+    Ok(validity)
 }
 
 /// Extracts a block header from an ExecutionPayloadV3 by removing transactions and withdrawals.

@@ -20,3 +20,11 @@ cache/
 
 # Solidity deployment artifacts
 deploy_output.json
+target
+.git
+**/node_modules
+**/.DS_Store
+**/*.log
+solidity/cache
+solidity/out
+simplex/scripts/runs

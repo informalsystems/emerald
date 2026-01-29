@@ -4,11 +4,6 @@
 //! - Uses commonware's simplex consensus for agreement
 //! - Reuses emerald's Engine API client for EVM execution
 //! - Can be used as an alternative to malachite consensus in the emerald node
-//!
-//! # Usage
-//!
-//! Add `consensus_type = "simplex"` to your emerald config to use this
-//! instead of the default malachite consensus.
 
 #![forbid(unsafe_code)]
 #![deny(trivial_casts, trivial_numeric_casts)]

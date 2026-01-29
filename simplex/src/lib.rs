@@ -10,11 +10,3 @@ pub mod block;
 pub mod config;
 pub mod consensus;
 pub mod engine;
-
-pub use application::Application;
-pub use block::Block;
-// Re-export key commonware types for convenience
-pub use commonware_consensus::types::{Height, ViewDelta};
-pub use commonware_cryptography::sha256::Digest;
-pub use consensus::{Activity, Finalization, Notarization, PublicKey, Scheme};
-pub use engine::{Config as EngineConfig, Engine};

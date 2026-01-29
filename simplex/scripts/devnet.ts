@@ -1174,12 +1174,7 @@ function showStatus(genesisHash?: string, runDir?: string): void {
 
   consola.log(colors.yellow("Commands:"));
   consola.log("  Check block number:");
-  consola.log(
-    "    curl -s -X POST http://localhost:8545 -H 'Content-Type: application/json' \\",
-  );
-  consola.log(
-    '      -d \'{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}\' | jq',
-  );
+  consola.log("    cast block-number --rpc-url http://localhost:8545");
   consola.log("  View logs:");
   consola.log("    deno run -A devnet.ts logs -f simplex-0");
   consola.log("    deno run -A devnet.ts logs -f reth-0");

@@ -39,8 +39,9 @@ use tracing::{debug, error, info, warn};
 use crate::block::{Block, ExecutionHash};
 use crate::consensus::{PublicKey, Scheme};
 
-/// Genesis message for block digest computation.
-const GENESIS: &[u8] = b"emerald-simplex genesis";
+/// Message that is hashed to create the parent digest for the genesis block.
+/// Since the genesis block has no actual parent, this deterministic value is used.
+const GENESIS_PARENT_MESSAGE: &[u8] = b"emerald-simplex genesis";
 
 /// Milliseconds in the future allowed for block timestamps.
 const SYNCHRONY_BOUND: u64 = 2_000;
@@ -161,7 +162,7 @@ impl Application {
         min_block_time: Duration,
     ) -> Self {
         let genesis = Block::new(
-            Sha256::hash(GENESIS),
+            Sha256::hash(GENESIS_PARENT_MESSAGE),
             Height::zero(),
             0,
             genesis_execution_hash,

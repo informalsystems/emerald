@@ -682,9 +682,10 @@ impl<E> commonware_consensus::VerifyingApplication<E> for Application
 where
     E: Rng + Spawner + Metrics + Clock + Send + Sync + 'static,
 {
+    #[allow(unused_mut)]
     async fn verify(
         &mut self,
-        (runtime_context, _): (E, Self::Context),
+        (mut runtime_context, _): (E, Self::Context),
         mut ancestry: AncestorStream<Self::SigningScheme, Self::Block>,
     ) -> bool {
         let Some(block) = ancestry.next().await else {
@@ -788,6 +789,21 @@ where
         if validity == Validity::Invalid {
             warn!(height = %block.height(), "Execution payload validation failed");
             return false;
+        }
+
+        // Byzantine behavior for testing: randomly reject valid blocks with probability p.
+        // With n=4 validators (quorum=3) and p=0.38:
+        //   - P(0 reject) = 0.62^4 = 15%  -> progress
+        //   - P(1 reject) = 4*0.38*0.62^3 = 36% -> progress (still have 3 votes)
+        //   - P(2+ reject) = 49% -> nullification (< 3 votes)
+        // This gives ~51% progress rate and ~49% nullification rate.
+        #[cfg(feature = "byzantine-test")]
+        {
+            const BYZANTINE_REJECT_PROBABILITY: f64 = 0.38;
+            if runtime_context.gen_bool(BYZANTINE_REJECT_PROBABILITY) {
+                warn!(height = %block.height(), "Byzantine test: randomly rejecting valid block");
+                return false;
+            }
         }
 
         debug!(height = %block.height(), "Block verified");

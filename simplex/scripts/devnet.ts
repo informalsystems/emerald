@@ -154,6 +154,7 @@ function generateGenesis(): object {
       mergeNetsplitBlock: 0,
       shanghaiTime: 0,
       cancunTime: 0,
+      pragueTime: 0,
       terminalTotalDifficulty: 0,
       terminalTotalDifficultyPassed: true,
     },
@@ -200,7 +201,7 @@ function generateDockerCompose(
     const ip = ipAtOffset(network, 10 + i);
 
     services[`reth-${i}`] = {
-      image: "ghcr.io/paradigmxyz/reth:v1.1.0",
+      image: "ghcr.io/informalsystems/custom-reth:latest",
       container_name: `reth-${i}`,
       user: `${uid}:${gid}`,
       working_dir: "/data",
@@ -686,7 +687,7 @@ async function pullImage(image: string): Promise<void> {
 async function buildDevnet(): Promise<void> {
   const scriptDir = getScriptDir();
   await buildImage(scriptDir);
-  await pullImage("ghcr.io/paradigmxyz/reth:v1.1.0");
+  await pullImage("ghcr.io/informalsystems/custom-reth:latest");
   await pullImage("otterscan/otterscan:v2.6.1");
 }
 

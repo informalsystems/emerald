@@ -15,8 +15,7 @@ use std::time::Instant;
 
 use alloy_primitives::{Address, B256};
 use alloy_rpc_types_engine::{
-    ExecutionPayloadEnvelopeV3, ExecutionPayloadV3, ForkchoiceUpdated, PayloadAttributes,
-    PayloadStatus, PayloadStatusEnum,
+    ExecutionPayloadV3, ForkchoiceUpdated, PayloadAttributes, PayloadStatus, PayloadStatusEnum,
 };
 use caches::lru::AdaptiveCache;
 use caches::Cache;
@@ -31,13 +30,9 @@ use commonware_runtime::{Clock, Metrics, Spawner};
 use commonware_utils::{Acknowledgement, SystemTimeExt};
 use futures::StreamExt;
 use malachitebft_eth_engine::engine::Engine as EmeraldEngine;
-use malachitebft_eth_engine::engine_rpc::{
-    ENGINE_GET_PAYLOAD_TIMEOUT, ENGINE_GET_PAYLOAD_V3, ENGINE_NEW_PAYLOAD_TIMEOUT,
-    ENGINE_NEW_PAYLOAD_V3,
-};
+use malachitebft_eth_engine::engine_rpc::Fork;
 use malachitebft_eth_types::RetryConfig;
 use rand::Rng;
-use serde_json::json;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
@@ -129,6 +124,10 @@ pub struct Application {
     last_block_timestamp: Arc<RwLock<u64>>,
     /// Wall-clock time of last finalized block, used for sub-second enforcement.
     last_block_time: Arc<RwLock<Instant>>,
+    /// Prague fork activation timestamp (in seconds). None means Prague is not activated.
+    prague_time: Option<u64>,
+    /// Osaka fork activation timestamp (in seconds). None means Osaka is not activated.
+    osaka_time: Option<u64>,
 }
 
 impl Clone for Application {
@@ -142,6 +141,8 @@ impl Clone for Application {
             validated_cache: Arc::clone(&self.validated_cache),
             last_block_timestamp: Arc::clone(&self.last_block_timestamp),
             last_block_time: Arc::clone(&self.last_block_time),
+            prague_time: self.prague_time,
+            osaka_time: self.osaka_time,
         }
     }
 }
@@ -190,6 +191,8 @@ impl Application {
             ))),
             last_block_timestamp: Arc::new(RwLock::new(0)),
             last_block_time: Arc::new(RwLock::new(initial_time)),
+            prague_time: Some(0), // Prague enabled from genesis by default
+            osaka_time: None,     // Osaka disabled by default
         }
     }
 
@@ -202,6 +205,18 @@ impl Application {
     /// Get the Engine API client.
     pub fn engine(&self) -> &EmeraldEngine {
         &self.engine
+    }
+
+    /// Determine the current fork based on timestamp (in seconds).
+    /// This follows the same pattern as emerald's get_fork() method.
+    fn get_fork(&self, timestamp_secs: u64) -> Fork {
+        if self.osaka_time.is_some_and(|time| time <= timestamp_secs) {
+            return Fork::Osaka;
+        }
+        if self.prague_time.is_some_and(|time| time <= timestamp_secs) {
+            return Fork::Prague;
+        }
+        Fork::Unsupported
     }
 
     /// Update the EVM state after finalization.
@@ -294,16 +309,16 @@ impl Application {
             let mut retry_delay = self.retry_config.initial_delay;
 
             loop {
-                // Use engine_newPayloadV3 directly for Cancun compatibility
-                let params = json!([
-                    execution_payload,
-                    versioned_hashes,
-                    parent_beacon_block_root
-                ]);
+                // Use new_payload method with Prague fork (V4)
                 let result: Result<PayloadStatus, _> = self
                     .engine
                     .api
-                    .rpc_request(ENGINE_NEW_PAYLOAD_V3, params, ENGINE_NEW_PAYLOAD_TIMEOUT)
+                    .new_payload(
+                        execution_payload.clone(),
+                        versioned_hashes.clone(),
+                        parent_beacon_block_root,
+                        vec![], // execution_requests (empty for now)
+                    )
                     .await;
 
                 match result {
@@ -376,20 +391,14 @@ impl Application {
             return None;
         };
 
-        // Use engine_getPayloadV3 directly (Cancun fork)
-        let payload_envelope = match self
-            .engine
-            .api
-            .rpc_request::<ExecutionPayloadEnvelopeV3>(
-                ENGINE_GET_PAYLOAD_V3,
-                json!([payload_id]),
-                ENGINE_GET_PAYLOAD_TIMEOUT,
-            )
-            .await
-        {
-            Ok(payload) => Some(payload.execution_payload),
+        // Determine fork based on EL timestamp
+        let fork = self.get_fork(el_timestamp);
+
+        // Use get_payload method with the determined fork
+        let payload_envelope = match self.engine.api.get_payload(payload_id, fork).await {
+            Ok(payload) => Some(payload),
             Err(e) => {
-                error!(error = %e, "Failed to fetch execution payload via getPayloadV3");
+                error!(error = %e, fork = ?fork, "Failed to fetch execution payload via get_payload");
                 None
             }
         };

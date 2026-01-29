@@ -92,7 +92,7 @@ pub struct EngineCapabilities {
     pub get_blobs_v2: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Fork {
     Osaka,
     Prague,

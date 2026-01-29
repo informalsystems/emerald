@@ -5,9 +5,6 @@
 //! - Reuses emerald's Engine API client for EVM execution
 //! - Can be used as an alternative to malachite consensus in the emerald node
 
-#![forbid(unsafe_code)]
-#![deny(trivial_casts, trivial_numeric_casts)]
-
 pub mod application;
 pub mod block;
 pub mod config;

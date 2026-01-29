@@ -244,10 +244,7 @@ impl Application {
                 match result {
                     Ok(forkchoice_updated) => {
                         if forkchoice_updated.payload_status.status.is_syncing() {
-                            warn!(
-                                "⚠️  Execution client SYNCING, retrying in {:?}",
-                                retry_delay
-                            );
+                            warn!("Execution client SYNCING, retrying in {:?}", retry_delay);
 
                             tokio::time::sleep(retry_delay).await;
                             retry_delay = self.retry_config.next_delay(retry_delay);
@@ -296,10 +293,7 @@ impl Application {
                 match result {
                     Ok(payload_status) => {
                         if payload_status.status.is_syncing() {
-                            warn!(
-                                "⚠️  Execution client SYNCING, retrying in {:?}",
-                                retry_delay
-                            );
+                            warn!("Execution client SYNCING, retrying in {:?}", retry_delay);
 
                             tokio::time::sleep(retry_delay).await;
                             retry_delay = self.retry_config.next_delay(retry_delay);

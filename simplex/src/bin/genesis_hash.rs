@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::fs;
 
-use alloy_primitives::{keccak256, Address, Bytes, B256, B64, U256};
+use alloy_primitives::{keccak256, Address, Bytes, B256, B64, U256, U64};
 use clap::Parser;
 use serde::Deserialize;
 
@@ -50,16 +50,6 @@ struct Args {
     genesis_path: String,
 }
 
-fn parse_hex_u64(s: &str) -> u64 {
-    let s = s.strip_prefix("0x").unwrap_or(s);
-    u64::from_str_radix(s, 16).unwrap_or(0)
-}
-
-fn parse_hex_u256(s: &str) -> U256 {
-    let s = s.strip_prefix("0x").unwrap_or(s);
-    U256::from_str_radix(s, 16).unwrap_or(U256::ZERO)
-}
-
 fn main() {
     let args = Args::parse();
     let genesis_path = &args.genesis_path;
@@ -85,11 +75,10 @@ fn compute_state_root(alloc: &HashMap<String, AllocAccount>) -> B256 {
     use alloy_primitives::keccak256;
 
     if alloc.is_empty() {
-        // Empty trie root
-        return B256::from_slice(
-            &hex::decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
-                .unwrap(),
-        );
+        // Empty trie root - Keccak-256 hash of RLP([]), canonical hash for empty Merkle Patricia Trie
+        return "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+            .parse::<B256>()
+            .expect("Failed to parse empty trie root");
     }
 
     // For a proper implementation, we'd need a full MPT implementation
@@ -101,17 +90,22 @@ fn compute_state_root(alloc: &HashMap<String, AllocAccount>) -> B256 {
 
     let mut data = Vec::new();
     for (addr, account) in accounts {
-        let addr = addr.strip_prefix("0x").unwrap_or(addr);
-        let addr_bytes = hex::decode(addr).unwrap_or_default();
-        data.extend_from_slice(&addr_bytes);
+        let address = addr
+            .parse::<Address>()
+            .expect("Failed to parse account address");
+        data.extend_from_slice(&address.0 .0);
 
-        let balance = parse_hex_u256(&account.balance);
+        let balance = account
+            .balance
+            .parse::<U256>()
+            .expect("Failed to parse account balance");
         data.extend_from_slice(&balance.to_be_bytes::<32>());
 
         let nonce = account
             .nonce
             .as_ref()
-            .map(|n| parse_hex_u64(n))
+            .and_then(|n| n.parse::<U64>().ok())
+            .map(|u| u.wrapping_to::<u64>())
             .unwrap_or(0);
         data.extend_from_slice(&nonce.to_be_bytes());
     }
@@ -123,67 +117,79 @@ fn compute_state_root(alloc: &HashMap<String, AllocAccount>) -> B256 {
 
 fn encode_genesis_header(genesis: &Genesis, state_root: B256) -> Vec<u8> {
     let parent_hash = B256::ZERO;
-    let ommers_hash = B256::from_slice(
-        &hex::decode("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347").unwrap(),
-    );
+    // Empty ommers hash - Keccak-256 hash of RLP([]), used when no uncle blocks exist
+    let ommers_hash = "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+        .parse::<B256>()
+        .expect("Failed to parse empty ommers hash");
 
-    let coinbase_str = genesis
-        .coinbase
-        .strip_prefix("0x")
-        .unwrap_or(&genesis.coinbase);
-    let beneficiary =
-        if coinbase_str.is_empty() || coinbase_str == "0000000000000000000000000000000000000000" {
-            Address::ZERO
-        } else {
-            coinbase_str.parse::<Address>().unwrap_or(Address::ZERO)
-        };
+    let beneficiary = genesis.coinbase.parse::<Address>().unwrap_or(Address::ZERO);
 
     let logs_bloom = [0u8; 256];
-    let difficulty = parse_hex_u256(&genesis.difficulty);
+    let difficulty = genesis
+        .difficulty
+        .parse::<U256>()
+        .expect("Failed to parse difficulty");
     let number = U256::ZERO;
-    let gas_limit = parse_hex_u64(&genesis.gas_limit);
+    let gas_limit = genesis
+        .gas_limit
+        .parse::<U64>()
+        .expect("Failed to parse gasLimit")
+        .wrapping_to::<u64>();
     let gas_used = 0u64;
-    let timestamp = parse_hex_u64(&genesis.timestamp);
+    let timestamp = genesis
+        .timestamp
+        .parse::<U64>()
+        .expect("Failed to parse timestamp")
+        .wrapping_to::<u64>();
 
-    let extra_data_str = genesis
-        .extra_data
-        .strip_prefix("0x")
-        .unwrap_or(&genesis.extra_data);
-    let extra_data: Bytes = if extra_data_str.is_empty() {
+    let extra_data: Bytes = if genesis.extra_data.is_empty() || genesis.extra_data == "0x" {
         Bytes::new()
     } else {
-        hex::decode(extra_data_str).unwrap_or_default().into()
+        genesis
+            .extra_data
+            .parse::<Bytes>()
+            .expect("Failed to parse extraData")
     };
 
-    let mix_hash_str = genesis
-        .mix_hash
-        .strip_prefix("0x")
-        .unwrap_or(&genesis.mix_hash);
-    let mix_hash = if mix_hash_str.len() == 64 {
-        B256::from_slice(&hex::decode(mix_hash_str).unwrap())
-    } else {
-        B256::ZERO
-    };
+    let mix_hash = genesis.mix_hash.parse::<B256>().unwrap_or(B256::ZERO);
 
-    let nonce_val = parse_hex_u64(&genesis.nonce);
+    let nonce_val = genesis
+        .nonce
+        .parse::<U64>()
+        .expect("Failed to parse nonce")
+        .wrapping_to::<u64>();
     let nonce = B64::from(nonce_val);
 
-    let base_fee = genesis.base_fee_per_gas.as_ref().map(|s| parse_hex_u256(s));
-    let withdrawals_root = Some(B256::from_slice(
-        &hex::decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421").unwrap(),
-    ));
-    let blob_gas_used = genesis.blob_gas_used.as_ref().map(|s| parse_hex_u64(s));
-    let excess_blob_gas = genesis.excess_blob_gas.as_ref().map(|s| parse_hex_u64(s));
+    let base_fee = genesis
+        .base_fee_per_gas
+        .as_ref()
+        .and_then(|s| s.parse::<U256>().ok());
+    // Empty trie root - Keccak-256 hash of RLP([]), canonical hash for empty Merkle Patricia Trie
+    let withdrawals_root = Some(
+        "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+            .parse::<B256>()
+            .expect("Failed to parse empty trie root"),
+    );
+    let blob_gas_used = genesis
+        .blob_gas_used
+        .as_ref()
+        .and_then(|s| s.parse::<U64>().ok())
+        .map(|u| u.wrapping_to::<u64>());
+    let excess_blob_gas = genesis
+        .excess_blob_gas
+        .as_ref()
+        .and_then(|s| s.parse::<U64>().ok())
+        .map(|u| u.wrapping_to::<u64>());
     let parent_beacon_block_root = Some(B256::ZERO);
 
-    // Empty transactions root
-    let transactions_root = B256::from_slice(
-        &hex::decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421").unwrap(),
-    );
-    // Empty receipts root
-    let receipts_root = B256::from_slice(
-        &hex::decode("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421").unwrap(),
-    );
+    // Empty trie root - Keccak-256 hash of RLP([]), canonical hash for empty Merkle Patricia Trie
+    let transactions_root = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+        .parse::<B256>()
+        .expect("Failed to parse empty trie root");
+    // Empty trie root - Keccak-256 hash of RLP([]), canonical hash for empty Merkle Patricia Trie
+    let receipts_root = "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+        .parse::<B256>()
+        .expect("Failed to parse empty trie root");
 
     // RLP encode the header
     let mut rlp = Vec::new();

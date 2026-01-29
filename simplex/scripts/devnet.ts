@@ -32,6 +32,7 @@ import { mainnet } from "npm:viem@2/chains";
 
 // Constants
 const DEFAULT_PROJECT_NAME = "simplex-devnet";
+const DEFAULT_VALIDATORS = 4;
 const PREFUNDED_COUNT = 10;
 const ANVIL_MNEMONIC =
   "test test test test test test test test test test test junk";
@@ -818,9 +819,10 @@ async function startDevnet(options: {
   clean?: boolean;
   cleanAll?: boolean;
   subnet?: string;
+  validators?: number;
 }): Promise<void> {
   const scriptDir = getScriptDir();
-  const numValidators = 4;
+  const numValidators = options.validators ?? DEFAULT_VALIDATORS;
   const projectName = getProjectName();
 
   // Clean up if requested
@@ -1207,7 +1209,7 @@ async function statusCommand(): Promise<void> {
   showStatus(genesisHash, runDir ?? undefined);
 }
 
-async function showAccounts(count = 4): Promise<void> {
+async function showAccounts(count = PREFUNDED_COUNT): Promise<void> {
   const alloc = await getGenesisAlloc();
   if (alloc) {
     const scriptDir = getScriptDir();
@@ -1241,8 +1243,15 @@ const cli = new Command()
 cli
   .command("start", "Start the devnet")
   .option("-c, --clean", "Clean up previous run before starting")
-  .option("--clean-all", "Clean up all devnet runs before starting")
-  .option("--subnet <subnet:string>", "Docker subnet CIDR (overrides auto)")
+  .option("-C, --clean-all", "Clean up all devnet runs before starting")
+  .option(
+    "-n, --validators <validators:number>",
+    "Number of validators to run",
+    {
+      default: DEFAULT_VALIDATORS,
+    },
+  )
+  .option("-s, --subnet <subnet:string>", "Docker subnet CIDR (overrides auto)")
   .action(async (options) => {
     await startDevnet(options);
   });

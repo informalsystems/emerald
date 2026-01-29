@@ -83,7 +83,7 @@ impl ValidatedPayloadCache {
 }
 
 /// State tracked for EVM execution.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct EvmState {
     /// Last finalized execution block hash.
     pub finalized_hash: B256,
@@ -99,20 +99,8 @@ pub struct EvmState {
     pub fee_recipient: Address,
 }
 
-impl Default for EvmState {
-    fn default() -> Self {
-        Self {
-            finalized_hash: B256::ZERO,
-            finalized_height: Height::zero(),
-            safe_hash: B256::ZERO,
-            safe_height: Height::zero(),
-            head_hash: B256::ZERO,
-            fee_recipient: Address::ZERO,
-        }
-    }
-}
-
 /// EVM Application that uses emerald's Engine API for block building and validation.
+#[derive(Clone)]
 pub struct Application {
     genesis: Arc<Block>,
     engine: Arc<EmeraldEngine>,
@@ -129,23 +117,6 @@ pub struct Application {
     prague_time: Option<u64>,
     /// Osaka fork activation timestamp (in seconds). None means Osaka is not activated.
     osaka_time: Option<u64>,
-}
-
-impl Clone for Application {
-    fn clone(&self) -> Self {
-        Self {
-            genesis: Arc::clone(&self.genesis),
-            engine: Arc::clone(&self.engine),
-            state: Arc::clone(&self.state),
-            retry_config: self.retry_config.clone(),
-            min_block_time: self.min_block_time,
-            validated_cache: Arc::clone(&self.validated_cache),
-            last_block_timestamp: Arc::clone(&self.last_block_timestamp),
-            last_block_time: Arc::clone(&self.last_block_time),
-            prague_time: self.prague_time,
-            osaka_time: self.osaka_time,
-        }
-    }
 }
 
 impl Application {

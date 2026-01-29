@@ -14,7 +14,7 @@ use commonware_consensus::marshal::{self};
 use commonware_consensus::simplex::elector::Random;
 use commonware_consensus::simplex::{self, Engine as Consensus};
 use commonware_consensus::types::{Epoch, FixedEpocher, ViewDelta};
-use commonware_consensus::{Reporter as ConsensusReporter, Reporters};
+use commonware_consensus::{Reporter as ConsensusReporter, Reporters, Viewable};
 use commonware_cryptography::bls12381::primitives::group;
 use commonware_cryptography::bls12381::primitives::sharing::Sharing;
 use commonware_cryptography::bls12381::primitives::variant::MinSig;
@@ -36,7 +36,7 @@ use governor::clock::Clock as GClock;
 use governor::Quota;
 use malachitebft_eth_engine::engine::Engine as EmeraldEngine;
 use rand::{CryptoRng, Rng};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::application::Application;
 use crate::block::Block;
@@ -62,7 +62,12 @@ impl ConsensusReporter for NotarizationReporter {
 
     async fn report(&mut self, activity: Self::Activity) {
         match activity {
-            Activity::Notarization(notarization) | Activity::Certification(notarization) => {
+            Activity::Notarization(notarization) => {
+                debug!(
+                    view = %notarization.view(),
+                    payload = ?notarization.proposal.payload,
+                    "block notarized"
+                );
                 let commitment = notarization.proposal.payload;
                 let mut mailbox = self.mailbox.clone();
                 let app = self.app.clone();
@@ -78,7 +83,55 @@ impl ConsensusReporter for NotarizationReporter {
                     }
                 });
             }
-            _ => {}
+            Activity::Certification(notarization) => {
+                debug!(
+                    view = %notarization.view(),
+                    payload = ?notarization.proposal.payload,
+                    "block certified"
+                );
+                let commitment = notarization.proposal.payload;
+                let mut mailbox = self.mailbox.clone();
+                let app = self.app.clone();
+                tokio::spawn(async move {
+                    let receiver = mailbox.subscribe(None, commitment).await;
+                    match receiver.await {
+                        Ok(block) => {
+                            app.on_notarized(&block).await;
+                        }
+                        Err(_) => {
+                            warn!(?commitment, "Notarized block subscription dropped");
+                        }
+                    }
+                });
+            }
+            Activity::Nullification(nullification) => {
+                debug!(view = %nullification.view(), "view nullified");
+            }
+            Activity::Finalization(finalization) => {
+                debug!(
+                    view = %finalization.view(),
+                    payload = ?finalization.proposal.payload,
+                    "block finalized"
+                );
+            }
+            Activity::Notarize(notarize) => {
+                debug!(view = %notarize.view(), "notarize vote received");
+            }
+            Activity::Nullify(nullify) => {
+                debug!(view = %nullify.view(), "nullify vote received");
+            }
+            Activity::Finalize(finalize) => {
+                debug!(view = %finalize.view(), "finalize vote received");
+            }
+            Activity::ConflictingNotarize(conflict) => {
+                warn!(view = %conflict.view(), "conflicting notarize detected (byzantine behavior)");
+            }
+            Activity::ConflictingFinalize(conflict) => {
+                warn!(view = %conflict.view(), "conflicting finalize detected (byzantine behavior)");
+            }
+            Activity::NullifyFinalize(conflict) => {
+                warn!(view = %conflict.view(), "nullify-finalize conflict detected (byzantine behavior)");
+            }
         }
     }
 }

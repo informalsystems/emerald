@@ -448,6 +448,12 @@ impl Application {
 
         // Skip if block is already processed
         if block.height() <= safe_height || block.height() <= finalized_height {
+            debug!(
+                height = %block.height(),
+                safe_height = %safe_height,
+                finalized_height = %finalized_height,
+                "Block skipped: already processed"
+            );
             return;
         }
 

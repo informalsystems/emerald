@@ -90,8 +90,8 @@ impl ValidatedPayloadCache {
 pub struct EvmState {
     /// Height of the last finalized block.
     pub finalized_height: Height,
-    /// Height of the last safe block.
-    pub safe_height: Height,
+    /// Height of the last notarized block.
+    pub notarized_height: Height,
     /// Timestamp (in seconds) of last finalized EVM block, used to enforce minimum block time.
     pub last_block_timestamp: u64,
     /// Cache for validated payloads.
@@ -102,7 +102,7 @@ impl Default for EvmState {
     fn default() -> Self {
         Self {
             finalized_height: Height::zero(),
-            safe_height: Height::zero(),
+            notarized_height: Height::zero(),
             last_block_timestamp: 0,
             validated_cache: ValidatedPayloadCache::new(VALIDATED_PAYLOAD_CACHE_SIZE),
         }
@@ -186,16 +186,16 @@ impl Application {
 
         let finalized_height = block.height();
 
-        // Warn if safe_height wasn't already at the new finalized_height
+        // Warn if notarized_height wasn't already at the new finalized_height
         // This could indicate blocks were finalized without being marked safe first
-        if state.safe_height != finalized_height {
+        if state.notarized_height != finalized_height {
             warn!(
-                safe_height = %state.safe_height,
+                notarized_height = %state.notarized_height,
                 old_finalized_height = %state.finalized_height,
                 new_finalized_height = %finalized_height,
-                "safe_height wasn't at finalized_height before finalization"
+                "notarized_height wasn't at finalized_height before finalization"
             );
-            state.safe_height = finalized_height;
+            state.notarized_height = finalized_height;
         }
 
         state.finalized_height = finalized_height;
@@ -437,16 +437,16 @@ impl Application {
 
     /// Update safe/head forkchoice for a notarized block.
     pub async fn on_notarized(&self, block: &Block) {
-        let (safe_height, finalized_height) = {
+        let (notarized_height, finalized_height) = {
             let state = self.state.read().await;
-            (state.safe_height, state.finalized_height)
+            (state.notarized_height, state.finalized_height)
         };
 
         // Skip if block is already processed
-        if block.height() <= safe_height || block.height() <= finalized_height {
+        if block.height() <= notarized_height || block.height() <= finalized_height {
             debug!(
                 height = %block.height(),
-                safe_height = %safe_height,
+                notarized_height = %notarized_height,
                 finalized_height = %finalized_height,
                 "Block skipped: already processed"
             );
@@ -500,9 +500,9 @@ impl Application {
         }
 
         let mut state = self.state.write().await;
-        if block.height() > state.safe_height {
-            state.safe_height = block.height();
-            info!(height = %block.height(), "Marked notarized block as safe");
+        if block.height() > state.notarized_height {
+            state.notarized_height = block.height();
+            info!(height = %block.height(), "Marked block as notarized");
         }
     }
 }

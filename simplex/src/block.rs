@@ -9,11 +9,8 @@ use commonware_consensus::types::Height;
 use commonware_consensus::Heightable;
 use commonware_cryptography::sha256::Digest;
 use commonware_cryptography::{Committable, Digestible, Hasher, Sha256};
-use commonware_parallel::Strategy;
-use rand::rngs::OsRng;
 use ssz::{Decode, Encode};
 
-use crate::consensus::{Finalization, Notarization, Scheme};
 
 /// Execution block hash from the EVM execution layer.
 pub type ExecutionHash = B256;
@@ -31,7 +28,7 @@ pub struct Block {
     pub timestamp: u64,
 
     /// EVM execution fields.
-    pub evm: EvmFields,
+    evm: EvmFields,
 
     /// Pre-computed digest of the block.
     digest: Digest,
@@ -235,99 +232,5 @@ impl commonware_consensus::Block for Block {
 impl Heightable for Block {
     fn height(&self) -> Height {
         self.height
-    }
-}
-
-/// A block with its notarization proof.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Notarized {
-    pub proof: Notarization,
-    pub block: Block,
-}
-
-impl Notarized {
-    pub fn new(proof: Notarization, block: Block) -> Self {
-        Self { proof, block }
-    }
-
-    pub fn verify(&self, scheme: &Scheme, strategy: &impl Strategy) -> bool {
-        self.proof.verify(&mut OsRng, scheme, strategy)
-    }
-}
-
-impl Write for Notarized {
-    fn write(&self, buf: &mut impl BufMut) {
-        self.proof.write(buf);
-        self.block.write(buf);
-    }
-}
-
-impl Read for Notarized {
-    type Cfg = ();
-
-    fn read_cfg(buf: &mut impl Buf, _: &Self::Cfg) -> Result<Self, Error> {
-        let proof = Notarization::read(buf)?;
-        let block = Block::read(buf)?;
-
-        if proof.proposal.payload != block.digest() {
-            return Err(Error::Invalid(
-                "Notarized",
-                "Proof payload does not match block digest",
-            ));
-        }
-        Ok(Self { proof, block })
-    }
-}
-
-impl EncodeSize for Notarized {
-    fn encode_size(&self) -> usize {
-        self.proof.encode_size() + self.block.encode_size()
-    }
-}
-
-/// A block with its finalization proof.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Finalized {
-    pub proof: Finalization,
-    pub block: Block,
-}
-
-impl Finalized {
-    pub fn new(proof: Finalization, block: Block) -> Self {
-        Self { proof, block }
-    }
-
-    pub fn verify(&self, scheme: &Scheme, strategy: &impl Strategy) -> bool {
-        self.proof.verify(&mut OsRng, scheme, strategy)
-    }
-}
-
-impl Write for Finalized {
-    fn write(&self, buf: &mut impl BufMut) {
-        self.proof.write(buf);
-        self.block.write(buf);
-    }
-}
-
-impl Read for Finalized {
-    type Cfg = ();
-
-    fn read_cfg(buf: &mut impl Buf, _: &Self::Cfg) -> Result<Self, Error> {
-        let proof = Finalization::read(buf)?;
-        let block = Block::read(buf)?;
-
-        if proof.proposal.payload != block.digest() {
-            return Err(Error::Invalid(
-                "Finalized",
-                "Proof payload does not match block digest",
-            ));
-        }
-        Ok(Self { proof, block })
-    }
-}
-
-impl EncodeSize for Finalized {
-    fn encode_size(&self) -> usize {
-        self.proof.encode_size() + self.block.encode_size()
     }
 }

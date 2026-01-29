@@ -83,18 +83,17 @@ impl ValidatedPayloadCache {
 }
 
 /// State tracked for EVM execution.
+///
+/// Note: We only track heights, not hashes. Hash tracking is unnecessary because:
+/// - Simplex provides canonical ancestry via AncestorStream
+/// - EL forkchoice_updated is called with block.execution_hash() directly
+/// - Heights are sufficient for early-exit optimizations in verify()
 #[derive(Clone, Default)]
 pub struct EvmState {
-    /// Last finalized execution block hash.
-    pub finalized_hash: B256,
     /// Height of the last finalized block.
     pub finalized_height: Height,
-    /// Last safe execution block hash.
-    pub safe_hash: B256,
     /// Height of the last safe block.
     pub safe_height: Height,
-    /// Last head execution block hash.
-    pub head_hash: B256,
     /// Fee recipient address for block building.
     pub fee_recipient: Address,
 }
@@ -141,9 +140,6 @@ impl Application {
 
         let state = EvmState {
             fee_recipient,
-            head_hash: genesis_execution_hash,
-            safe_hash: genesis_execution_hash,
-            finalized_hash: genesis_execution_hash,
             safe_height: Height::zero(),
             finalized_height: Height::zero(),
         };
@@ -194,14 +190,25 @@ impl Application {
     /// Update the EVM state after finalization.
     pub async fn on_finalized(&self, block: &Block) {
         let mut state = self.state.write().await;
-        state.finalized_hash = block.execution_hash();
-        state.safe_hash = block.execution_hash();
-        state.head_hash = block.execution_hash();
-        state.finalized_height = block.height();
-        state.safe_height = block.height();
+
+        let finalized_height = block.height();
+
+        // Warn if safe_height wasn't already at the new finalized_height
+        // This could indicate blocks were finalized without being marked safe first
+        if state.safe_height != finalized_height {
+            warn!(
+                safe_height = %state.safe_height,
+                old_finalized_height = %state.finalized_height,
+                new_finalized_height = %finalized_height,
+                "safe_height wasn't at finalized_height before finalization"
+            );
+            state.safe_height = finalized_height;
+        }
+
+        state.finalized_height = finalized_height;
 
         info!(
-            height = %block.height(),
+            height = %finalized_height,
             exec_hash = %block.execution_hash(),
             "EVM block finalized"
         );
@@ -437,13 +444,9 @@ impl Application {
 
     /// Update safe/head forkchoice for a notarized block.
     pub async fn on_notarized(&self, block: &Block) {
-        let (safe_height, finalized_height, _finalized_hash) = {
+        let (safe_height, finalized_height) = {
             let state = self.state.read().await;
-            (
-                state.safe_height,
-                state.finalized_height,
-                state.finalized_hash,
-            )
+            (state.safe_height, state.finalized_height)
         };
 
         // Skip if block is already processed
@@ -506,8 +509,6 @@ impl Application {
         let mut state = self.state.write().await;
         if block.height() > state.safe_height {
             state.safe_height = block.height();
-            state.safe_hash = block.execution_hash();
-            state.head_hash = block.execution_hash();
         }
 
         info!(height = %block.height(), "Marked notarized block as safe");
@@ -659,12 +660,6 @@ where
                 );
                 let exec_hash = block.execution_hash();
 
-                // Update head hash
-                {
-                    let mut state = self.state.write().await;
-                    state.head_hash = exec_hash;
-                }
-
                 // Cache as valid since we just built it
                 {
                     let mut cache = self.validated_cache.write().await;
@@ -706,6 +701,20 @@ where
         let Some(parent) = ancestry.next().await else {
             return false;
         };
+
+        // Check if execution hash is already in validated cache
+        {
+            let mut cache = self.validated_cache.write().await;
+            if let Some(validity) = cache.get(&block.execution_hash()) {
+                debug!(
+                    height = %block.height(),
+                    exec_hash = %block.execution_hash(),
+                    ?validity,
+                    "Using cached validation result"
+                );
+                return validity == Validity::Valid;
+            }
+        }
 
         // Basic consensus verification - timestamps must be increasing
         if block.timestamp <= parent.timestamp {

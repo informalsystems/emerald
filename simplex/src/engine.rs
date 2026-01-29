@@ -107,6 +107,8 @@ impl ConsensusReporter for NotarizationReporter {
             Activity::Nullification(nullification) => {
                 debug!(view = %nullification.view(), "view nullified");
             }
+            // Note: Finalized blocks are processed in Application's Reporter impl,
+            // which receives Update<Block> directly from the marshal.
             Activity::Finalization(finalization) => {
                 debug!(
                     view = %finalization.view(),

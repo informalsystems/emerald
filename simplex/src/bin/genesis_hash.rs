@@ -1,9 +1,10 @@
 //! Compute genesis block hash from genesis.json
 
 use std::collections::HashMap;
-use std::{env, fs};
+use std::fs;
 
 use alloy_primitives::{keccak256, Address, Bytes, B256, B64, U256};
+use clap::Parser;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -39,6 +40,16 @@ struct AllocAccount {
     storage: Option<HashMap<String, String>>,
 }
 
+/// Compute genesis block hash from genesis.json
+#[derive(Parser, Debug)]
+#[command(name = "genesis-hash")]
+#[command(about = "Compute genesis block hash from genesis.json")]
+struct Args {
+    /// Path to genesis.json file
+    #[arg(default_value = "genesis.json")]
+    genesis_path: String,
+}
+
 fn parse_hex_u64(s: &str) -> u64 {
     let s = s.strip_prefix("0x").unwrap_or(s);
     u64::from_str_radix(s, 16).unwrap_or(0)
@@ -50,8 +61,8 @@ fn parse_hex_u256(s: &str) -> U256 {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let genesis_path = args.get(1).map(|s| s.as_str()).unwrap_or("genesis.json");
+    let args = Args::parse();
+    let genesis_path = &args.genesis_path;
 
     let content = fs::read_to_string(genesis_path).expect("Failed to read genesis.json");
     let genesis: Genesis = serde_json::from_str(&content).expect("Failed to parse genesis.json");

@@ -268,7 +268,7 @@ function generateDockerCompose(
     };
 
     services[`otterscan-${i}`] = {
-      image: "otterscan/otterscan:v2.6.1",
+      image: "otterscan/otterscan:develop",
       container_name: `otterscan-${i}`,
       restart: "unless-stopped",
       networks: ["simplex-net"],

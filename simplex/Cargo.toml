@@ -40,6 +40,10 @@ commonware-math = "0.0.65"
 # Alloy for EVM types
 alloy-primitives = { workspace = true }
 alloy-rpc-types-engine = { workspace = true }
+alloy-rlp = "0.3"
+alloy-consensus = { workspace = true }
+alloy-trie = "0.9"
+alloy-genesis = "1.4.3"
 
 # Serialization
 bytes = { workspace = true }

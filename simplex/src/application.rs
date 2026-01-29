@@ -502,9 +502,8 @@ impl Application {
         let mut state = self.state.write().await;
         if block.height() > state.safe_height {
             state.safe_height = block.height();
+            info!(height = %block.height(), "Marked notarized block as safe");
         }
-
-        info!(height = %block.height(), "Marked notarized block as safe");
     }
 }
 
@@ -832,13 +831,8 @@ impl Reporter for Application {
                 .set_latest_forkchoice_state(block.execution_hash(), &self.retry_config)
                 .await;
 
-            match result {
-                Ok(_) => {
-                    info!(%height, "Finalized EVM block");
-                }
-                Err(e) => {
-                    warn!(?e, %height, "Failed to finalize block in EL");
-                }
+            if let Err(e) = &result {
+                warn!(?e, %height, "Failed to update EL forkchoice for finalized block");
             }
 
             // Update last block timestamp for min_block_time enforcement in propose()

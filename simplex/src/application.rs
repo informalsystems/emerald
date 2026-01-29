@@ -11,7 +11,6 @@
 
 use core::time::Duration;
 use std::sync::Arc;
-use std::time::Instant;
 
 use alloy_primitives::{Address, B256};
 use alloy_rpc_types_engine::{
@@ -88,14 +87,26 @@ impl ValidatedPayloadCache {
 /// - Simplex provides canonical ancestry via AncestorStream
 /// - EL forkchoice_updated is called with block.execution_hash() directly
 /// - Heights are sufficient for early-exit optimizations in verify()
-#[derive(Clone, Default)]
 pub struct EvmState {
     /// Height of the last finalized block.
     pub finalized_height: Height,
     /// Height of the last safe block.
     pub safe_height: Height,
-    /// Fee recipient address for block building.
-    pub fee_recipient: Address,
+    /// Timestamp (in seconds) of last finalized EVM block, used to enforce minimum block time.
+    pub last_block_timestamp: u64,
+    /// Cache for validated payloads.
+    pub validated_cache: ValidatedPayloadCache,
+}
+
+impl Default for EvmState {
+    fn default() -> Self {
+        Self {
+            finalized_height: Height::zero(),
+            safe_height: Height::zero(),
+            last_block_timestamp: 0,
+            validated_cache: ValidatedPayloadCache::new(VALIDATED_PAYLOAD_CACHE_SIZE),
+        }
+    }
 }
 
 /// EVM Application that uses emerald's Engine API for block building and validation.
@@ -106,12 +117,8 @@ pub struct Application {
     state: Arc<RwLock<EvmState>>,
     retry_config: RetryConfig,
     min_block_time: Duration,
-    /// Cache for validated payloads - protected by RwLock since it's mutable.
-    validated_cache: Arc<RwLock<ValidatedPayloadCache>>,
-    /// Timestamp (in seconds) of last finalized EVM block, used to enforce minimum block time.
-    last_block_timestamp: Arc<RwLock<u64>>,
-    /// Wall-clock time of last finalized block, used for sub-second enforcement.
-    last_block_time: Arc<RwLock<Instant>>,
+    /// Fee recipient address for block building (immutable after initialization).
+    fee_recipient: Address,
     /// Prague fork activation timestamp (in seconds). None means Prague is not activated.
     prague_time: Option<u64>,
     /// Osaka fork activation timestamp (in seconds). None means Osaka is not activated.
@@ -138,27 +145,13 @@ impl Application {
             genesis_execution_hash,
         );
 
-        let state = EvmState {
-            fee_recipient,
-            safe_height: Height::zero(),
-            finalized_height: Height::zero(),
-        };
-
-        let initial_time = Instant::now()
-            .checked_sub(min_block_time)
-            .unwrap_or_else(Instant::now);
-
         Self {
             genesis: Arc::new(genesis),
             engine: Arc::new(engine),
-            state: Arc::new(RwLock::new(state)),
+            state: Arc::new(RwLock::new(EvmState::default())),
+            fee_recipient,
             retry_config: RetryConfig::default(),
             min_block_time,
-            validated_cache: Arc::new(RwLock::new(ValidatedPayloadCache::new(
-                VALIDATED_PAYLOAD_CACHE_SIZE,
-            ))),
-            last_block_timestamp: Arc::new(RwLock::new(0)),
-            last_block_time: Arc::new(RwLock::new(initial_time)),
             prague_time: Some(0), // Prague enabled from genesis by default
             osaka_time: None,     // Osaka disabled by default
         }
@@ -391,8 +384,8 @@ impl Application {
 
         // Check cache first
         {
-            let mut cache = self.validated_cache.write().await;
-            if let Some(cached_validity) = cache.get(&block_hash) {
+            let mut state = self.state.write().await;
+            if let Some(cached_validity) = state.validated_cache.get(&block_hash) {
                 debug!(
                     %height, %block_hash, validity = ?cached_validity,
                     "Returning cached payload validation result"
@@ -435,8 +428,8 @@ impl Application {
 
         // Cache the result
         {
-            let mut cache = self.validated_cache.write().await;
-            cache.insert(block_hash, validity);
+            let mut state = self.state.write().await;
+            state.validated_cache.insert(block_hash, validity);
         }
 
         validity
@@ -541,10 +534,13 @@ where
         // Block time defines how long a transaction needs to wait to be included in a proposal block.
         // We wait to allow the mempool to fill up with transactions to include in the proposed block.
         {
-            let last_time = *self.last_block_time.read().await;
-            let elapsed = last_time.elapsed();
-            if elapsed < self.min_block_time {
-                let sleep_for = self.min_block_time - elapsed;
+            let state = self.state.read().await;
+            let last_timestamp_secs = state.last_block_timestamp;
+            let min_next_timestamp = last_timestamp_secs + self.min_block_time.as_secs();
+            let current_secs = runtime_context.current().epoch_millis() / 1000;
+            if current_secs < min_next_timestamp {
+                let sleep_secs = min_next_timestamp - current_secs;
+                let sleep_for = Duration::from_secs(sleep_secs);
                 debug!(?sleep_for, "Waiting for min_block_time before proposing");
                 tokio::time::sleep(sleep_for).await;
             }
@@ -585,16 +581,13 @@ where
 
         let current = el_timestamp * 1000; // consensus timestamp in ms
 
-        // Get current state
-        let state = self.state.read().await.clone();
-
         // Generate deterministic consensus-derived values for EL payload attributes
         let prev_randao = Self::generate_prev_randao(&parent_digest, parent_height.next());
         let parent_beacon_block_root = Self::parent_beacon_block_root(&parent_digest);
 
         // Convert fee recipient to emerald Address type
         let fee_recipient = malachitebft_eth_types::Address::from(alloy_primitives::Address::from(
-            state.fee_recipient.0 .0,
+            self.fee_recipient.0 .0,
         ));
 
         // Build execution payload via Engine API with retry
@@ -662,8 +655,8 @@ where
 
                 // Cache as valid since we just built it
                 {
-                    let mut cache = self.validated_cache.write().await;
-                    cache.insert(exec_hash, Validity::Valid);
+                    let mut state = self.state.write().await;
+                    state.validated_cache.insert(exec_hash, Validity::Valid);
                 }
 
                 info!(
@@ -704,8 +697,8 @@ where
 
         // Check if execution hash is already in validated cache
         {
-            let mut cache = self.validated_cache.write().await;
-            if let Some(validity) = cache.get(&block.execution_hash()) {
+            let mut state = self.state.write().await;
+            if let Some(validity) = state.validated_cache.get(&block.execution_hash()) {
                 debug!(
                     height = %block.height(),
                     exec_hash = %block.execution_hash(),
@@ -852,11 +845,9 @@ impl Reporter for Application {
             // Use the EVM block's timestamp
             if let Some(payload) = block.payload() {
                 let block_timestamp = payload.payload_inner.payload_inner.timestamp;
-                let mut last_timestamp = self.last_block_timestamp.write().await;
-                *last_timestamp = block_timestamp;
+                let mut state = self.state.write().await;
+                state.last_block_timestamp = block_timestamp;
             }
-            let mut last_time = self.last_block_time.write().await;
-            *last_time = Instant::now();
 
             ack_rx.acknowledge();
         }

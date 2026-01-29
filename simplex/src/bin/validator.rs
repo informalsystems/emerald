@@ -32,7 +32,7 @@ use malachitebft_eth_engine::engine::Engine as EmeraldEngine;
 use malachitebft_eth_engine::engine_rpc::EngineRPC;
 use malachitebft_eth_engine::ethereum_rpc::EthereumRPC;
 use serde::{Deserialize, Serialize};
-use tracing::{error, info, Level};
+use tracing::{error, info, warn, Level};
 use url::Url;
 
 // Channel IDs
@@ -300,6 +300,17 @@ fn main() {
 
         info!("Connected to Engine API at {}", engine_api_url);
 
+        // Ensure min_block_time is at least 1 second for simplex consensus
+        let min_block_time = if emerald.min_block_time < Duration::from_secs(1) {
+            warn!(
+                "min_block_time {:?} is less than 1 second, using 1 second instead",
+                emerald.min_block_time
+            );
+            Duration::from_secs(1)
+        } else {
+            emerald.min_block_time
+        };
+
         // Create engine config
         let engine_config = EngineConfig {
             blocker: oracle.clone(),
@@ -326,7 +337,7 @@ fn main() {
             engine: emerald_engine,
             fee_recipient,
             genesis_execution_hash,
-            min_block_time: emerald.min_block_time,
+            min_block_time,
         };
 
         // Create and start engine

@@ -132,7 +132,7 @@ Depending on the node type, behavior differs:
   - Restrict itself to providing only data available locally.
 
 > Note:
-> Emerald currently supports only archival Reth nodes.
+> In order for a node to be able to sync, there has to be at least one archival node in the network that can provide historical data. We plan to add snapshot syncing to remove this constraint.
 >
 
 ## Emerald Storage overview

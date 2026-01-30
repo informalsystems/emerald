@@ -80,20 +80,20 @@ sequenceDiagram
 
 The sync request contains the height, while the expected response includes the `value_bytes` and the commit `certificate`.
 
-When the middleware (Emerald) receives the `AppMsg::GetDecidedValue` message, it processes it as follows:
+When the application (Emerald) receives the `AppMsg::GetDecidedValue` message, it processes it as follows:
 
-1. Retrieve the earliest height from storage.
-    This represents the earliest height for which the node can provide a payload (block). See the _Minimal Node Height_ section.
+1. Retrieve from storage the _earliest available height_, i.e., the minimum height for which the application can provide a payload (block). 
+   See the [Minimal Node Height](#minimal-node-height) section.
 2. Validate the requested height range:
-    - If the requested height is above the node’s current height or below the earliest available height, return `None`.
-    - Otherwise, continue.
-3. Retrieve the earliest unpruned height from storage.
-    This is the earliest height for which the full block is available locally (no need to query Reth).
-4. Fetch block data:
-    - If the requested height is above the earliest unpruned height, return the decided value directly from storage.
-    - Otherwise, fetch the missing block data from Reth using the Engine API method `engine_getPayloadBodiesByRange`.
+   - If the requested height is not available (i.e., below the earliest available height or above the latest decided height), return `None`.
+   - Otherwise, continue.  
+3. Retrieve from storage the _earliest unpruned height_, i.e., the minimum height for which the full block is available locally (no need to query the EL).
+4. Fetch the block data:
+    - If the requested height is below the earliest unpruned height, try fetching the missing block data from the EL using the Engine API method `engine_getPayloadBodiesByRange`. 
+    - Otherwise, return the decided value directly from storage.
 
-To support this logic, block headers and certificates are stored for all blocks a node can provide to peers. This is necessary because Reth only stores payload bodies and does not include the metadata or consensus data required for full block reconstruction.
+To support this logic, block headers and certificates are stored for all blocks a node can provide to peers. 
+This is necessary because the EL only stores payload bodies and does not include the metadata or consensus data required for full block reconstruction.
 
 ## Sync Response Handling
 

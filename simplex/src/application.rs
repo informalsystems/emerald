@@ -206,7 +206,7 @@ impl Application {
             );
         } else if let Some(payload) = block.payload().cloned() {
             if Self::payload_has_blobs(&payload) {
-                warn!(height = %finalized_height, "Notarized payload includes blobs");
+                warn!(height = %finalized_height, "Finalized payload includes blobs");
             } else {
                 // Import the payload with retry for syncing nodes
                 let parent_beacon_block_root = Self::parent_beacon_block_root(&block.parent);
@@ -226,7 +226,7 @@ impl Application {
                         );
                     }
                     Ok(status) => {
-                        warn!(height = %finalized_height, ?status, "Notarized payload invalid");
+                        warn!(height = %finalized_height, ?status, "Finalized payload invalid");
                     }
                     Err(e) => {
                         warn!(height = %finalized_height, ?e, "Failed to import notarized payload");
@@ -255,7 +255,7 @@ impl Application {
         } else {
             warn!(
                 height = %finalized_height,
-                "Notarized block missing execution payload"
+                "Finalized block missing execution payload"
             );
         }
 
@@ -276,12 +276,6 @@ impl Application {
             let peer_set = self.oracle.peer_set(0).await;
             info!(?peer_set, "Current authorized peer set from oracle");
         }
-
-        info!(
-            height = %finalized_height,
-            exec_hash = %block.execution_hash(),
-            "EVM block finalized"
-        );
     }
 
     /// Check if payload includes blob data (unsupported without versioned hashes).
@@ -827,36 +821,6 @@ impl Reporter for Application {
             // Update finalized state first
             self.on_finalized(&block).await;
 
-            // Import the execution payload if present
-            // This is necessary because our node may not have this block
-            // (it was built by another validator)
-            if let Some(payload) = block.payload() {
-                if !Self::payload_has_blobs(payload) {
-                    let parent_beacon_block_root = Self::parent_beacon_block_root(&block.parent);
-                    let import_result = self
-                        .notify_new_block_with_retry(
-                            payload.clone(),
-                            vec![],
-                            parent_beacon_block_root,
-                        )
-                        .await;
-
-                    if let Err(e) = &import_result {
-                        warn!(error = %e, %height, "Failed to import finalized payload");
-                    }
-                }
-            }
-
-            // Update forkchoice to finalize this block in the EL
-            let result = self
-                .engine
-                .set_latest_forkchoice_state(block.execution_hash(), &self.retry_config)
-                .await;
-
-            if let Err(e) = &result {
-                warn!(?e, %height, "Failed to update EL forkchoice for finalized block");
-            }
-
             // Update last block timestamp for min_block_time enforcement in propose()
             // Use the EVM block's timestamp
             if let Some(payload) = block.payload() {
@@ -866,6 +830,12 @@ impl Reporter for Application {
             }
 
             ack_rx.acknowledge();
+
+            info!(
+                height = %height,
+                exec_hash = %block.execution_hash(),
+                "EVM block finalized"
+            );
         }
     }
 }

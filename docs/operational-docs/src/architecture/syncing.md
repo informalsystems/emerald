@@ -128,6 +128,8 @@ Depending on the node type, behavior differs:
 
 ## Sync Response Handling
 
+> TODO: Ensure this is the correct way to handle ProcessSyncedValue. If not, open a different PR to fix the code and then update this section.
+
 Upon receiving a response from a peer, Malachite is providing to the application (Emerald) the `height`, `round`, `proposer`, and `value_bytes` via the `AppMsg::ProcessSyncedValue` message. 
 The application is processing it as follows:
 

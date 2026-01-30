@@ -92,8 +92,6 @@ impl ValidatedPayloadCache {
 pub struct EvmState {
     /// Height of the last finalized block.
     pub finalized_height: Height,
-    /// Height of the last notarized block.
-    pub notarized_height: Height,
     /// Timestamp (in seconds) of last finalized EVM block, used to enforce minimum block time.
     pub last_block_timestamp: u64,
     /// Cache for validated payloads.
@@ -104,7 +102,6 @@ impl Default for EvmState {
     fn default() -> Self {
         Self {
             finalized_height: Height::zero(),
-            notarized_height: Height::zero(),
             last_block_timestamp: 0,
             validated_cache: ValidatedPayloadCache::new(VALIDATED_PAYLOAD_CACHE_SIZE),
         }
@@ -187,25 +184,86 @@ impl Application {
         Fork::Unsupported
     }
 
+    /// Update safe/head forkchoice for a notarized block.
+    pub async fn on_notarized(&self, block: &Block) {
+        let _ = block;
+    }
+
     /// Update the EVM state after finalization.
     pub async fn on_finalized(&mut self, block: &Block) {
-        let mut state = self.state.write().await;
-
         let finalized_height = block.height();
+        let previously_finalized_height = {
+            let state = self.state.read().await;
+            state.finalized_height
+        };
 
-        // Warn if notarized_height wasn't already at the new finalized_height
-        // This could indicate blocks were finalized without being marked safe first
-        if state.notarized_height != finalized_height {
-            warn!(
-                notarized_height = %state.notarized_height,
-                old_finalized_height = %state.finalized_height,
-                new_finalized_height = %finalized_height,
-                "notarized_height wasn't at finalized_height before finalization"
+        // Apply notarized handling during finalization for now.
+        if finalized_height <= previously_finalized_height {
+            debug!(
+                height = %finalized_height,
+                finalized_height = %previously_finalized_height,
+                "Block skipped: already processed"
             );
-            state.notarized_height = finalized_height;
+        } else if let Some(payload) = block.payload().cloned() {
+            if Self::payload_has_blobs(&payload) {
+                warn!(height = %finalized_height, "Notarized payload includes blobs");
+            } else {
+                // Import the payload with retry for syncing nodes
+                let parent_beacon_block_root = Self::parent_beacon_block_root(&block.parent);
+                let import_result = self
+                    .notify_new_block_with_retry(payload, vec![], parent_beacon_block_root)
+                    .await;
+
+                let mut import_ok = false;
+                match import_result {
+                    Ok(status) if matches!(status.status, PayloadStatusEnum::Valid) => {
+                        import_ok = true;
+                    }
+                    Ok(status) if matches!(status.status, PayloadStatusEnum::Syncing) => {
+                        warn!(
+                            height = %finalized_height,
+                            "EL is syncing during notarized payload import"
+                        );
+                    }
+                    Ok(status) => {
+                        warn!(height = %finalized_height, ?status, "Notarized payload invalid");
+                    }
+                    Err(e) => {
+                        warn!(height = %finalized_height, ?e, "Failed to import notarized payload");
+                    }
+                }
+
+                if import_ok {
+                    // Update forkchoice
+                    let forkchoice_result = self
+                        .engine
+                        .set_latest_forkchoice_state(block.execution_hash(), &self.retry_config)
+                        .await;
+
+                    match forkchoice_result {
+                        Ok(_) => {}
+                        Err(e) => {
+                            warn!(
+                                height = %finalized_height,
+                                ?e,
+                                "Failed to update safe forkchoice"
+                            );
+                        }
+                    }
+                }
+            }
+        } else {
+            warn!(
+                height = %finalized_height,
+                "Notarized block missing execution payload"
+            );
         }
 
-        state.finalized_height = finalized_height;
+        {
+            let mut state = self.state.write().await;
+
+            state.finalized_height = finalized_height;
+        }
 
         // TODO: Dynamic validator set updates
         // To implement validator set changes:
@@ -452,77 +510,6 @@ impl Application {
         }
 
         validity
-    }
-
-    /// Update safe/head forkchoice for a notarized block.
-    pub async fn on_notarized(&self, block: &Block) {
-        let (notarized_height, finalized_height) = {
-            let state = self.state.read().await;
-            (state.notarized_height, state.finalized_height)
-        };
-
-        // Skip if block is already processed
-        if block.height() <= notarized_height || block.height() <= finalized_height {
-            debug!(
-                height = %block.height(),
-                notarized_height = %notarized_height,
-                finalized_height = %finalized_height,
-                "Block skipped: already processed"
-            );
-            return;
-        }
-
-        let Some(payload) = block.payload().cloned() else {
-            warn!(height = %block.height(), "Notarized block missing execution payload");
-            return;
-        };
-
-        if Self::payload_has_blobs(&payload) {
-            warn!(height = %block.height(), "Notarized payload includes blobs");
-            return;
-        }
-
-        // Import the payload with retry for syncing nodes
-        let parent_beacon_block_root = Self::parent_beacon_block_root(&block.parent);
-        let import_result = self
-            .notify_new_block_with_retry(payload, vec![], parent_beacon_block_root)
-            .await;
-
-        match import_result {
-            Ok(status) if matches!(status.status, PayloadStatusEnum::Valid) => {}
-            Ok(status) if matches!(status.status, PayloadStatusEnum::Syncing) => {
-                warn!(height = %block.height(), "EL is syncing during notarized payload import");
-                return;
-            }
-            Ok(status) => {
-                warn!(height = %block.height(), ?status, "Notarized payload invalid");
-                return;
-            }
-            Err(e) => {
-                warn!(height = %block.height(), ?e, "Failed to import notarized payload");
-                return;
-            }
-        }
-
-        // Update forkchoice
-        let forkchoice_result = self
-            .engine
-            .set_latest_forkchoice_state(block.execution_hash(), &self.retry_config)
-            .await;
-
-        match forkchoice_result {
-            Ok(_) => {}
-            Err(e) => {
-                warn!(height = %block.height(), ?e, "Failed to update safe forkchoice");
-                return;
-            }
-        }
-
-        let mut state = self.state.write().await;
-        if block.height() > state.notarized_height {
-            state.notarized_height = block.height();
-            info!(height = %block.height(), "Marked block as notarized");
-        }
     }
 }
 

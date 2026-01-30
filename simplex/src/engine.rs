@@ -14,7 +14,6 @@ use commonware_consensus::marshal::{self};
 use commonware_consensus::simplex::elector::RoundRobin;
 use commonware_consensus::simplex::{self, Engine as Consensus};
 use commonware_consensus::types::{Epoch, FixedEpocher, ViewDelta};
-use commonware_consensus::{Reporter as ConsensusReporter, Reporters, Viewable};
 use commonware_cryptography::certificate::{ConstantProvider, Scheme as CertificateScheme};
 use commonware_cryptography::sha256::{Digest, Sha256};
 use commonware_cryptography::Signer;
@@ -35,112 +34,19 @@ use governor::clock::Clock as GClock;
 use governor::Quota;
 use malachitebft_eth_engine::engine::Engine as EmeraldEngine;
 use rand::{CryptoRng, Rng};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::application::Application;
 use crate::block::Block;
 use crate::consensus::{
-    Activity, Finalization, PrivateKey, PublicKey, Scheme, EPOCH, EPOCH_LENGTH, NAMESPACE,
+    Finalization, PrivateKey, PublicKey, Scheme, EPOCH, EPOCH_LENGTH, NAMESPACE,
 };
 
 /// Reporter type for simplex Engine.
-type EngineReporter = Reporters<Activity, marshal::Mailbox<Scheme, Block>, NotarizationReporter>;
+type EngineReporter = marshal::Mailbox<Scheme, Block>;
 
 /// Elector type using round-robin with SHA256 for shuffling.
 type Elector = RoundRobin<Sha256>;
-
-#[derive(Clone)]
-struct NotarizationReporter {
-    app: Application,
-    mailbox: marshal::Mailbox<Scheme, Block>,
-}
-
-impl NotarizationReporter {
-    fn new(app: Application, mailbox: marshal::Mailbox<Scheme, Block>) -> Self {
-        Self { app, mailbox }
-    }
-}
-
-impl ConsensusReporter for NotarizationReporter {
-    type Activity = Activity;
-
-    async fn report(&mut self, activity: Self::Activity) {
-        match activity {
-            Activity::Notarization(notarization) => {
-                debug!(
-                    view = %notarization.view(),
-                    payload = ?notarization.proposal.payload,
-                    "block notarized"
-                );
-                let commitment = notarization.proposal.payload;
-                let mut mailbox = self.mailbox.clone();
-                let app = self.app.clone();
-                tokio::spawn(async move {
-                    let receiver = mailbox.subscribe(None, commitment).await;
-                    match receiver.await {
-                        Ok(block) => {
-                            app.on_notarized(&block).await;
-                        }
-                        Err(_) => {
-                            warn!(?commitment, "Notarized block subscription dropped");
-                        }
-                    }
-                });
-            }
-            Activity::Certification(notarization) => {
-                debug!(
-                    view = %notarization.view(),
-                    payload = ?notarization.proposal.payload,
-                    "block certified"
-                );
-                let commitment = notarization.proposal.payload;
-                let mut mailbox = self.mailbox.clone();
-                let app = self.app.clone();
-                tokio::spawn(async move {
-                    let receiver = mailbox.subscribe(None, commitment).await;
-                    match receiver.await {
-                        Ok(block) => {
-                            app.on_notarized(&block).await;
-                        }
-                        Err(_) => {
-                            warn!(?commitment, "Notarized block subscription dropped");
-                        }
-                    }
-                });
-            }
-            Activity::Nullification(nullification) => {
-                debug!(view = %nullification.view(), "view nullified");
-            }
-            // Note: Finalized blocks are processed in Application's Reporter impl,
-            // which receives Update<Block> directly from the marshal.
-            Activity::Finalization(finalization) => {
-                debug!(
-                    view = %finalization.view(),
-                    payload = ?finalization.proposal.payload,
-                    "block finalized"
-                );
-            }
-            Activity::Notarize(notarize) => {
-                debug!(view = %notarize.view(), "notarize vote received");
-            }
-            Activity::Nullify(nullify) => {
-                debug!(view = %nullify.view(), "nullify vote received");
-            }
-            Activity::Finalize(finalize) => {
-                debug!(view = %finalize.view(), "finalize vote received");
-            }
-            Activity::ConflictingNotarize(conflict) => {
-                warn!(view = %conflict.view(), "conflicting notarize detected (byzantine behavior)");
-            }
-            Activity::ConflictingFinalize(conflict) => {
-                warn!(view = %conflict.view(), "conflicting finalize detected (byzantine behavior)");
-            }
-            Activity::NullifyFinalize(conflict) => {
-                warn!(view = %conflict.view(), "nullify-finalize conflict detected (byzantine behavior)");
-            }
-        }
-    }
-}
 
 // Storage constants
 const SYNCER_ACTIVITY_TIMEOUT_MULTIPLIER: u64 = 10;
@@ -373,7 +279,6 @@ impl<
             cfg.min_block_time,
             cfg.oracle,
         );
-        let app_reporter = app.clone();
         let marshaled = Marshaled::new(
             context.with_label("marshaled"),
             app,
@@ -382,9 +287,7 @@ impl<
         );
 
         // Create the reporter
-        let notarization_reporter =
-            NotarizationReporter::new(app_reporter, marshal_mailbox.clone());
-        let reporter: EngineReporter = (marshal_mailbox, notarization_reporter).into();
+        let reporter: EngineReporter = marshal_mailbox;
 
         // Create the consensus engine with round-robin leader election
         // Use shuffled round-robin with the namespace as seed for deterministic ordering

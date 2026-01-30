@@ -148,22 +148,24 @@ The application is processing it as follows:
 > In the current Malachite implementation, there is no timeout during validation of syncing values.
 > A configurable syncing timeout has been introduced as part of the `EmeraldConfig` to address this.
 
-## Example flow
+## Example Flow
 
-Consider a scenario where the entire node crashes and falls behind. In this case, Reth will detect from its peers that it is lagging, and Malachite will also trigger its syncing protocol through status exchanges.
+Consider a scenario where the entire node falls behind. In this case, 
 
-On the Malachite side, data needs to be retrieved from its host (in our setup, Emerald + Reth) to provide information to peers. When we receive the `AppMsg::GetDecidedValue` message, several situations are possible:
+- Reth will detect from its peers that it is lagging; 
+- and Malachite will trigger its syncing protocol through status exchanges.
+
+On the Malachite side, data needs to be retrieved from its application (i.e., Emerald with Reth as EL) to provide information to peers. 
+When Emerald receives the `AppMsg::GetDecidedValue` message, several situations are possible:
 
 1. Data is available locally in Emerald - this applies only for the last few heights (5).
-2. Metadata is available, but the full decided value is missing - we need to query Reth for the missing data.
+2. Metadata is available, but the full decided value is missing - Emerald needs to query Reth for the missing data.
 3. No data is available at all.
 
-Suppose a situation where metadata is available, but the payload bodies for the corresponding block heights must be retrieved from Reth. In this case, the decided value is reconstructed and returned to Malachite, which then forwards it to the syncing peer.
+Suppose a situation where metadata is available, but the payloads for the corresponding block heights must be retrieved from Reth. 
+In this case, the decided value is reconstructed and returned to Malachite, which then forwards it to the syncing peer.
 
 When the peer receives the decided value, it must validate it via the `engine_newPayload` API call.
 If Reth is still syncing and does not yet have the required data for validation, the call will return `PayloadStatus::SYNCING`.
-In that case, Malachite will retry until the operation either succeeds or times out. Once Reth returns `Valid` or `Invalid`, the peer can proceed accordingly.
-
-A similar flow occurs when a node is joining the network where emr0 runs with reth0, and emr1 runs with reth1. A new node pair, emr2 and reth2, then intends to join the network.
-
-For example, emr1 (Emerald 1) can provide a decided value to emr2, while reth2 queries its peers to retrieve the missing data it has fallen behind on. If emr2 (Emerald 2) reaches the newPayload call before reth2 has fully synchronized, it must wait until Reth completes syncing.
+In that case, Emerald will retry until the operation either succeeds or times out. 
+Once Reth returns `Valid` or `Invalid`, the peer can proceed accordingly.

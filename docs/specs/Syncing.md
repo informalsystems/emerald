@@ -32,7 +32,49 @@ This design keeps syncing logic separate from consensus while reusing the same v
 
 ### Emerald Sync Overview
 
-<img src="../assets/emerald-syncing.png" width="800" />
+```mermaid
+sequenceDiagram
+    box Node 1 (Behind)
+        participant M1 as Malachite
+        participant E1 as Emerald
+        participant EC1 as EL
+    end
+    box Node 2 (Ahead)
+        participant M2 as Malachite
+        participant E2 as Emerald
+        participant EC2 as EL
+    end
+
+    M1->>M2: Exchange Status
+    M1->>M2: requestSyncValues
+
+    M2->>E2: AppMsg::GetDecidedValue
+
+    alt Height available locally
+        E2->>E2: Return from store
+    else Height not available
+        E2->>EC2: engine_getPayloadBodiesByRange
+        EC2-->>E2: Payload bodies result
+    end
+
+    E2-->>M2: Return result
+    M2-->>M1: Return result
+
+    M1->>E1: AppMsg::ProcessSyncedValue
+    E1->>EC1: newPayload (validation request)
+    EC1-->>E1: Validation result
+
+    alt Valid/Invalid/Accepted
+        E1->>E1: Set validity accordingly
+    else Syncing
+        loop Retry mechanism
+            E1->>EC1: newPayload (retry)
+            EC1-->>E1: Validation result
+        end
+    end
+
+    E1-->>M1: Return result
+```
 
 ## Sync Request Handling
 

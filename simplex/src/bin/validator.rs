@@ -21,15 +21,14 @@ use commonware_p2p::{Ingress, Manager};
 use commonware_runtime::{tokio, Metrics, RayonPoolSpawner, Runner};
 use commonware_utils::ordered::BiMap;
 use commonware_utils::{from_hex_formatted, union_unique, NZUsize};
-use emerald_simplex::config::SimplexConfigFile;
-use emerald_simplex::consensus::NAMESPACE;
+use emerald_simplex::config::{Peers, SimplexConfigFile};
+use emerald_simplex::consensus::{EPOCH, NAMESPACE};
 use emerald_simplex::engine::{Config as EngineConfig, Engine};
 use futures::future::try_join_all;
 use governor::Quota;
 use malachitebft_eth_engine::engine::Engine as EmeraldEngine;
 use malachitebft_eth_engine::engine_rpc::EngineRPC;
 use malachitebft_eth_engine::ethereum_rpc::EthereumRPC;
-use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn, Level};
 use url::Url;
 
@@ -53,15 +52,6 @@ const MAX_FETCH_SIZE: usize = 512 * 1024;
 const FETCH_CONCURRENT: usize = 4;
 const BLOCKS_FREEZER_TABLE_INITIAL_SIZE: u32 = 2u32.pow(21);
 const FINALIZED_FREEZER_TABLE_INITIAL_SIZE: u32 = 2u32.pow(21);
-
-/// Epoch for validator set (fixed for now).
-const EPOCH: u64 = 0;
-
-/// Peers file format.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Peers {
-    pub addresses: HashMap<String, SocketAddr>,
-}
 
 fn main() {
     // Parse arguments
@@ -186,7 +176,7 @@ fn main() {
             BiMap::try_from(participant_pairs).expect("duplicate participants");
         oracle
             .update(
-                EPOCH,
+                EPOCH.get(),
                 participants
                     .keys()
                     .iter()

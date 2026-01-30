@@ -1,3 +1,6 @@
+use core::net::SocketAddr;
+use std::collections::HashMap;
+
 use malachitebft_eth_cli::config::EmeraldConfig;
 use serde::{Deserialize, Serialize};
 
@@ -29,4 +32,10 @@ pub struct SimplexConfigFile {
     #[serde(flatten)]
     pub emerald: EmeraldConfig,
     pub simplex: SimplexConfig,
+}
+
+/// Peers file format mapping public keys to socket addresses.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Peers {
+    pub addresses: HashMap<String, SocketAddr>,
 }

@@ -11,7 +11,6 @@ use commonware_cryptography::sha256::Digest;
 use commonware_cryptography::{Committable, Digestible, Hasher, Sha256};
 use ssz::{Decode, Encode};
 
-
 /// Execution block hash from the EVM execution layer.
 pub type ExecutionHash = B256;
 

@@ -15,11 +15,10 @@ use commonware_cryptography::secp256r1::standard::PrivateKey;
 use commonware_cryptography::Signer;
 use commonware_math::algebra::Random;
 use commonware_utils::{from_hex_formatted, hex};
-use emerald_simplex::config::{SimplexConfig, SimplexConfigFile};
+use emerald_simplex::config::{Peers, SimplexConfig, SimplexConfigFile};
 use malachitebft_eth_cli::config::{ElNodeType, EmeraldConfig};
 use malachitebft_eth_types::Address;
 use rand::rngs::OsRng;
-use serde::{Deserialize, Serialize};
 use tokio::time::Duration;
 
 /// Emerald Simplex setup tool.
@@ -59,12 +58,6 @@ enum Commands {
         #[arg(long)]
         genesis_hash: String,
     },
-}
-
-/// Peers file format.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Peers {
-    pub addresses: HashMap<String, SocketAddr>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {

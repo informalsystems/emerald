@@ -97,25 +97,23 @@ This is necessary because the EL only stores payload bodies and does not include
 
 ## Sync Response Handling
 
-Upon receiving a response from a peer, we get the `height`, `round`, `proposer`, and `value_bytes`.
+Upon receiving a response from a peer, Malachite is providing to the application (Emerald) the `height`, `round`, `proposer`, and `value_bytes` via the `AppMsg::ProcessSyncedValue` message. 
+The application is processing it as follows:
 
-The response is processed as follows:
+1. Extract the payload from the value and then validate it using the Engine API method `engine_newPayload`.
+   This validation ensures that the provided value is consistent with the EL rules before passing it back to Malachite.
+2. Handle the payload validation responses:
+    - If the EL returns a `SYNCING` status, the node retries validation.
+    - The retry mechanism re-sends the validation request until the EL returns either `VALID` or `INVALID`.
+    - After each `SYNCING` response, the application waits for a configurable sleep delay before retrying.
 
-1. Reconstruct and validate the block using the Engine API method `engine_newPayload`.
-    This validation ensures that the provided value is consistent with the execution layer’s rules before passing it back to Malachite.
-2. Handle the validation responses:
-    - If the execution client returns a `SYNCING` status, the node retries validation.
-    - The retry mechanism resends the validation request until the execution layer returns either `VALID` or `INVALID`.
-    - After each `SYNCING` response, the system waits for a configurable sleep delay before retrying.
-
-        This was added in order to ensure proper sync in scenarios where both the consensus and execution layers are recovering from a crash.
+    This was added in order to ensure proper sync in scenarios where both CL and EL are recovering from a crash.
 
 3. Return the reconstructed proposal to Malachite once validation succeeds.
 
 > [!NOTE]
 > In the current Malachite implementation, there is no timeout during validation of syncing values.
-> A configurable syncing timeout has been introduced as part of the `MalakethConfig` to address this.
->
+> A configurable syncing timeout has been introduced as part of the `EmeraldConfig` to address this.
 
 ## Minimal Node Height
 

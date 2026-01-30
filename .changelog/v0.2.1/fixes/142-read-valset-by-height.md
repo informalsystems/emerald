@@ -1,0 +1,1 @@
+- `[state/app]` Validator set state is now height-related and can raise a new error when the validator set for a given height is not found in the application state ([#142](https://github.com/informalsystems/emerald/pull/142))

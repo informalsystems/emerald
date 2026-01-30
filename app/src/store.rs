@@ -1,43 +1,48 @@
 #![allow(clippy::result_large_err)]
 
-use std::mem::size_of;
-use std::ops::RangeBounds;
+use core::mem::size_of;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
 use bytes::Bytes;
-use prost::Message;
-use redb::ReadableTable;
-use thiserror::Error;
-
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Round};
 use malachitebft_app_channel::app::types::ProposedValue;
 use malachitebft_eth_types::codec::proto as codec;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::proto;
-use malachitebft_eth_types::{Height, MalakethContext, Value};
+use malachitebft_eth_types::{proto, EmeraldContext, Height, Value, ValueId};
 use malachitebft_proto::{Error as ProtoError, Protobuf};
+use prost::Message;
+use redb::ReadableTable;
+use thiserror::Error;
 
 mod keys;
 use keys::{HeightKey, UndecidedValueKey};
 
 use crate::metrics::DbMetrics;
+use crate::store::keys::PendingValueKey;
+use crate::streaming::ProposalParts;
 
+/// Malachite keeps values (block data) during processing a height and stores it.
+/// For blocks decided on, that data is stored by the execution engine as well.
+/// We therefore want to prune these heights to decrease the storage usage.
+/// The retain height set via config refers to storing certificate data which is
+/// stored only in the consensus engine.
+const VALUE_RETAIN_HEIGHT: Height = Height::new(10);
 #[derive(Clone, Debug)]
 pub struct DecidedValue {
     pub value: Value,
-    pub certificate: CommitCertificate<MalakethContext>,
+    pub certificate: CommitCertificate<EmeraldContext>,
 }
 
-fn decode_certificate(bytes: &[u8]) -> Result<CommitCertificate<MalakethContext>, ProtoError> {
+fn decode_certificate(bytes: &[u8]) -> Result<CommitCertificate<EmeraldContext>, ProtoError> {
     let proto = proto::CommitCertificate::decode(bytes)?;
     codec::decode_certificate(proto)
 }
 
 fn encode_certificate(
-    certificate: &CommitCertificate<MalakethContext>,
+    certificate: &CommitCertificate<EmeraldContext>,
 ) -> Result<Vec<u8>, ProtoError> {
     let proto = codec::encode_certificate(certificate)?;
     Ok(proto.encode_to_vec())
@@ -65,25 +70,34 @@ pub enum StoreError {
 
     #[error("Failed to join on task: {0}")]
     TaskJoin(#[from] tokio::task::JoinError),
+
+    #[error("Failed to serialize/deserialize JSON: {0}")]
+    Serialization(#[from] serde_json::Error),
 }
 
-const CERTIFICATES_TABLE: redb::TableDefinition<HeightKey, Vec<u8>> =
+const CERTIFICATES_TABLE: redb::TableDefinition<'_, HeightKey, Vec<u8>> =
     redb::TableDefinition::new("certificates");
 
-const DECIDED_VALUES_TABLE: redb::TableDefinition<HeightKey, Vec<u8>> =
+const DECIDED_VALUES_TABLE: redb::TableDefinition<'_, HeightKey, Vec<u8>> =
     redb::TableDefinition::new("decided_values");
 
-const UNDECIDED_PROPOSALS_TABLE: redb::TableDefinition<UndecidedValueKey, Vec<u8>> =
+const UNDECIDED_PROPOSALS_TABLE: redb::TableDefinition<'_, UndecidedValueKey, Vec<u8>> =
     redb::TableDefinition::new("undecided_values");
 
-const DECIDED_BLOCK_DATA_TABLE: redb::TableDefinition<HeightKey, Vec<u8>> =
+const DECIDED_BLOCK_DATA_TABLE: redb::TableDefinition<'_, HeightKey, Vec<u8>> =
     redb::TableDefinition::new("decided_block_data");
 
-const UNDECIDED_BLOCK_DATA_TABLE: redb::TableDefinition<UndecidedValueKey, Vec<u8>> =
+const UNDECIDED_BLOCK_DATA_TABLE: redb::TableDefinition<'_, UndecidedValueKey, Vec<u8>> =
     redb::TableDefinition::new("undecided_block_data");
 
-const DECIDED_BLOCK_HEADERS_TABLE: redb::TableDefinition<HeightKey, Vec<u8>> =
+const DECIDED_BLOCK_HEADERS_TABLE: redb::TableDefinition<'_, HeightKey, Vec<u8>> =
     redb::TableDefinition::new("decided_block_headers");
+
+const PERSISTENT_METRICS_TABLE: redb::TableDefinition<'_, &str, u64> =
+    redb::TableDefinition::new("persistent_metrics");
+
+const PENDING_PROPOSAL_PARTS_TABLE: redb::TableDefinition<'_, PendingValueKey, Vec<u8>> =
+    redb::TableDefinition::new("pending_proposal_parts");
 
 struct Db {
     db: redb::Database,
@@ -179,14 +193,15 @@ impl Db {
         &self,
         height: Height,
         round: Round,
-    ) -> Result<Option<ProposedValue<MalakethContext>>, StoreError> {
+        value_id: ValueId,
+    ) -> Result<Option<ProposedValue<EmeraldContext>>, StoreError> {
         let start = Instant::now();
         let mut read_bytes = 0;
 
         let tx = self.db.begin_read()?;
         let table = tx.open_table(UNDECIDED_PROPOSALS_TABLE)?;
 
-        let value = if let Ok(Some(value)) = table.get(&(height, round)) {
+        let value = if let Ok(Some(value)) = table.get(&(height, round, value_id)) {
             let bytes = value.value();
             read_bytes += bytes.len() as u64;
 
@@ -202,18 +217,55 @@ impl Db {
         self.metrics.observe_read_time(start.elapsed());
         self.metrics.add_read_bytes(read_bytes);
         self.metrics
-            .add_key_read_bytes(size_of::<(Height, Round)>() as u64);
+            .add_key_read_bytes(size_of::<(Height, Round, ValueId)>() as u64);
 
         Ok(value)
     }
 
+    fn get_undecided_proposals(
+        &self,
+        height: Height,
+        round: Round,
+    ) -> Result<Vec<ProposedValue<EmeraldContext>>, StoreError> {
+        let start = Instant::now();
+        let mut read_bytes = 0;
+
+        let tx = self.db.begin_read()?;
+        let table = tx.open_table(UNDECIDED_PROPOSALS_TABLE)?;
+
+        let mut proposals = Vec::new();
+        for result in table.iter()? {
+            let (key, value) = result?;
+            let (h, r, _) = key.value();
+
+            if h == height && r == round {
+                let bytes = value.value();
+                read_bytes += bytes.len() as u64;
+
+                let proposal = ProtobufCodec
+                    .decode(Bytes::from(bytes))
+                    .map_err(StoreError::Protobuf)?;
+
+                proposals.push(proposal);
+            }
+        }
+
+        self.metrics.observe_read_time(start.elapsed());
+        self.metrics.add_read_bytes(read_bytes);
+        self.metrics.add_key_read_bytes(
+            size_of::<(Height, Round, ValueId)>() as u64 * proposals.len() as u64,
+        );
+
+        Ok(proposals)
+    }
+
     fn insert_undecided_proposal(
         &self,
-        proposal: ProposedValue<MalakethContext>,
+        proposal: ProposedValue<EmeraldContext>,
     ) -> Result<(), StoreError> {
         let start = Instant::now();
 
-        let key = (proposal.height, proposal.round);
+        let key = (proposal.height, proposal.round, proposal.value.id());
         let value = ProtobufCodec.encode(&proposal)?;
 
         let tx = self.db.begin_write()?;
@@ -232,87 +284,172 @@ impl Db {
         Ok(())
     }
 
-    fn height_range<Table>(
+    fn get_pending_proposal_parts(
         &self,
-        table: &Table,
-        range: impl RangeBounds<Height>,
-    ) -> Result<Vec<Height>, StoreError>
-    where
-        Table: redb::ReadableTable<HeightKey, Vec<u8>>,
-    {
-        Ok(table
-            .range(range)?
-            .flatten()
-            .map(|(key, _)| key.value())
-            .collect::<Vec<_>>())
+        height: Height,
+        round: Round,
+    ) -> Result<Vec<ProposalParts>, StoreError> {
+        let start = Instant::now();
+        let mut read_bytes = 0;
+
+        let tx = self.db.begin_read()?;
+        let table = tx.open_table(PENDING_PROPOSAL_PARTS_TABLE)?;
+
+        let mut proposals = Vec::new();
+        for result in table.iter()? {
+            let (key, value) = result?;
+            let (h, r, _) = key.value();
+
+            if h == height && r == round {
+                let bytes = value.value();
+                read_bytes += bytes.len() as u64;
+
+                let parts: ProposalParts = serde_json::from_slice(&bytes)?;
+
+                proposals.push(parts);
+            }
+        }
+
+        self.metrics.observe_read_time(start.elapsed());
+        self.metrics.add_read_bytes(read_bytes);
+        self.metrics.add_key_read_bytes(
+            size_of::<(Height, Round, ValueId)>() as u64 * proposals.len() as u64,
+        );
+
+        Ok(proposals)
     }
 
-    fn undecided_proposals_range<Table>(
-        &self,
-        table: &Table,
-        range: impl RangeBounds<(Height, Round)>,
-    ) -> Result<Vec<(Height, Round)>, StoreError>
-    where
-        Table: redb::ReadableTable<UndecidedValueKey, Vec<u8>>,
-    {
-        Ok(table
-            .range(range)?
-            .flatten()
-            .map(|(key, _)| key.value())
-            .collect::<Vec<_>>())
+    fn remove_pending_proposal_parts(&self, parts: ProposalParts) -> Result<(), StoreError> {
+        let key = (
+            parts.height,
+            parts.round,
+            Self::generate_value_id_from_parts(&parts),
+        );
+        let tx = self.db.begin_write()?;
+        {
+            let mut table = tx.open_table(PENDING_PROPOSAL_PARTS_TABLE)?;
+            table.remove(key)?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
-    fn block_data_range<Table>(
-        &self,
-        table: &Table,
-        range: impl RangeBounds<(Height, Round)>,
-    ) -> Result<Vec<(Height, Round)>, StoreError>
-    where
-        Table: redb::ReadableTable<UndecidedValueKey, Vec<u8>>,
-    {
-        Ok(table
-            .range(range)?
-            .flatten()
-            .map(|(key, _)| key.value())
-            .collect::<Vec<_>>())
+    fn insert_pending_proposal_parts(&self, parts: ProposalParts) -> Result<(), StoreError> {
+        let start = Instant::now();
+        let key = (
+            parts.height,
+            parts.round,
+            Self::generate_value_id_from_parts(&parts),
+        );
+        let value = serde_json::to_vec(&parts)?;
+
+        let tx = self.db.begin_write()?;
+        {
+            let mut table = tx.open_table(PENDING_PROPOSAL_PARTS_TABLE)?;
+            table.insert(key, value.clone())?;
+        }
+        tx.commit()?;
+
+        self.metrics.observe_write_time(start.elapsed());
+        self.metrics.add_write_bytes(value.len() as u64);
+
+        Ok(())
     }
 
-    fn prune(&self, retain_height: Height) -> Result<Vec<Height>, StoreError> {
+    // fn height_range<Table>(
+    //     &self,
+    //     table: &Table,
+    //     range: impl RangeBounds<Height>,
+    // ) -> Result<Vec<Height>, StoreError>
+    // where
+    //     Table: redb::ReadableTable<HeightKey, Vec<u8>>,
+    // {
+    //     Ok(table
+    //         .range(range)?
+    //         .flatten()
+    //         .map(|(key, _)| key.value())
+    //         .collect::<Vec<_>>())
+    // }
+
+    // Helper method to generate a unique ValueId from proposal parts
+    pub fn generate_value_id_from_parts(parts: &ProposalParts) -> ValueId {
+        use sha3::{Digest, Keccak256};
+
+        let mut hasher = Keccak256::new();
+
+        // Hash height, round, and proposer
+        hasher.update(parts.height.as_u64().to_be_bytes());
+        hasher.update(parts.round.as_i64().to_be_bytes());
+        hasher.update(parts.proposer.into_inner());
+
+        // Hash all the proposal parts content
+        for part in &parts.parts {
+            if let Some(data) = part.as_data() {
+                hasher.update(data.bytes.as_ref());
+            }
+        }
+
+        // In the generate_value_id_from_parts method:
+        let hash = hasher.finalize();
+
+        // Use first 8 bytes of hash to create ValueId
+        let mut bytes = [0u8; 8];
+        bytes.copy_from_slice(&hash[..8]);
+        ValueId::new(u64::from_be_bytes(bytes))
+    }
+
+    // All values except certificates can be retrieved from Reth (if the node has not been pruned)
+    // But if we prune certificates, other nodes will not be able to catchup.
+    fn prune(
+        &self,
+        retain_height: Height,
+        curr_height: Height,
+        prune_certificates: bool,
+    ) -> Result<(), StoreError> {
         let start = Instant::now();
 
         let tx = self.db.begin_write().unwrap();
 
-        let pruned = {
-            let mut undecided = tx.open_table(UNDECIDED_PROPOSALS_TABLE)?;
-            let keys = self.undecided_proposals_range(&undecided, ..(retain_height, Round::Nil))?;
-            for key in keys {
-                undecided.remove(key)?;
+        {
+            if curr_height > VALUE_RETAIN_HEIGHT {
+                let block_data_retain_height = Height::new(
+                    curr_height
+                        .as_u64()
+                        .saturating_sub(VALUE_RETAIN_HEIGHT.as_u64()),
+                );
+
+                // Remove all undecided proposals with height < retain_height
+                let mut undecided = tx.open_table(UNDECIDED_PROPOSALS_TABLE)?;
+                undecided.retain(|k, _| k.0 >= block_data_retain_height)?;
+
+                // Remove all undecided block data with height < retain_height
+                let mut undecided_block_data = tx.open_table(UNDECIDED_BLOCK_DATA_TABLE)?;
+                undecided_block_data.retain(|k, _| k.0 >= block_data_retain_height)?;
+
+                // Remove all pending proposal parts with height < retain_height
+                let mut pending = tx.open_table(PENDING_PROPOSAL_PARTS_TABLE)?;
+                pending.retain(|k, _| k.0 >= block_data_retain_height)?;
+
+                // Remove all decided values with height < retain_height
+                let mut decided = tx.open_table(DECIDED_VALUES_TABLE)?;
+                decided.retain(|k, _| k >= block_data_retain_height)?;
+
+                // Remove all decided block data with height < retain_height
+                let mut decided_block_data = tx.open_table(DECIDED_BLOCK_DATA_TABLE)?;
+                decided_block_data.retain(|k, _| k >= block_data_retain_height)?;
             }
-
-            let mut undecided_block_data = tx.open_table(UNDECIDED_BLOCK_DATA_TABLE)?;
-            let keys =
-                self.block_data_range(&undecided_block_data, ..(retain_height, Round::Nil))?;
-            for key in &keys {
-                undecided_block_data.remove(key)?;
+            if prune_certificates {
+                // We prune certificates only if pruning is set.
+                let mut certificate_data = tx.open_table(CERTIFICATES_TABLE)?;
+                certificate_data.retain(|k, _| k >= retain_height)?;
             }
-
-            let mut decided = tx.open_table(DECIDED_VALUES_TABLE)?;
-            let mut decided_block_data = tx.open_table(DECIDED_BLOCK_DATA_TABLE)?;
-
-            let keys = self.height_range(&decided, ..retain_height)?;
-            for key in &keys {
-                decided.remove(key)?;
-                decided_block_data.remove(key)?;
-            }
-
-            keys
-        };
+        }
 
         tx.commit()?;
 
         self.metrics.observe_delete_time(start.elapsed());
 
-        Ok(pruned)
+        Ok(())
     }
 
     fn min_decided_value_height(&self) -> Option<Height> {
@@ -332,8 +469,10 @@ impl Db {
     fn min_unpruned_decided_value_height(&self) -> Option<Height> {
         let start = Instant::now();
 
-        let tx = self.db.begin_read().unwrap();
-        let table = tx.open_table(DECIDED_VALUES_TABLE).unwrap();
+        let tx = self.db.begin_read().expect("failed to open db for reading");
+        let table = tx
+            .open_table(DECIDED_VALUES_TABLE)
+            .expect("failed to open DECIDED_VALUES_TABLE");
         let (key, value) = table.first().ok()??;
 
         self.metrics.observe_read_time(start.elapsed());
@@ -343,12 +482,17 @@ impl Db {
         Some(key.value())
     }
 
-    // fn max_decided_value_height(&self) -> Option<Height> {
-    //     let tx = self.db.begin_read().unwrap();
-    //     let table = tx.open_table(DECIDED_VALUES_TABLE).unwrap();
-    //     let (key, _) = table.last().ok()??;
-    //     Some(key.value())
-    // }
+    fn max_decided_value_height(&self) -> Option<Height> {
+        let tx = self
+            .db
+            .begin_read()
+            .expect("failed for open db for reading");
+        let table = tx
+            .open_table(DECIDED_VALUES_TABLE)
+            .expect("failed to open DECIDED_VALUES_TABLE");
+        let (key, _) = table.last().ok()??;
+        Some(key.value())
+    }
 
     fn create_tables(&self) -> Result<(), StoreError> {
         let tx = self.db.begin_write()?;
@@ -360,26 +504,91 @@ impl Db {
         let _ = tx.open_table(DECIDED_BLOCK_DATA_TABLE)?;
         let _ = tx.open_table(UNDECIDED_BLOCK_DATA_TABLE)?;
         let _ = tx.open_table(DECIDED_BLOCK_HEADERS_TABLE)?;
+        let _ = tx.open_table(PERSISTENT_METRICS_TABLE)?;
+        let _ = tx.open_table(PENDING_PROPOSAL_PARTS_TABLE)?;
 
         tx.commit()?;
 
         Ok(())
     }
 
-    fn get_block_data(&self, height: Height, round: Round) -> Result<Option<Bytes>, StoreError> {
+    fn insert_cumulative_metrics(
+        &self,
+        txs_count: u64,
+        chain_bytes: u64,
+        elapsed_seconds: u64,
+    ) -> Result<(), StoreError> {
+        let start = Instant::now();
+        let write_bytes = (size_of::<u64>() * 3) as u64;
+
+        let tx = self.db.begin_write()?;
+        {
+            let mut table = tx.open_table(PERSISTENT_METRICS_TABLE)?;
+            table.insert("txs_count", txs_count)?;
+            table.insert("chain_bytes", chain_bytes)?;
+            table.insert("elapsed_seconds", elapsed_seconds)?;
+        }
+        tx.commit()?;
+
+        self.metrics.observe_write_time(start.elapsed());
+        self.metrics.add_write_bytes(write_bytes);
+
+        Ok(())
+    }
+
+    fn get_cumulative_metrics(&self) -> Result<Option<(u64, u64, u64)>, StoreError> {
+        let start = Instant::now();
+        let mut read_bytes = 0;
+
+        let tx = self.db.begin_read()?;
+        let table = tx.open_table(PERSISTENT_METRICS_TABLE)?;
+
+        let txs_count = table.get("txs_count")?.map(|v| {
+            read_bytes += size_of::<u64>() as u64;
+            v.value()
+        });
+
+        let chain_bytes = table.get("chain_bytes")?.map(|v| {
+            read_bytes += size_of::<u64>() as u64;
+            v.value()
+        });
+
+        let elapsed_seconds = table.get("elapsed_seconds")?.map(|v| {
+            read_bytes += size_of::<u64>() as u64;
+            v.value()
+        });
+
+        self.metrics.observe_read_time(start.elapsed());
+        self.metrics.add_read_bytes(read_bytes);
+        self.metrics.add_key_read_bytes(
+            ("txs_count".len() + "chain_bytes".len() + "elapsed_seconds".len()) as u64,
+        );
+
+        Ok(txs_count
+            .zip(chain_bytes)
+            .and_then(|(t, c)| elapsed_seconds.map(|e| (t, c, e))))
+    }
+
+    fn get_block_data(
+        &self,
+        height: Height,
+        round: Round,
+        value_id: ValueId,
+    ) -> Result<Option<Bytes>, StoreError> {
         let start = Instant::now();
 
         let tx = self.db.begin_read()?;
 
         // Try undecided block data first
         let undecided_table = tx.open_table(UNDECIDED_BLOCK_DATA_TABLE)?;
-        if let Some(data) = undecided_table.get(&(height, round))? {
+        if let Some(data) = undecided_table.get(&(height, round, value_id))? {
             let bytes = data.value();
             let read_bytes = bytes.len() as u64;
             self.metrics.observe_read_time(start.elapsed());
             self.metrics.add_read_bytes(read_bytes);
-            self.metrics
-                .add_key_read_bytes((size_of::<Height>() + size_of::<Round>()) as u64);
+            self.metrics.add_key_read_bytes(
+                (size_of::<Height>() + size_of::<Round>() + size_of::<ValueId>()) as u64,
+            );
             return Ok(Some(Bytes::copy_from_slice(&bytes)));
         }
 
@@ -402,6 +611,7 @@ impl Db {
         &self,
         height: Height,
         round: Round,
+        value_id: ValueId,
         data: Bytes,
     ) -> Result<(), StoreError> {
         let start = Instant::now();
@@ -410,7 +620,7 @@ impl Db {
         let tx = self.db.begin_write()?;
         {
             let mut table = tx.open_table(UNDECIDED_BLOCK_DATA_TABLE)?;
-            let key = (height, round);
+            let key = (height, round, value_id);
             // Only insert if no value exists at this key
             if table.get(&key)?.is_none() {
                 table.insert(key, data.to_vec())?;
@@ -447,7 +657,7 @@ impl Db {
     fn get_certificate_and_header(
         &self,
         height: Height,
-    ) -> Result<Option<(CommitCertificate<MalakethContext>, Bytes)>, StoreError> {
+    ) -> Result<Option<(CommitCertificate<EmeraldContext>, Bytes)>, StoreError> {
         let start = Instant::now();
         let mut read_bytes = 0;
 
@@ -485,13 +695,21 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn open(path: impl AsRef<Path>, metrics: DbMetrics) -> Result<Self, StoreError> {
-        let db = Db::new(path, metrics)?;
-        db.create_tables()?;
+    /// Opens a new store at the given path with the provided metrics.
+    /// Called by the application when initializing the store.
+    pub async fn open(path: impl AsRef<Path>, metrics: DbMetrics) -> Result<Self, StoreError> {
+        let path = path.as_ref().to_owned();
 
-        Ok(Self { db: Arc::new(db) })
+        tokio::task::spawn_blocking(move || {
+            let db = Db::new(path, metrics)?;
+            db.create_tables()?;
+            Ok(Self { db: Arc::new(db) })
+        })
+        .await?
     }
 
+    /// Returns the minimum height of decided values in the store.
+    /// Called by the application to determine the earliest available height.
     pub async fn min_decided_value_height(&self) -> Option<Height> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.min_decided_value_height())
@@ -508,14 +726,16 @@ impl Store {
             .flatten()
     }
 
-    // pub async fn max_decided_value_height(&self) -> Option<Height> {
-    //     let db = Arc::clone(&self.db);
-    //     tokio::task::spawn_blocking(move || db.max_decided_value_height())
-    //         .await
-    //         .ok()
-    //         .flatten()
-    // }
+    pub async fn max_decided_value_height(&self) -> Option<Height> {
+        let db = Arc::clone(&self.db);
+        tokio::task::spawn_blocking(move || db.max_decided_value_height())
+            .await
+            .ok()
+            .flatten()
+    }
 
+    /// Retrieves a decided value for the given height.
+    /// Called by the application when a syncing peer is asking for a decided value.
     pub async fn get_decided_value(
         &self,
         height: Height,
@@ -525,9 +745,11 @@ impl Store {
         tokio::task::spawn_blocking(move || db.get_decided_value(height)).await?
     }
 
+    /// Stores a decided value with its certificate.
+    /// Called by the application when it `commit`s a value decided by consensus.
     pub async fn store_decided_value(
         &self,
-        certificate: &CommitCertificate<MalakethContext>,
+        certificate: &CommitCertificate<EmeraldContext>,
         value: Value,
         block_header_bytes: Bytes,
     ) -> Result<(), StoreError> {
@@ -543,45 +765,110 @@ impl Store {
         .await?
     }
 
+    /// Stores an undecided proposal.
+    /// Called by the application when receiving new proposals from peers.
     pub async fn store_undecided_proposal(
         &self,
-        value: ProposedValue<MalakethContext>,
+        value: ProposedValue<EmeraldContext>,
     ) -> Result<(), StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.insert_undecided_proposal(value)).await?
     }
 
+    /// Retrieves a specific undecided proposal by height, round, and value ID.
+    /// Called by the application when consensus asks for a specific proposal to restream.
     pub async fn get_undecided_proposal(
         &self,
         height: Height,
         round: Round,
-    ) -> Result<Option<ProposedValue<MalakethContext>>, StoreError> {
+        value_id: ValueId,
+    ) -> Result<Option<ProposedValue<EmeraldContext>>, StoreError> {
         let db = Arc::clone(&self.db);
-        tokio::task::spawn_blocking(move || db.get_undecided_proposal(height, round)).await?
+        tokio::task::spawn_blocking(move || db.get_undecided_proposal(height, round, value_id))
+            .await?
     }
 
-    pub async fn prune(&self, retain_height: Height) -> Result<Vec<Height>, StoreError> {
+    /// Retrieves all undecided proposals for a given height and round.
+    /// Called by the application when starting a new round and existing proposals need to be replayed.
+    pub async fn get_undecided_proposals(
+        &self,
+        height: Height,
+        round: Round,
+    ) -> Result<Vec<ProposedValue<EmeraldContext>>, StoreError> {
         let db = Arc::clone(&self.db);
-        tokio::task::spawn_blocking(move || db.prune(retain_height)).await?
+        tokio::task::spawn_blocking(move || db.get_undecided_proposals(height, round)).await?
     }
+
+    /// Stores a pending proposal parts.
+    /// Called by the application when receiving new proposals from peers.
+    pub async fn store_pending_proposal_parts(
+        &self,
+        value: ProposalParts,
+    ) -> Result<(), StoreError> {
+        let db = Arc::clone(&self.db);
+        tokio::task::spawn_blocking(move || db.insert_pending_proposal_parts(value)).await?
+    }
+
+    /// Retrieves all pendingproposal parts for a given height and round.
+    /// Called by the application when starting a new round and existing proposals need to be replayed.
+    pub async fn get_pending_proposal_parts(
+        &self,
+        height: Height,
+        round: Round,
+    ) -> Result<Vec<ProposalParts>, StoreError> {
+        let db = Arc::clone(&self.db);
+        tokio::task::spawn_blocking(move || db.get_pending_proposal_parts(height, round)).await?
+    }
+
+    /// Removes a pending proposal parts.
+    /// Called by the application when a proposal is no longer valid.
+    pub async fn remove_pending_proposal_parts(
+        &self,
+        value: ProposalParts,
+    ) -> Result<(), StoreError> {
+        let db = Arc::clone(&self.db);
+        tokio::task::spawn_blocking(move || db.remove_pending_proposal_parts(value)).await?
+    }
+
+    /// Prunes the store by removing all undecided proposals and decided values up to the retain height.
+    /// Called by the application to clean up old data and free up space. This is done when a new value is committed.
+    /// If state.max_retain_height is set to something else than u64::MAX, this function also prunes certificates.
+    /// Pruned certificates cannot be retrieved later on.
+    pub async fn prune(
+        &self,
+        retain_height: Height,
+        curr_height: Height,
+        prune_certificates: bool,
+    ) -> Result<(), StoreError> {
+        let db = Arc::clone(&self.db);
+        tokio::task::spawn_blocking(move || {
+            db.prune(retain_height, curr_height, prune_certificates)
+        })
+        .await?
+    }
+
     pub async fn get_block_data(
         &self,
         height: Height,
         round: Round,
+        value_id: ValueId,
     ) -> Result<Option<Bytes>, StoreError> {
         let db = Arc::clone(&self.db);
-        tokio::task::spawn_blocking(move || db.get_block_data(height, round)).await?
+        tokio::task::spawn_blocking(move || db.get_block_data(height, round, value_id)).await?
     }
 
     pub async fn store_undecided_block_data(
         &self,
         height: Height,
         round: Round,
+        value_id: ValueId,
         data: Bytes,
     ) -> Result<(), StoreError> {
         let db = Arc::clone(&self.db);
-        tokio::task::spawn_blocking(move || db.insert_undecided_block_data(height, round, data))
-            .await?
+        tokio::task::spawn_blocking(move || {
+            db.insert_undecided_block_data(height, round, value_id, data)
+        })
+        .await?
     }
 
     pub async fn store_decided_block_data(
@@ -596,8 +883,26 @@ impl Store {
     pub async fn get_certificate_and_header(
         &self,
         height: Height,
-    ) -> Result<Option<(CommitCertificate<MalakethContext>, Bytes)>, StoreError> {
+    ) -> Result<Option<(CommitCertificate<EmeraldContext>, Bytes)>, StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.get_certificate_and_header(height)).await?
+    }
+
+    pub async fn store_cumulative_metrics(
+        &self,
+        txs_count: u64,
+        chain_bytes: u64,
+        elapsed_seconds: u64,
+    ) -> Result<(), StoreError> {
+        let db = Arc::clone(&self.db);
+        tokio::task::spawn_blocking(move || {
+            db.insert_cumulative_metrics(txs_count, chain_bytes, elapsed_seconds)
+        })
+        .await?
+    }
+
+    pub async fn load_cumulative_metrics(&self) -> Result<Option<(u64, u64, u64)>, StoreError> {
+        let db = Arc::clone(&self.db);
+        tokio::task::spawn_blocking(move || db.get_cumulative_metrics()).await?
     }
 }

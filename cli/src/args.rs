@@ -10,7 +10,6 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use directories::BaseDirs;
-
 use malachitebft_config::{LogFormat, LogLevel};
 
 use crate::cmd::distributed_testnet::DistributedTestnetCmd;
@@ -20,8 +19,7 @@ use crate::cmd::start::StartCmd;
 use crate::cmd::testnet::TestnetCmd;
 use crate::error::Error;
 
-const APP_FOLDER: &str = ".malachite";
-const MALAKETH_FOLDER: &str = ".malaketh";
+const EMERALD_FOLDER: &str = ".emerald";
 const CONFIG_FILE: &str = "config.toml";
 const GENESIS_FILE: &str = "genesis.json";
 const PRIV_VALIDATOR_KEY_FILE: &str = "priv_validator_key.json";
@@ -29,7 +27,7 @@ const PRIV_VALIDATOR_KEY_FILE: &str = "priv_validator_key.json";
 #[derive(Parser, Clone, Debug, Default)]
 #[command(version, about, long_about = None)]
 pub struct Args {
-    /// Home directory for Malachite (default: `~/.malachite`)
+    /// Home directory for Malachite (default: `$HOME/.emerald-devnet`)
     #[arg(long, global = true, value_name = "HOME_DIR")]
     pub home: Option<PathBuf>,
 
@@ -41,7 +39,7 @@ pub struct Args {
     #[arg(long, global = true, value_name = "LOG_FORMAT")]
     pub log_format: Option<LogFormat>,
 
-    /// Malaketh configuration file (default: `~/.malaketh/config/config.toml`)
+    /// Emerald configuration file (default: `~/.emerald/config/config.toml`)
     #[arg(long, global = true, value_name = "CONFIG_FILE")]
     pub config: Option<PathBuf>,
 
@@ -63,43 +61,43 @@ pub enum Commands {
     /// Generate distributed testnet configuration
     DistributedTestnet(DistributedTestnetCmd),
 
-    /// Extract Ed25519 public key from Tendermint private key file
+    /// Extract secp256k1 public key from a file containing a Secp256k1 private key
     ShowPubkey(ShowPubkeyCmd),
 }
 
 impl Default for Commands {
     fn default() -> Self {
-        Commands::Start(StartCmd::default())
+        Self::Start(StartCmd::default())
     }
 }
 
 impl Args {
     /// new returns a new instance of the arguments.
-    pub fn new() -> Args {
-        Args::parse()
+    pub fn new() -> Self {
+        Self::parse()
     }
 
     /// get_home_dir returns the application home folder.
-    /// Typically, `$HOME/.malachite`, dependent on the operating system.
+    /// Defaults to `$HOME/.emerald-devnet`.
     pub fn get_home_dir(&self) -> Result<PathBuf, Error> {
         match self.home {
             Some(ref path) => Ok(path.clone()),
             None => Ok(BaseDirs::new()
                 .ok_or(Error::DirPath)?
                 .home_dir()
-                .join(APP_FOLDER)),
+                .join(".emerald-devnet")),
         }
     }
 
-    /// get_malaketch_config_file returns the application configuration file.
-    /// Typically, `$HOME/.malaketh/config/config.toml`.
-    pub fn get_malaketch_config_file(&self) -> Result<PathBuf, Error> {
+    /// get_emerald_config_file returns the application configuration file.
+    /// Typically, `$HOME/.emerald/config/config.toml`.
+    pub fn get_emerald_config_file(&self) -> Result<PathBuf, Error> {
         match self.config {
             Some(ref path) => Ok(path.clone()),
             None => Ok(BaseDirs::new()
                 .ok_or(Error::DirPath)?
                 .home_dir()
-                .join(MALAKETH_FOLDER)
+                .join(EMERALD_FOLDER)
                 .join("config")
                 .join("config.toml")),
         }

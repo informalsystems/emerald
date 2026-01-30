@@ -1,10 +1,9 @@
+use malachitebft_config::{LogFormat, LogLevel};
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::FmtSubscriber;
-
-use malachitebft_config::{LogFormat, LogLevel};
 
 /// Initialize logging.
 ///
@@ -48,7 +47,11 @@ pub fn enable_ansi() -> bool {
 }
 
 /// Common prefixes of the crates targeted by the default log level.
-const TARGET_CRATES: &[&str] = &["informalsystems_malachitebft", "malachitebft_eth"];
+const TARGET_CRATES: &[&str] = &[
+    "informalsystems_malachitebft",
+    "malachitebft_eth",
+    "emerald",
+];
 
 /// Build a tracing directive setting the log level for the
 /// crates to the given `log_level`.

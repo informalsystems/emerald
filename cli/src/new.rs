@@ -1,15 +1,16 @@
 //! key and configuration generation
 
-use std::time::Duration;
+use core::time::Duration;
 
 use itertools::Itertools;
-use rand::prelude::StdRng;
-use rand::rngs::OsRng;
-use rand::{seq::IteratorRandom, Rng, SeedableRng};
-
-use crate::config::*;
 use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, Node};
 use malachitebft_core_types::{PrivateKey, PublicKey};
+use rand::prelude::StdRng;
+use rand::rngs::OsRng;
+use rand::seq::IteratorRandom;
+use rand::{Rng, SeedableRng};
+
+use crate::config::*;
 const MIN_VOTING_POWER: u64 = 1;
 const MAX_VOTING_POWER: u64 = 1;
 
@@ -76,14 +77,14 @@ pub fn generate_config(
     ephemeral_connection_timeout_ms: u64,
     transport: TransportProtocol,
     logging: LoggingConfig,
-    malaketh_config: MalakethConfig,
+    moniker: String,
 ) -> Config {
     let consensus_port = CONSENSUS_BASE_PORT + index;
     let mempool_port = MEMPOOL_BASE_PORT + index;
     let metrics_port = METRICS_BASE_PORT + index;
 
     Config {
-        moniker: malaketh_config.moniker,
+        moniker,
         consensus: ConsensusConfig {
             timeouts: TimeoutConfig::default(),
             p2p: P2pConfig {
@@ -126,6 +127,7 @@ pub fn generate_config(
             },
             value_payload: ValuePayload::default(),
             queue_capacity: 0,
+            ..Default::default()
         },
         mempool: MempoolConfig {
             p2p: P2pConfig {
@@ -152,7 +154,11 @@ pub fn generate_config(
             gossip_batch_size: 0,
             load: MempoolLoadConfig::default(),
         },
-        value_sync: ValueSyncConfig::default(),
+        value_sync: ValueSyncConfig {
+            batch_size: 500,
+            parallel_requests: 25,
+            ..ValueSyncConfig::default()
+        },
         metrics: MetricsConfig {
             enabled: true,
             listen_addr: format!("127.0.0.1:{metrics_port}").parse().unwrap(),

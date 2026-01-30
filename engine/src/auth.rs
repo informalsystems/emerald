@@ -1,7 +1,8 @@
+use std::path::Path;
+
 use alloy_rpc_types_engine::{Claims, JwtSecret};
 use color_eyre::eyre::{self, Ok};
 use jsonwebtoken::{encode, get_current_timestamp, Algorithm, EncodingKey, Header};
-use std::path::Path;
 
 /// Default algorithm used for JWT token signing.
 const DEFAULT_ALGORITHM: Algorithm = Algorithm::HS256;

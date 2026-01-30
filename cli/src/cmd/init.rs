@@ -1,12 +1,7 @@
 //! Init command
 
-use std::fs;
 use std::path::Path;
 
-use crate::config::Config;
-use crate::error::Error;
-use crate::file::{save_config, save_genesis, save_priv_validator_key};
-use crate::new::{generate_config, generate_genesis, generate_private_keys};
 use clap::Parser;
 use malachitebft_app::node::{CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, Node};
 use malachitebft_config::{
@@ -14,11 +9,20 @@ use malachitebft_config::{
 };
 use tracing::{info, warn};
 
+use crate::config::Config;
+use crate::error::Error;
+use crate::file::{save_config, save_genesis, save_priv_validator_key};
+use crate::new::{generate_config, generate_genesis, generate_private_keys};
+
 #[derive(Parser, Debug, Clone, Default, PartialEq)]
 pub struct InitCmd {
     /// Overwrite existing configuration files
     #[clap(long)]
     pub overwrite: bool,
+
+    /// Moniker for this node. If not provided and config doesn't exist, defaults to "node"
+    #[clap(long, default_value = "node")]
+    pub moniker: Option<String>,
 
     /// Enable peer discovery.
     /// If enabled, the node will attempt to discover other nodes in the network
@@ -63,18 +67,15 @@ impl InitCmd {
         node: &N,
         config_file: &Path,
         genesis_file: &Path,
-        malaketh_config_file: &Path,
         priv_validator_key_file: &Path,
         logging: LoggingConfig,
     ) -> Result<(), Error>
     where
         N: Node + CanMakePrivateKeyFile + CanGeneratePrivateKey + CanMakeGenesis,
     {
-        let malaketh_config_content = fs::read_to_string(malaketh_config_file)
-            .map_err(|e| Error::LoadFile(malaketh_config_file.to_path_buf(), e))?;
-        let malaketh_config =
-            toml::from_str::<crate::config::MalakethConfig>(&malaketh_config_content)
-                .map_err(Error::FromTOML)?;
+        // Use `node` as default moniker if not provided
+        let moniker = self.moniker.clone().unwrap_or_else(|| "node".to_string());
+
         let config = &generate_config(
             0,
             1,
@@ -87,7 +88,7 @@ impl InitCmd {
             self.ephemeral_connection_timeout_ms,
             TransportProtocol::Tcp,
             logging,
-            malaketh_config,
+            moniker,
         );
 
         init(
@@ -117,7 +118,7 @@ where
 {
     // Save configuration
     if config_file.exists() && !overwrite {
-        warn!(file = ?config_file.display(), "Configuration file already exists, skipping")
+        warn!(file = ?config_file.display(), "Configuration file already exists, skipping");
     } else {
         info!(file = ?config_file, "Saving configuration");
         save_config(config_file, config)?;
@@ -141,7 +142,7 @@ where
         warn!(
             "Genesis file already exists at {:?}, skipping",
             genesis_file.display()
-        )
+        );
     } else {
         let private_keys = generate_private_keys(node, 1, false);
         let public_keys = private_keys

@@ -1,9 +1,8 @@
-use std::ops::Deref;
+use core::ops::Deref;
+use core::time::Duration;
 use std::sync::Arc;
-use std::time::Duration;
 
 use malachitebft_app_channel::app::metrics;
-
 use metrics::prometheus::metrics::counter::Counter;
 use metrics::prometheus::metrics::gauge::Gauge;
 use metrics::prometheus::metrics::histogram::{exponential_buckets, Histogram};
@@ -92,37 +91,37 @@ impl DbMetrics {
             );
 
             registry.register(
-                "db_write_bytes_total",
+                "db_write_bytes",
                 "Amount of data written to the database (bytes)",
                 metrics.db_write_bytes.clone(),
             );
 
             registry.register(
-                "db_read_bytes_total",
+                "db_read_bytes",
                 "Amount of data read from the database (bytes)",
                 metrics.db_read_bytes.clone(),
             );
 
             registry.register(
-                "db_key_read_bytes_total",
+                "db_key_read_bytes",
                 "Amount of key data read from the database (bytes)",
                 metrics.db_key_read_bytes.clone(),
             );
 
             registry.register(
-                "db_read_count_total",
+                "db_read_count",
                 "Total number of reads from the database",
                 metrics.db_read_count.clone(),
             );
 
             registry.register(
-                "db_write_count_total",
+                "db_write_count",
                 "Total number of writes to the database",
                 metrics.db_write_count.clone(),
             );
 
             registry.register(
-                "db_delete_count_total",
+                "db_delete_count",
                 "Total number of deletions to the database",
                 metrics.db_delete_count.clone(),
             );
@@ -182,6 +181,166 @@ impl DbMetrics {
 }
 
 impl Default for DbMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TxStatsMetrics(Arc<TxStatsInner>);
+
+impl Deref for TxStatsMetrics {
+    type Target = TxStatsInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug)]
+pub struct TxStatsInner {
+    /// Total number of transactions committed
+    pub txs_count: Counter,
+
+    /// Total chain bytes committed
+    pub chain_bytes: Counter,
+
+    /// Transactions per second
+    pub txs_per_second: Gauge,
+
+    /// Chain bytes per second
+    pub bytes_per_second: Gauge,
+
+    /// Transactions in the last committed block
+    pub block_tx_count: Gauge,
+
+    /// Size of the last committed block (bytes)
+    pub block_size: Gauge,
+}
+
+impl TxStatsInner {
+    pub fn new() -> Self {
+        Self {
+            txs_count: Counter::default(),
+            chain_bytes: Counter::default(),
+            txs_per_second: Gauge::default(),
+            bytes_per_second: Gauge::default(),
+            block_tx_count: Gauge::default(),
+            block_size: Gauge::default(),
+        }
+    }
+}
+
+impl Default for TxStatsInner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TxStatsMetrics {
+    pub fn new() -> Self {
+        Self(Arc::new(TxStatsInner::new()))
+    }
+
+    pub fn register(registry: &SharedRegistry) -> Self {
+        let metrics = Self::new();
+
+        registry.with_prefix("app_channel", |registry| {
+            registry.register(
+                "txs_count",
+                "Total number of transactions committed",
+                metrics.txs_count.clone(),
+            );
+
+            registry.register(
+                "chain_bytes",
+                "Total chain bytes committed",
+                metrics.chain_bytes.clone(),
+            );
+
+            registry.register(
+                "txs_per_second",
+                "Transactions per second",
+                metrics.txs_per_second.clone(),
+            );
+
+            registry.register(
+                "bytes_per_second",
+                "Chain bytes per second",
+                metrics.bytes_per_second.clone(),
+            );
+
+            registry.register(
+                "block_tx_count",
+                "Transactions in the last committed block",
+                metrics.block_tx_count.clone(),
+            );
+
+            registry.register(
+                "block_size",
+                "Size of the last committed block (bytes)",
+                metrics.block_size.clone(),
+            );
+        });
+
+        metrics
+    }
+
+    pub fn add_txs(&self, count: u64) {
+        self.txs_count.inc_by(count);
+    }
+
+    pub fn add_chain_bytes(&self, bytes: u64) {
+        self.chain_bytes.inc_by(bytes);
+    }
+
+    pub fn set_txs_per_second(&self, tps: f64) {
+        self.txs_per_second.set(tps as i64);
+    }
+
+    pub fn set_bytes_per_second(&self, bps: f64) {
+        self.bytes_per_second.set(bps as i64);
+    }
+
+    pub fn set_block_tx_count(&self, count: u64) {
+        self.block_tx_count.set(count as i64);
+    }
+
+    pub fn set_block_size(&self, size: u64) {
+        self.block_size.set(size as i64);
+    }
+}
+
+impl Default for TxStatsMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Unified metrics container for all application metrics
+#[derive(Clone, Debug)]
+pub struct Metrics {
+    pub db: DbMetrics,
+    pub tx_stats: TxStatsMetrics,
+}
+
+impl Metrics {
+    pub fn new() -> Self {
+        Self {
+            db: DbMetrics::new(),
+            tx_stats: TxStatsMetrics::new(),
+        }
+    }
+
+    pub fn register(registry: &SharedRegistry) -> Self {
+        Self {
+            db: DbMetrics::register(registry),
+            tx_stats: TxStatsMetrics::register(registry),
+        }
+    }
+}
+
+impl Default for Metrics {
     fn default() -> Self {
         Self::new()
     }

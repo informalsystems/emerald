@@ -1,0 +1,43 @@
+[Unit]
+Description=Reth Execution Client
+Documentation=https://github.com/paradigmxyz/reth
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=reth
+Group=reth
+
+# Environment
+Environment="RUST_LOG=info"
+Environment="RUST_BACKTRACE=1"
+
+# Start Reth
+ExecStart=/usr/local/bin/reth node \
+  --chain /etc/reth/genesis.json \
+  --datadir /var/lib/reth \
+  --http \
+  --http.addr 0.0.0.0 \
+  --http.port 8545 \
+  --http.api eth,net,web3,txpool,debug \
+  --http.corsdomain "*" \
+  --ws \
+  --ws.addr 0.0.0.0 \
+  --ws.port 8546 \
+  --ws.api eth,net,web3,txpool,debug \
+  --authrpc.addr 127.0.0.1 \
+  --authrpc.port 8551 \
+  --authrpc.jwtsecret /var/lib/reth/jwt.hex \
+  --port 30303 \
+  --metrics=0.0.0.0:9000
+
+# Restart configuration
+Restart=on-failure
+RestartSec=10s
+TimeoutStopSec=30s
+KillMode=process
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

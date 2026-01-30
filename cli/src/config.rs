@@ -1,13 +1,15 @@
-use color_eyre::eyre;
-use malachitebft_app::node::NodeConfig;
-use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+use color_eyre::eyre;
+use malachitebft_app::node::NodeConfig;
 pub use malachitebft_config::{
     BootstrapProtocol, ConsensusConfig, DiscoveryConfig, LoggingConfig, MempoolConfig,
     MempoolLoadConfig, MetricsConfig, P2pConfig, PubSubProtocol, RuntimeConfig, ScoringStrategy,
     Selector, TestConfig, TimeoutConfig, TransportProtocol, ValuePayload, ValueSyncConfig,
 };
+use malachitebft_eth_types::{Address, RetryConfig};
+use serde::{Deserialize, Serialize};
+use tokio::time::Duration;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -23,7 +25,7 @@ pub enum ElNodeType {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct MalakethConfig {
+pub struct EmeraldConfig {
     /// A custom human-readable name for this node
     pub moniker: String,
 
@@ -36,25 +38,55 @@ pub struct MalakethConfig {
     /// Path of the JWT token file
     pub jwt_token_path: String,
 
-    /// Maximum time to wait for execution client to sync before crashing
-    #[serde(default = "default_sync_timeout")]
-    pub sync_timeout_ms: u64,
+    /// Path of the EVM genesis file
+    #[serde(default = "default_eth_gensesis_path")]
+    pub eth_genesis_path: String,
 
-    /// Initial retry delay for execution client sync validation
-    #[serde(default = "default_sync_initial_delay")]
-    pub sync_initial_delay_ms: u64,
+    /// Retry configuration for execution client sync operations
+    #[serde(default)]
+    pub retry_config: RetryConfig,
 
     /// Type of execution layer node (archive, full, or custom)
     #[serde(default)]
     pub el_node_type: ElNodeType,
+
+    /// Number of certificates to retain.
+    /// Default is retain all (u64::MAX).
+    #[serde(default = "max_retain_block_default")]
+    pub max_retain_blocks: u64,
+
+    /// Number of blocks to wait before attempting pruning
+    /// Note that this applies only to pruning certificates.
+    /// Certificates are pruned based on max_retain_blocks.
+    /// This value cannot be 0.
+    /// Defatul: 10.
+    #[serde(default = "prune_at_interval_default")]
+    pub prune_at_block_interval: u64,
+    // Application set min_block_time forcing the app to sleep
+    // before moving onto the next height.
+    // Malachite does not have a notion of min_block_time, thus
+    // this has to be handled by the application.
+    // Default: 500ms
+    #[serde(with = "humantime_serde", default = "default_min_block_time")]
+    pub min_block_time: Duration,
+
+    // Address used to receive fees
+    pub fee_recipient: Address,
 }
 
-fn default_sync_timeout() -> u64 {
-    10000
+fn default_min_block_time() -> Duration {
+    Duration::from_millis(500)
 }
 
-fn default_sync_initial_delay() -> u64 {
-    100
+fn max_retain_block_default() -> u64 {
+    u64::MAX
+}
+fn prune_at_interval_default() -> u64 {
+    10
+}
+
+fn default_eth_gensesis_path() -> String {
+    "./assets/genesis.json".to_string()
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -93,8 +125,16 @@ impl NodeConfig for Config {
         &self.consensus
     }
 
+    fn consensus_mut(&mut self) -> &mut ConsensusConfig {
+        &mut self.consensus
+    }
+
     fn value_sync(&self) -> &ValueSyncConfig {
         &self.value_sync
+    }
+
+    fn value_sync_mut(&mut self) -> &mut ValueSyncConfig {
+        &mut self.value_sync
     }
 }
 

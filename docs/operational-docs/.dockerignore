@@ -1,0 +1,15 @@
+# Ignore build output
+book/
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore old docs directory
+docs/
+
+# Ignore env files
+.env
+
+# Ignore README (not needed in container)
+README.md

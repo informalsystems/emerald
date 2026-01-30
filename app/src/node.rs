@@ -1,40 +1,37 @@
 //! The Application (or Node) definition. The Node trait implements the Consensus context and the
 //! cryptographic library used for signing.
 
+use core::str::FromStr;
 use std::fs;
 use std::path::PathBuf;
-use std::str::FromStr;
 
+use alloy_genesis::Genesis as EvmGenesis;
 use async_trait::async_trait;
 use color_eyre::eyre;
+use libp2p_identity::Keypair;
 use malachitebft_app_channel::app::events::{RxEvent, TxEvent};
-use malachitebft_app_channel::app::node::NodeHandle;
+use malachitebft_app_channel::app::metrics::SharedRegistry;
+use malachitebft_app_channel::app::node::{
+    CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, EngineHandle, Node, NodeHandle,
+};
+use malachitebft_app_channel::app::types::core::VotingPower;
+use malachitebft_app_channel::Channels;
+use malachitebft_eth_cli::config::{Config, EmeraldConfig};
+use malachitebft_eth_cli::metrics;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::engine_rpc::EngineRPC;
 use malachitebft_eth_engine::ethereum_rpc::EthereumRPC;
-use rand::{CryptoRng, RngCore};
-
-use malachitebft_app_channel::app::metrics::SharedRegistry;
-use malachitebft_app_channel::app::node::{
-    CanGeneratePrivateKey, CanMakeGenesis, CanMakePrivateKeyFile, EngineHandle, Node,
-};
-use malachitebft_app_channel::app::types::core::VotingPower;
-use malachitebft_app_channel::app::types::Keypair;
-use malachitebft_eth_cli::config::{Config, MalakethConfig};
-
-// Use the same types used for integration tests.
-// A real application would use its own types and context instead.
-use malachitebft_eth_cli::metrics;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
-use malachitebft_eth_types::{
-    Address, Ed25519Provider, Genesis, Height, MalakethContext, PrivateKey, PublicKey, Validator,
-    ValidatorSet,
-};
+use malachitebft_eth_types::secp256k1::{K256Provider, PrivateKey, PublicKey};
+use malachitebft_eth_types::{Address, EmeraldContext, Genesis, Height, Validator, ValidatorSet};
+use rand::{CryptoRng, RngCore};
 use tokio::task::JoinHandle;
 use url::Url;
 
-use crate::metrics::DbMetrics;
-use crate::state::State;
+// Use the same types used for integration tests.
+// A real application would use its own types and context instead.
+use crate::metrics::Metrics;
+use crate::state::{State, StateMetrics};
 use crate::store::Store;
 
 /// Main application struct implementing the consensus node functionality
@@ -43,36 +40,157 @@ pub struct App {
     pub config: Config,
     pub home_dir: PathBuf,
     pub genesis_file: PathBuf,
-    pub malaketh_config_file: PathBuf,
+    pub emerald_config_file: PathBuf,
     pub private_key_file: PathBuf,
     pub start_height: Option<Height>,
 }
 
+/// Components needed to run the application
+pub struct AppRuntime {
+    pub state: State,
+    pub channels: Channels<EmeraldContext>,
+    pub engine: Engine,
+    pub emerald_config: EmeraldConfig,
+    pub engine_handle: EngineHandle,
+    pub tx_event: TxEvent<EmeraldContext>,
+}
+
 impl App {
-    fn load_malaketh_config(&self) -> eyre::Result<MalakethConfig> {
-        let malaketh_config_content =
-            fs::read_to_string(&self.malaketh_config_file).map_err(|e| {
+    /// Build the application state and all necessary components.
+    ///
+    /// This function performs all the initialization and setup required to run
+    /// the application, including loading configuration, initializing the
+    /// consensus engine, and creating the state.
+    ///
+    /// Returns a [AppRuntime] struct containing the state and all components
+    /// needed to run the app.
+    pub async fn build_runtime(&self) -> eyre::Result<AppRuntime> {
+        let config = self.load_config()?;
+        let span = tracing::error_span!("node", moniker = %config.moniker);
+        let _enter = span.enter();
+
+        let private_key_file = self.load_private_key_file()?;
+        let private_key = self.load_private_key(private_key_file);
+        let public_key = self.get_public_key(&private_key);
+        let address = self.get_address(&public_key);
+        let signing_provider = self.get_signing_provider(private_key);
+        let ctx = EmeraldContext::new();
+
+        let genesis = self.load_genesis()?;
+        let initial_validator_set = genesis.validator_set.clone();
+
+        let codec = ProtobufCodec;
+
+        let (channels, engine_handle) = malachitebft_app_channel::start_engine(
+            ctx,
+            self.clone(),
+            config.clone(),
+            codec, // WAL codec
+            codec, // Network codec
+            self.start_height,
+            initial_validator_set,
+        )
+        .await?;
+
+        let tx_event = channels.events.clone();
+
+        let registry = SharedRegistry::global().with_moniker(&config.moniker);
+        let metrics = Metrics::register(&registry);
+
+        if config.metrics.enabled {
+            tokio::spawn(metrics::serve(config.metrics.listen_addr));
+        }
+
+        let store = Store::open(self.get_home_dir().join("store.db"), metrics.db.clone()).await?;
+        let start_height = self.start_height.unwrap_or_default();
+
+        // Load cumulative metrics from database for crash recovery
+        let (txs_count, chain_bytes, elapsed_seconds) =
+            store.load_cumulative_metrics().await?.unwrap_or_else(|| {
+                tracing::info!("📊 No metrics found in database, starting with default values");
+                (0, 0, 0)
+            });
+
+        let state_metrics = StateMetrics {
+            txs_count,
+            chain_bytes,
+            elapsed_seconds,
+            metrics,
+        };
+
+        let emerald_config = self.load_emerald_config()?;
+
+        let engine: Engine = {
+            let engine_url = Url::parse(&emerald_config.engine_authrpc_address)?;
+            let jwt_path = PathBuf::from_str(&emerald_config.jwt_token_path)?;
+            let eth_url = Url::parse(&emerald_config.execution_authrpc_address)?;
+            Engine::new(
+                EngineRPC::new(engine_url, jwt_path.as_path())?,
+                EthereumRPC::new(eth_url)?,
+            )
+        };
+
+        let min_block_time = emerald_config.min_block_time;
+        let max_retain_blocks = emerald_config.max_retain_blocks;
+        let prune_at_block_interval = emerald_config.prune_at_block_interval;
+
+        assert!(
+            prune_at_block_interval != 0,
+            "prune block interval cannot be 0"
+        );
+
+        let eth_genesis_path = PathBuf::from_str(&emerald_config.eth_genesis_path)?;
+        let eth_genesis: EvmGenesis = serde_json::from_str(&fs::read_to_string(eth_genesis_path)?)?;
+
+        let evm_chain_config = eth_genesis.config;
+
+        let state = State::new(
+            genesis,
+            ctx,
+            signing_provider,
+            address,
+            start_height,
+            store,
+            state_metrics,
+            max_retain_blocks,
+            prune_at_block_interval,
+            min_block_time,
+            evm_chain_config,
+        );
+
+        Ok(AppRuntime {
+            state,
+            channels,
+            engine,
+            emerald_config,
+            engine_handle,
+            tx_event,
+        })
+    }
+
+    fn load_emerald_config(&self) -> eyre::Result<EmeraldConfig> {
+        let emerald_config_content =
+            fs::read_to_string(&self.emerald_config_file).map_err(|e| {
                 eyre::eyre!(
-                    "Failed to read malaketh config file `{}`: {e}",
-                    self.malaketh_config_file.display()
+                    "Failed to read emerald config file `{}`: {e}",
+                    self.emerald_config_file.display()
                 )
             })?;
-        let malaketh_config =
-            toml::from_str::<crate::config::MalakethConfig>(&malaketh_config_content)
-                .map_err(|e| eyre::eyre!("Failed to parse malaketh config file: {e}"))?;
-        Ok(malaketh_config)
+        let emerald_config = toml::from_str::<EmeraldConfig>(&emerald_config_content)
+            .map_err(|e| eyre::eyre!("Failed to parse emerald config file: {e}"))?;
+        Ok(emerald_config)
     }
 }
 
 pub struct Handle {
     pub app: JoinHandle<()>,
     pub engine: EngineHandle,
-    pub tx_event: TxEvent<MalakethContext>,
+    pub tx_event: TxEvent<EmeraldContext>,
 }
 
 #[async_trait]
-impl NodeHandle<MalakethContext> for Handle {
-    fn subscribe(&self) -> RxEvent<MalakethContext> {
+impl NodeHandle<EmeraldContext> for Handle {
+    fn subscribe(&self) -> RxEvent<EmeraldContext> {
         self.tx_event.subscribe()
     }
 
@@ -86,11 +204,11 @@ impl NodeHandle<MalakethContext> for Handle {
 
 #[async_trait]
 impl Node for App {
-    type Context = MalakethContext;
+    type Context = EmeraldContext;
     type Config = Config;
     type Genesis = Genesis;
     type PrivateKeyFile = PrivateKey;
-    type SigningProvider = Ed25519Provider;
+    type SigningProvider = K256Provider;
     type NodeHandle = Handle;
 
     fn get_home_dir(&self) -> PathBuf {
@@ -102,7 +220,7 @@ impl Node for App {
     }
 
     fn get_signing_provider(&self, private_key: PrivateKey) -> Self::SigningProvider {
-        Ed25519Provider::new(private_key)
+        K256Provider::new(private_key)
     }
 
     fn get_address(&self, pk: &PublicKey) -> Address {
@@ -114,7 +232,12 @@ impl Node for App {
     }
 
     fn get_keypair(&self, pk: PrivateKey) -> Keypair {
-        Keypair::ed25519_from_bytes(pk.inner().to_bytes()).unwrap()
+        use libp2p_identity::secp256k1::{Keypair as Secp256k1Keypair, SecretKey};
+
+        let secret_bytes: [u8; 32] = pk.inner().to_bytes().into();
+        let secret_key =
+            SecretKey::try_from_bytes(secret_bytes).expect("failed to decode secp256k1 secret key");
+        Secp256k1Keypair::from(secret_key).into()
     }
 
     fn load_private_key(&self, file: Self::PrivateKeyFile) -> PrivateKey {
@@ -132,62 +255,17 @@ impl Node for App {
     }
 
     async fn start(&self) -> eyre::Result<Handle> {
-        let config = self.load_config()?;
-        let span = tracing::error_span!("node", moniker = %config.moniker);
-        let _enter = span.enter();
-
-        let private_key_file = self.load_private_key_file()?;
-        let private_key = self.load_private_key(private_key_file);
-        let public_key = self.get_public_key(&private_key);
-        let address = self.get_address(&public_key);
-        let signing_provider = self.get_signing_provider(private_key);
-        let ctx = MalakethContext::new();
-
-        let genesis = self.load_genesis()?;
-        let initial_validator_set = genesis.validator_set.clone();
-
-        let codec = ProtobufCodec;
-
-        let (mut channels, engine_handle) = malachitebft_app_channel::start_engine(
-            ctx,
-            self.clone(),
-            config.clone(),
-            codec, // WAL codec
-            codec, // Network codec
-            self.start_height,
-            initial_validator_set,
-        )
-        .await?;
-
-        let tx_event = channels.events.clone();
-
-        let registry = SharedRegistry::global().with_moniker(&config.moniker);
-        let metrics = DbMetrics::register(&registry);
-
-        if config.metrics.enabled {
-            tokio::spawn(metrics::serve(config.metrics.listen_addr));
-        }
-
-        let store = Store::open(self.get_home_dir().join("store.db"), metrics)?;
-        let start_height = self.start_height.unwrap_or_default();
-        let mut state = State::new(genesis, ctx, signing_provider, address, start_height, store);
-
-        let malaketh_config = self.load_malaketh_config()?;
-
-        let engine: Engine = {
-            let engine_url = Url::parse(&malaketh_config.engine_authrpc_address)?;
-            let jwt_path = PathBuf::from_str(&malaketh_config.jwt_token_path)?;
-
-            let eth_url = Url::parse(&malaketh_config.execution_authrpc_address)?;
-            Engine::new(
-                EngineRPC::new(engine_url, jwt_path.as_path())?,
-                EthereumRPC::new(eth_url)?,
-            )
-        };
+        let AppRuntime {
+            mut state,
+            mut channels,
+            engine,
+            emerald_config,
+            engine_handle,
+            tx_event,
+        } = self.build_runtime().await?;
 
         let app_handle = tokio::spawn(async move {
-            if let Err(e) =
-                crate::app::run(&mut state, &mut channels, engine, malaketh_config).await
+            if let Err(e) = crate::app::run(&mut state, &mut channels, engine, emerald_config).await
             {
                 tracing::error!(%e, "Application error");
             }

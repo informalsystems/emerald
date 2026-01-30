@@ -1,0 +1,33 @@
+[Unit]
+Description=Emerald Consensus Engine (Malachite BFT)
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=emerald
+Group=emerald
+
+# Working directory
+WorkingDirectory=/home/emerald
+
+# Environment
+Environment="RUST_LOG=info"
+Environment="RUST_BACKTRACE=1"
+
+# Start Emerald node
+ExecStart=/usr/local/bin/emerald start \
+  --home /var/lib/emerald/node0
+ExecStart=/usr/local/bin/emerald start \
+  --home /home/emerald/.emerald \
+  --config /home/emerald/.emerald/config/emerald.toml \
+  --log-level info
+
+# Restart configuration
+Restart=on-failure
+RestartSec=10s
+TimeoutStopSec=30s
+KillMode=process
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

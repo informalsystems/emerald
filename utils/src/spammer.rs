@@ -1,22 +1,52 @@
-use crate::make_signers;
-use crate::tx::{make_signed_eip1559_tx, make_signed_eip4844_tx};
+use core::fmt;
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use alloy_network::eip2718::Encodable2718;
 use alloy_primitives::Address;
 use alloy_rpc_types_txpool::TxpoolStatus;
-use alloy_signer_local::LocalSigner;
+use alloy_signer_local::PrivateKeySigner;
 use color_eyre::eyre::{self, Result};
-use core::fmt;
-use k256::ecdsa::SigningKey;
-use reqwest::header::CONTENT_TYPE;
-use reqwest::{Client, Url};
+use jsonrpsee_core::client::ClientT;
+use jsonrpsee_core::params::{ArrayParams, BatchRequestBuilder};
+use jsonrpsee_http_client::{HttpClient, HttpClientBuilder};
+use reqwest::Url;
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::time::{self, sleep, Duration, Instant};
 use tracing::debug;
+
+use crate::make_signers;
+use crate::tx::{make_signed_contract_call_tx, make_signed_eip1559_tx, make_signed_eip4844_tx};
+
+/// Target pool size to maintain (in number of transactions).
+const TARGET_POOL_SIZE: u64 = 30_000;
+
+struct ContractPayload {
+    /// Contract address for contract call spamming.
+    address: Address,
+    /// Function signature for contract calls (e.g., "increment()").
+    function_sig: String,
+    /// Function arguments.
+    args: Vec<String>,
+}
+
+/// Configuration for the transaction spammer.
+pub struct SpammerConfig {
+    /// Maximum number of transactions to send (0 for no limit).
+    pub max_num_txs: u64,
+    /// Maximum number of seconds to run the spammer (0 for no limit).
+    pub max_time: u64,
+    /// Maximum number of transactions to send per second.
+    pub max_rate: u64,
+    /// Number of ms between sending batches of txs.
+    pub batch_interval: u64,
+    /// Whether to send EIP-4844 blob transactions.
+    pub blobs: bool,
+    /// Chain ID for the transactions.
+    pub chain_id: u64,
+}
 
 /// A transaction spammer that sends Ethereum transactions at a controlled rate.
 /// Tracks and reports statistics on sent transactions.
@@ -26,35 +56,65 @@ pub struct Spammer {
     /// Client for Ethereum RPC node server.
     client: RpcClient,
     /// Ethereum transaction signer.
-    signer: LocalSigner<SigningKey>,
+    signer: PrivateKeySigner,
     /// Maximum number of transactions to send (0 for no limit).
     max_num_txs: u64,
     /// Maximum number of seconds to run the spammer (0 for no limit).
     max_time: u64,
     /// Maximum number of transactions to send per second.
     max_rate: u64,
+    /// Number of ms between sending batches of txs (default: 200).
+    batch_interval: u64,
     /// Whether to send EIP-4844 blob transactions.
     blobs: bool,
+    /// Chain ID for the transactions.
+    chain_id: u64,
+    /// Optional payload describing contract call spam parameters.
+    contract_payload: Option<ContractPayload>,
 }
 
 impl Spammer {
-    pub fn new(
-        url: Url,
-        signer_index: usize,
-        max_num_txs: u64,
-        max_time: u64,
-        max_rate: u64,
-        blobs: bool,
-    ) -> Result<Self> {
+    pub fn new(url: Url, signer_index: usize, config: SpammerConfig) -> Result<Self> {
         let signers = make_signers();
         Ok(Self {
             id: signer_index.to_string(),
-            client: RpcClient::new(url),
+            client: RpcClient::new(url)?,
             signer: signers[signer_index].clone(),
-            max_num_txs,
-            max_time,
-            max_rate,
-            blobs,
+            max_num_txs: config.max_num_txs,
+            max_time: config.max_time,
+            max_rate: config.max_rate,
+            batch_interval: config.batch_interval,
+            blobs: config.blobs,
+            chain_id: config.chain_id,
+            contract_payload: None,
+        })
+    }
+
+    pub fn new_contract(
+        url: Url,
+        signer_index: usize,
+        config: SpammerConfig,
+        contract: &Address,
+        function: &str,
+        args: &[String],
+    ) -> Result<Self> {
+        let signers = make_signers();
+        let contract_payload = ContractPayload {
+            address: *contract,
+            function_sig: function.to_string(),
+            args: args.to_vec(),
+        };
+        Ok(Self {
+            id: signer_index.to_string(),
+            client: RpcClient::new(url)?,
+            signer: signers[signer_index].clone(),
+            max_num_txs: config.max_num_txs,
+            max_time: config.max_time,
+            max_rate: config.max_rate,
+            batch_interval: config.batch_interval,
+            blobs: false, // Contract calls don't use blobs
+            contract_payload: Some(contract_payload),
+            chain_id: config.chain_id,
         })
     }
 
@@ -66,27 +126,29 @@ impl Spammer {
 
         let self_arc = Arc::new(self);
 
-        // Spawn spammer.
-        let spammer_handle = tokio::spawn({
+        // Spammer future.
+        let spammer_handle = {
             let self_arc = Arc::clone(&self_arc);
             async move {
                 self_arc
                     .spammer(result_sender, report_sender, finish_sender)
                     .await
             }
-        });
+        };
 
-        // Spawn result tracker.
-        let tracker_handle = tokio::spawn({
+        // Result tracker future.
+        let tracker_handle = {
             let self_arc = Arc::clone(&self_arc);
             async move {
                 self_arc
                     .tracker(result_receiver, report_receiver, finish_receiver)
                     .await
             }
-        });
+        };
 
-        let _ = tokio::join!(spammer_handle, tracker_handle);
+        // Run spammer and result tracker concurrently.
+        tokio::try_join!(spammer_handle, tracker_handle)?;
+
         Ok(())
     }
 
@@ -94,11 +156,25 @@ impl Spammer {
     async fn get_latest_nonce(&self, address: Address) -> Result<u64> {
         let response: String = self
             .client
-            .rpc_request("eth_getTransactionCount", json!([address, "latest"]))
+            .rpc_request(
+                "eth_getTransactionCount",
+                vec![json!(address), json!("latest")],
+            )
             .await?;
         // Convert hex string to integer.
         let hex_str = response.as_str().strip_prefix("0x").unwrap();
         Ok(u64::from_str_radix(hex_str, 16)?)
+    }
+
+    // Get current txpool status.
+    async fn get_txpool_status(&self) -> Result<TxpoolStatus> {
+        self.client.rpc_request("txpool_status", vec![]).await
+    }
+
+    // Get current number of pending and queued transactions in the pool.
+    async fn get_mempool_count(&self) -> Result<u64> {
+        let status = self.get_txpool_status().await?;
+        Ok(status.pending + status.queued)
     }
 
     /// Generate and send transactions to the Ethereum node at a controlled rate.
@@ -111,57 +187,120 @@ impl Spammer {
         // Fetch latest nonce for the sender address.
         let address = self.signer.address();
         let latest_nonce = self.get_latest_nonce(address).await?;
-        debug!("Spamming {address} starting from nonce={latest_nonce}");
+        let txs_per_batch = self
+            .max_rate
+            .saturating_mul(self.batch_interval)
+            .checked_div(1000)
+            .unwrap_or(0);
+        debug!(
+            "Spamming {address} starting from nonce={latest_nonce} at rate {}, sending {txs_per_batch} txs every {}ms", 
+            self.max_rate,
+            self.batch_interval,
+        );
 
         // Initialize nonce and counters.
         let mut nonce = latest_nonce;
         let start_time = Instant::now();
         let mut txs_sent_total = 0u64;
-        let mut interval = time::interval(Duration::from_secs(1));
+        let mut interval = time::interval(Duration::from_millis(self.batch_interval));
+
         loop {
             // Wait for next one-second tick.
             let _ = interval.tick().await;
-            let mut txs_sent_in_interval = 0u64;
             let interval_start = Instant::now();
 
-            // Send up to max_rate transactions per one-second interval.
-            while txs_sent_in_interval < self.max_rate {
-                // Check exit conditions before sending each transaction.
-                if (self.max_num_txs > 0 && txs_sent_total >= self.max_num_txs)
-                    || (self.max_time > 0 && start_time.elapsed().as_secs() >= self.max_time)
-                {
-                    break;
-                }
+            // Verify the nonce for gaps
+            // TODO: probably this should run as a separate task
+            let on_chain_nonce = self.get_latest_nonce(address).await?;
+            // If the span between the on-chain nonce and the one we are about to send
+            // is too big, then probably there is a gap that doesn't allow the
+            // on-chain nonce too advance.
+            let nonce_span = nonce.saturating_sub(on_chain_nonce);
+            if nonce_span > self.max_rate {
+                debug!("Current nonce={nonce}, on-chain nonce={on_chain_nonce}. Sending 10 txs");
+                let batch_entries = self.build_batch_entries(10, on_chain_nonce).await?;
+                if let Some(results) = self.send_raw_batch(&batch_entries).await? {
+                    if results.len() != batch_entries.len() {
+                        return Err(eyre::eyre!(
+                            "Batch response count {} does not match request count {}",
+                            results.len(),
+                            batch_entries.len()
+                        ));
+                    }
 
-                // Create one transaction and sing it.
-                let signed_tx = if self.blobs {
-                    make_signed_eip4844_tx(&self.signer, nonce).await?
+                    // Report individual results.
+                    for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
+                        let mapped_result = result.map(|_| tx_bytes_len);
+                        result_sender.send(mapped_result).await?;
+                    }
                 } else {
-                    make_signed_eip1559_tx(&self.signer, nonce).await?
-                };
-                let tx_bytes = signed_tx.encoded_2718();
-                let tx_bytes_len = tx_bytes.len() as u64;
+                    debug!("Batch eth_sendRawTransaction timed out; skipping this tick");
+                    report_sender.send(interval_start).await?;
+                    continue;
+                }
+            }
 
-                // Send transaction to Ethereum RPC endpoint.
-                let payload = hex::encode(tx_bytes);
-                let result = self
-                    .client
-                    .rpc_request("eth_sendRawTransaction", json!([payload]))
-                    .await
-                    .map(|_: String| tx_bytes_len);
+            // Get current pool size and calculate dynamic send rate
+            let current_pool_size = self.get_mempool_count().await.unwrap_or(0);
+            let space_available = TARGET_POOL_SIZE.saturating_sub(current_pool_size);
+            let txs_to_send = if space_available < txs_per_batch {
+                space_available
+            } else {
+                txs_per_batch
+            };
 
-                // Report result and update counters.
-                result_sender.send(result).await?;
-                txs_sent_in_interval += 1;
-                nonce += 1;
-                txs_sent_total += 1;
+            // Continue if there is no space available
+            if txs_to_send == 0 {
+                debug!("Mempool already full. Do not send more transactions.");
+                let _ = report_sender.send(interval_start).await;
+                continue;
+            }
+
+            // Limit the max number of transactions
+            let tx_count = if self.max_num_txs > 0 {
+                txs_to_send.min(self.max_num_txs.saturating_sub(txs_sent_total))
+            } else {
+                txs_to_send
+            };
+
+            // Prepare batch of transactions for this interval.
+            let batch_entries = self.build_batch_entries(tx_count, nonce).await?;
+            let batch_size = batch_entries.len() as u64;
+
+            debug!(
+                "Pool: {current_pool_size}/{TARGET_POOL_SIZE}, sending {batch_size} txs from nonce {nonce} (rate: {})",
+                self.max_rate
+            );
+
+            // Send all transactions in a single batch RPC call.
+            if !batch_entries.is_empty() {
+                if let Some(results) = self.send_raw_batch(&batch_entries).await? {
+                    if results.len() != batch_entries.len() {
+                        return Err(eyre::eyre!(
+                            "Batch response count {} does not match request count {}",
+                            results.len(),
+                            batch_entries.len()
+                        ));
+                    }
+
+                    // Report individual results.
+                    for ((_, tx_bytes_len), result) in batch_entries.into_iter().zip(results) {
+                        let mapped_result = result.map(|_| tx_bytes_len);
+                        result_sender.send(mapped_result).await?;
+                    }
+
+                    txs_sent_total += batch_size;
+                    nonce += batch_size;
+                } else {
+                    debug!("Batch eth_sendRawTransaction timed out; skipping this tick");
+                }
             }
 
             // Give time to the in-flight results to be received.
             sleep(Duration::from_millis(20)).await;
 
             // Signal tracker to report stats after this batch.
-            report_sender.try_send(interval_start)?;
+            let _ = report_sender.send(interval_start).await;
 
             // Check exit conditions after each tick.
             if (self.max_num_txs > 0 && txs_sent_total >= self.max_num_txs)
@@ -172,6 +311,68 @@ impl Spammer {
         }
         finish_sender.send(()).await?;
         Ok(())
+    }
+
+    async fn build_batch_entries(
+        &self,
+        tx_count: u64,
+        nonce: u64,
+    ) -> Result<Vec<(Vec<serde_json::Value>, u64)>> {
+        let mut batch_entries = Vec::with_capacity(tx_count as usize);
+        let mut next_nonce = nonce;
+
+        for _ in 0..tx_count {
+            let signed_tx = if let Some(ref payload) = self.contract_payload {
+                make_signed_contract_call_tx(
+                    &self.signer,
+                    next_nonce,
+                    payload.address,
+                    &payload.function_sig,
+                    payload.args.as_slice(),
+                    self.chain_id,
+                )
+                .await?
+            } else if self.blobs {
+                make_signed_eip4844_tx(&self.signer, next_nonce, self.chain_id).await?
+            } else {
+                make_signed_eip1559_tx(&self.signer, next_nonce, self.chain_id).await?
+            };
+
+            let tx_bytes = signed_tx.encoded_2718();
+            let tx_bytes_len = tx_bytes.len() as u64;
+            let payload = hex::encode(tx_bytes);
+            batch_entries.push((vec![json!(payload)], tx_bytes_len));
+            next_nonce += 1;
+        }
+
+        Ok(batch_entries)
+    }
+
+    async fn send_raw_batch(
+        &self,
+        batch_entries: &[(Vec<serde_json::Value>, u64)],
+    ) -> Result<Option<Vec<Result<String>>>> {
+        let params: Vec<_> = batch_entries
+            .iter()
+            .map(|(params, _)| params.clone())
+            .collect();
+
+        match self
+            .client
+            .rpc_batch_request("eth_sendRawTransaction", params)
+            .await
+        {
+            Ok(responses) => Ok(Some(responses)),
+            Err(err) => {
+                if let Some(jsonrpsee_core::client::Error::RequestTimeout) =
+                    err.downcast_ref::<jsonrpsee_core::client::Error>()
+                {
+                    Ok(None)
+                } else {
+                    Err(err)
+                }
+            }
+        }
     }
 
     // Track and report statistics on sent transactions.
@@ -202,7 +403,7 @@ impl Spammer {
                         sleep(Duration::from_secs(1) - elapsed).await;
                     }
 
-                    let pool_status: TxpoolStatus = self.client.rpc_request("txpool_status", json!([])).await?;
+                    let pool_status = self.get_txpool_status().await?;
                     debug!("{stats_last_second}; {pool_status:?}");
 
                     // Update total, then reset last second stats
@@ -271,7 +472,7 @@ impl Stats {
 }
 
 impl fmt::Display for Stats {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let elapsed = self.start_time.elapsed().as_millis();
         let stats = format!(
             "[{}] elapsed {:.3}s: Sent {} txs ({} bytes)",
@@ -290,57 +491,52 @@ impl fmt::Display for Stats {
     }
 }
 
+#[derive(Clone)]
 struct RpcClient {
-    client: Client,
-    url: Url,
+    client: HttpClient,
 }
 
 impl RpcClient {
-    pub fn new(url: Url) -> Self {
-        let client = Client::new();
-        Self { client, url }
+    pub fn new(url: Url) -> Result<Self> {
+        let client = HttpClientBuilder::default()
+            .request_timeout(Duration::from_secs(1))
+            .build(url)?;
+        Ok(Self { client })
     }
 
     pub async fn rpc_request<D: DeserializeOwned>(
         &self,
         method: &str,
-        params: serde_json::Value,
+        params: Vec<serde_json::Value>,
     ) -> Result<D> {
-        let body = json!({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-            "id": 1
-        });
-        let request = self
-            .client
-            .post(self.url.clone())
-            .timeout(Duration::from_secs(1))
-            .header(CONTENT_TYPE, "application/json")
-            .json(&body);
-        let body: JsonResponseBody = request.send().await?.error_for_status()?.json().await?;
-
-        if let Some(JsonError { code, message }) = body.error {
-            Err(eyre::eyre!("Server Error {}: {}", code, message))
-        } else {
-            serde_json::from_value(body.result).map_err(Into::into)
+        let mut array_params = ArrayParams::new();
+        for item in params {
+            array_params.insert(item)?;
         }
+        let result = self.client.request(method, array_params).await?;
+        Ok(result)
     }
-}
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct JsonResponseBody {
-    pub jsonrpc: String,
-    #[serde(default)]
-    pub error: Option<JsonError>,
-    #[serde(default)]
-    pub result: serde_json::Value,
-    pub id: serde_json::Value,
-}
+    pub async fn rpc_batch_request(
+        &self,
+        method: &str,
+        batch_params: Vec<Vec<serde_json::Value>>,
+    ) -> Result<Vec<Result<String>>> {
+        let mut batch = BatchRequestBuilder::new();
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct JsonError {
-    pub code: i64,
-    pub message: String,
+        for params in &batch_params {
+            let mut array_params = ArrayParams::new();
+            for item in params {
+                array_params.insert(item)?;
+            }
+            batch.insert(method, array_params)?;
+        }
+
+        let batch_response = self.client.batch_request(batch).await?;
+
+        Ok(batch_response
+            .into_iter()
+            .map(|r| r.map_err(|e| eyre::eyre!("RPC error: {e:?}")))
+            .collect())
+    }
 }

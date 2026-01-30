@@ -1,62 +1,84 @@
 //! Types for validator set management
 
-use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 use alloy_primitives::U256;
 
 use crate::validator_manager::contract::ValidatorManager;
+use crate::validator_manager::error::{Error as ValidatorManagerError, Result};
 
-/// Direct alias to the Solidity-generated validator info struct
-pub type Validator = ValidatorManager::ValidatorInfo;
+/// Tuple wrapper for an uncompressed secp256k1 public key (x, y limbs)
+pub type ValidatorKey = (U256, U256);
 
-impl ValidatorManager::ValidatorInfo {
-    /// Construct a validator from a raw Ed25519 key encoded as `U256`
-    pub fn from_public_key(ed25519_key: U256, power: U256) -> Self {
+/// In-memory representation of a validator entry
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Validator {
+    /// Tuple of 32-byte secp256k1 public key limbs `(x, y)` stored as U256 values
+    pub validator_key: ValidatorKey,
+    /// Voting power for the validator
+    pub power: u64,
+}
+
+impl Validator {
+    /// Construct a validator from the `(x, y)` limbs of an uncompressed secp256k1 public key and voting power
+    pub fn from_public_key(secp256k1_key: ValidatorKey, power: u64) -> Self {
         Self {
-            validatorKey: ed25519_key,
+            validator_key: secp256k1_key,
             power,
         }
     }
 }
 
+impl From<ValidatorManager::ValidatorInfo> for Validator {
+    fn from(info: ValidatorManager::ValidatorInfo) -> Self {
+        Self {
+            validator_key: (info.validatorKey.x, info.validatorKey.y),
+            power: info.power,
+        }
+    }
+}
+
+impl From<Validator> for ValidatorManager::ValidatorInfo {
+    fn from(validator: Validator) -> Self {
+        Self {
+            validatorKey: ValidatorManager::Secp256k1Key {
+                x: validator.validator_key.0,
+                y: validator.validator_key.1,
+            },
+            power: validator.power,
+        }
+    }
+}
+
 /// Complete validator set state
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ValidatorSet {
     /// Map of validator keys to their data
-    pub validators: HashMap<U256, Validator>,
-    /// Set of validator keys for enumeration
-    pub validator_keys: HashSet<U256>,
+    validators: HashMap<ValidatorKey, Validator>,
     /// Ordered list of validator keys reflecting registration order
-    pub validator_order: Vec<U256>,
-    /// Total power of all validators
-    pub total_power: U256,
+    validator_order: Vec<ValidatorKey>,
+    /// Aggregate voting power across validators
+    total_power: u64,
 }
 
 impl ValidatorSet {
-    /// Create a new empty validator set
-    pub fn new() -> Self {
-        Self {
-            validators: HashMap::new(),
-            validator_keys: HashSet::new(),
-            validator_order: Vec::new(),
-            total_power: U256::ZERO,
-        }
-    }
-
     /// Add a validator to the set
-    pub fn add_validator(&mut self, validator: Validator) {
-        if let Some(existing) = self.validators.get(&validator.validatorKey) {
-            self.total_power = self
-                .total_power
-                .saturating_sub(existing.power)
-                .saturating_add(validator.power);
-        } else {
-            self.total_power += validator.power;
-            self.validator_keys.insert(validator.validatorKey);
-            self.validator_order.push(validator.validatorKey);
+    pub fn add_validator(&mut self, validator: Validator) -> Result<()> {
+        let key = validator.validator_key;
+
+        if let Entry::Occupied(mut e) = self.validators.entry(key) {
+            e.insert(validator);
+            return Ok(());
         }
 
-        self.validators.insert(validator.validatorKey, validator);
+        self.total_power = self
+            .total_power
+            .checked_add(validator.power)
+            .ok_or(ValidatorManagerError::TotalPowerOverflow)?;
+        self.validator_order.push(key);
+        self.validators.insert(key, validator);
+        Ok(())
     }
 
     /// Get the number of validators
@@ -71,10 +93,14 @@ impl ValidatorSet {
             .filter_map(|key| self.validators.get(key))
             .collect()
     }
-}
 
-impl Default for ValidatorSet {
-    fn default() -> Self {
-        Self::new()
+    /// Compute the total voting power across all validators
+    pub fn total_power(&self) -> Result<u64> {
+        Ok(self.total_power)
+    }
+
+    /// Ordered validator keys, useful for deterministic storage layout
+    pub fn ordered_validator_keys(&self) -> &[ValidatorKey] {
+        &self.validator_order
     }
 }

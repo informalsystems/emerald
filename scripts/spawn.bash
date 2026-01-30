@@ -35,11 +35,11 @@ if [[ -z "$NODES_HOME" ]]; then
 fi
 
 if [[ -z "$APP_BINARY" ]]; then
-    APP_BINARY="malachitebft-eth-app"
+    APP_BINARY="emerald"
 fi
 
 echo "Compiling '$APP_BINARY'..."
-cargo build -p $APP_BINARY
+cargo build --release -p $APP_BINARY
 
 export RUST_BACKTRACE=full
 
@@ -62,8 +62,8 @@ function exit_and_cleanup {
 function wait_for_reth {
     NODE_PORT=$1
     echo "Waiting for reth node at port $NODE_PORT to reach height 1..."
-    echo "trying 10 times"
-    for i in $(seq 1 10); do
+    echo "trying 20 times"
+    for i in $(seq 1 20); do
         BLOCK_NUMBER=$(cast block-number --rpc-url 127.0.0.1:$NODE_PORT)
         if [[ $BLOCK_NUMBER -ge 1 ]]; then
             echo "Reth node at port $NODE_PORT has reached height $BLOCK_NUMBER."
@@ -105,7 +105,7 @@ function spawn_node {
     rm -rf "$NODES_HOME/$NODE/traces"
     mkdir -p "$NODES_HOME/$NODE/traces"
     echo "[Node $NODE] Spawning node..."
-    cargo run --bin $APP_BINARY -q -- start --home "$NODES_HOME/$NODE" --config ".testnet/config/$NODE"/config.toml > "$NODES_HOME/$NODE/logs/node.log" 2>&1 &
+    cargo run --bin $APP_BINARY -q -- start --home "$NODES_HOME/$NODE" --log-level info --config ".testnet/config/$NODE"/config.toml > "$NODES_HOME/$NODE/logs/node.log" 2>&1 &
     echo $! > "$NODES_HOME/$NODE/node.pid"
     echo "[Node $NODE] Logs are available at: $NODES_HOME/$NODE/logs/node.log"
 }
@@ -119,14 +119,14 @@ if [[ -z "$NO_DELAY" ]]; then
     
     # Wait for first node to reach height 10
     NODE=$((NODES_COUNT - 1))
-    echo "[Node $NODE] Waiting for first node (port 8545) to reach height 10 before starting the last node..."
-    for i in $(seq 1 30); do
-        BLOCK_NUMBER=$(cast block-number --rpc-url 127.0.0.1:8545 2>/dev/null || echo "0")
-        if [[ $BLOCK_NUMBER -ge 10 ]]; then
+    echo "[Node $NODE] Waiting for first node (port 8645) to reach height 100 before starting the last node..."
+    for i in $(seq 1 100); do
+        BLOCK_NUMBER=$(cast block-number --rpc-url 127.0.0.1:8645 2>/dev/null || echo "0")
+        if [[ $BLOCK_NUMBER -ge 100 ]]; then
             echo "First node has reached height $BLOCK_NUMBER."
             break
         else
-            echo "Current block number: $BLOCK_NUMBER. Waiting... (attempt $i/30)"
+            echo "Current block number: $BLOCK_NUMBER. Waiting... (attempt $i/100)"
             sleep 2
         fi
     done
@@ -141,16 +141,12 @@ else
     done
 fi
 
-wait_for_reth 8545
+wait_for_reth 8645
 
-for NODE_PORT in 8545 18545 28545; do
-    check_reth_progress $NODE_PORT || exit_and_cleanup 1
+for ((i = 0; i < NODES_COUNT; i++)); do
+    PORT=$((8645 + i * 100))
+    check_reth_progress $PORT || exit_and_cleanup 1
 done
-
-# Check progress for additional node
-if [[ $NODES_COUNT -ge 4 ]]; then
-    check_reth_progress 38545 || exit_and_cleanup 1
-fi
 
 # Trap the INT signal (Ctrl+C) to run the cleanup function
 trap exit_and_cleanup INT

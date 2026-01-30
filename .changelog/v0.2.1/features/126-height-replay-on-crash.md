@@ -1,0 +1,1 @@
+- `[app]` Height replay mechanism automatically recovers when Reth is behind Emerald's stored height after a crash, eliminating the need for `--engine.persistence-threshold=0` ([#126](https://github.com/informalsystems/emerald/issues/126))

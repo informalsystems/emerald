@@ -38,4 +38,10 @@ pub enum Error {
 
     #[error("Missing configuration path for node {0}")]
     MissingPath(usize),
+
+    #[error("Missing moniker for node {0}")]
+    MissingMoniker(usize),
+
+    #[error("Invalid configuration: {0}")]
+    InvalidConfig(String),
 }

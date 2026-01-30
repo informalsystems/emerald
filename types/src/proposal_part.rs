@@ -1,14 +1,13 @@
 use core::fmt;
 
 use bytes::Bytes;
-use serde::{Deserialize, Serialize};
-
 use malachitebft_core_types::Round;
 use malachitebft_proto::{self as proto, Error as ProtoError, Protobuf};
-use malachitebft_signing_ed25519::Signature;
+use serde::{Deserialize, Serialize};
 
 use crate::codec::proto::{decode_signature, encode_signature};
-use crate::{Address, Height, MalakethContext};
+use crate::secp256k1::Signature;
+use crate::{Address, EmeraldContext, Height};
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProposalData {
@@ -21,7 +20,7 @@ impl ProposalData {
     }
 
     pub fn size_bytes(&self) -> usize {
-        std::mem::size_of::<u64>()
+        core::mem::size_of::<u64>()
     }
 }
 
@@ -71,6 +70,13 @@ impl ProposalPart {
         }
     }
 
+    pub fn as_fin(&self) -> Option<&ProposalFin> {
+        match self {
+            Self::Fin(fin) => Some(fin),
+            _ => None,
+        }
+    }
+
     pub fn to_sign_bytes(&self) -> Bytes {
         proto::Protobuf::to_bytes(self).unwrap()
     }
@@ -113,7 +119,7 @@ impl ProposalFin {
     }
 }
 
-impl malachitebft_core_types::ProposalPart<MalakethContext> for ProposalPart {
+impl malachitebft_core_types::ProposalPart<EmeraldContext> for ProposalPart {
     fn is_first(&self) -> bool {
         matches!(self, Self::Init(_))
     }

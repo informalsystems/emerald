@@ -1,10 +1,10 @@
 use core::fmt;
-use serde::{Deserialize, Serialize};
 
 use alloy_primitives::Address as AlloyAddress;
 use malachitebft_proto::{Error as ProtoError, Protobuf};
+use serde::{Deserialize, Serialize};
 
-use crate::signing::PublicKey;
+use crate::signing::secp256k1::PublicKey;
 use crate::{proto, Hashable};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -28,9 +28,12 @@ impl Address {
 
     #[cfg_attr(coverage_nightly, coverage(off))]
     pub fn from_public_key(public_key: &PublicKey) -> Self {
+        // Hash (keccak256) of the x and y coordinates of the public key
         let hash = public_key.hash();
+
+        // Take the last 20 bytes for Ethereum address
         let mut address = [0; Self::LENGTH];
-        address.copy_from_slice(&hash[..Self::LENGTH]);
+        address.copy_from_slice(&hash[12..]);
         Self(AlloyAddress::new(address))
     }
 
@@ -95,5 +98,37 @@ impl Protobuf for Address {
 impl From<AlloyAddress> for Address {
     fn from(addr: AlloyAddress) -> Self {
         Self::new(addr.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy_primitives::{address, b256};
+
+    use super::*;
+    use crate::secp256k1::PrivateKey;
+
+    #[test]
+    fn test_ethereum_address_derivation_anvil_account() {
+        // Anvil test account #0
+        // Private key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+        // Expected address: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+
+        let private_key_bytes =
+            b256!("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
+        let expected_address = address!("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
+
+        // Create PrivateKey from bytes
+        let private_key = PrivateKey::from_slice(private_key_bytes.as_ref()).unwrap();
+        let public_key = private_key.public_key();
+
+        // Derive address
+        let derived_address = Address::from_public_key(&public_key);
+
+        assert_eq!(
+            derived_address.to_alloy_address(),
+            expected_address,
+            "Derived address doesn't match expected Anvil address",
+        );
     }
 }

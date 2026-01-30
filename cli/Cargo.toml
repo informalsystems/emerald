@@ -1,30 +1,36 @@
 [package]
-name = "malachitebft-eth-cli"
-version.workspace = true
-edition.workspace = true
-repository.workspace = true
-license.workspace = true
-publish.workspace = true
+name       = "malachitebft-eth-cli"
+version    = { workspace = true }
+edition    = { workspace = true }
+repository = { workspace = true }
+license    = { workspace = true }
+publish    = { workspace = true }
 
 [lints]
 workspace = true
 
 [dependencies]
-malachitebft-core-types.workspace = true
-malachitebft-metrics.workspace = true
-malachitebft-config.workspace = true
-malachitebft-app.workspace = true
-malachitebft-signing-ed25519 = { workspace = true, features = ["serde"] }
+malachitebft-core-types = { workspace = true }
+malachitebft-eth-types  = { workspace = true }
+malachitebft-eth-engine = { workspace = true }
+malachitebft-metrics    = { workspace = true }
+malachitebft-config     = { workspace = true }
+malachitebft-app        = { workspace = true }
 
+
+alloy-primitives = { workspace = true }
+humantime-serde = { workspace = true }
 axum = { workspace = true }
+base64 = "0.22"
 bytesize = { workspace = true }
-clap = { workspace = true, features = ["derive", "env"] }
+clap = { workspace = true, features = [ "derive", "env" ] }
 color-eyre = { workspace = true }
 config = { workspace = true }
 directories = { workspace = true }
 hex = "0.4"
 itertools = { workspace = true }
-tokio = { workspace = true, features = ["full"] }
+reqwest = { version = "0.12.2", default-features = false, features = [ "json", "rustls-tls" ] }
+tokio = { workspace = true, features = [ "full" ] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }

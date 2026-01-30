@@ -3,8 +3,8 @@ use std::sync::Arc;
 use malachitebft_core_types::VotingPower;
 use serde::{Deserialize, Serialize};
 
-use crate::signing::PublicKey;
-use crate::{Address, MalakethContext};
+use crate::signing::secp256k1::PublicKey;
+use crate::{Address, EmeraldContext};
 
 /// A validator is a public key and voting power
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,18 +26,18 @@ impl Validator {
 }
 
 impl PartialOrd for Validator {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for Validator {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.address.cmp(&other.address)
     }
 }
 
-impl malachitebft_core_types::Validator<MalakethContext> for Validator {
+impl malachitebft_core_types::Validator<EmeraldContext> for Validator {
     fn address(&self) -> &Address {
         &self.address
     }
@@ -60,7 +60,7 @@ pub struct ValidatorSet {
 impl ValidatorSet {
     pub fn new(validators: impl IntoIterator<Item = Validator>) -> Self {
         let mut validators: Vec<_> = validators.into_iter().collect();
-        ValidatorSet::sort_validators(&mut validators);
+        Self::sort_validators(&mut validators);
 
         assert!(!validators.is_empty());
 
@@ -99,11 +99,14 @@ impl ValidatorSet {
         vals.dedup();
     }
     pub fn get_keys(&self) -> Vec<PublicKey> {
-        self.validators.iter().map(|v| v.public_key).collect()
+        self.validators
+            .iter()
+            .map(|v| v.public_key.clone())
+            .collect()
     }
 }
 
-impl malachitebft_core_types::ValidatorSet<MalakethContext> for ValidatorSet {
+impl malachitebft_core_types::ValidatorSet<EmeraldContext> for ValidatorSet {
     fn count(&self) -> usize {
         self.validators.len()
     }

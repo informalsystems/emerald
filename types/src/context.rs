@@ -1,25 +1,25 @@
 use bytes::Bytes;
 use malachitebft_core_types::{Context, NilOrVal, Round, ValidatorSet as _};
+use malachitebft_signing_ecdsa::K256;
 
 use crate::address::*;
 use crate::height::*;
 use crate::proposal::*;
 use crate::proposal_part::*;
-use crate::signing::*;
 use crate::validator_set::*;
 use crate::value::*;
 use crate::vote::*;
 
 #[derive(Copy, Clone, Debug, Default)]
-pub struct MalakethContext;
+pub struct EmeraldContext;
 
-impl MalakethContext {
+impl EmeraldContext {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Context for MalakethContext {
+impl Context for EmeraldContext {
     type Address = Address;
     type ProposalPart = ProposalPart;
     type Height = Height;
@@ -28,7 +28,7 @@ impl Context for MalakethContext {
     type Validator = Validator;
     type Value = Value;
     type Vote = Vote;
-    type SigningScheme = Ed25519;
+    type SigningScheme = K256;
     type Extension = Bytes;
 
     fn select_proposer<'a>(

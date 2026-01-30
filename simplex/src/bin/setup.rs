@@ -11,10 +11,7 @@ use std::path::PathBuf;
 use alloy_primitives::Address as AlloyAddress;
 use clap::{Parser, Subcommand};
 use commonware_codec::Encode;
-use commonware_consensus::simplex::scheme::bls12381_threshold;
-use commonware_cryptography::bls12381::primitives::variant::MinSig;
-use commonware_cryptography::certificate::mocks::Fixture;
-use commonware_cryptography::ed25519::PrivateKey;
+use commonware_cryptography::secp256r1::standard::PrivateKey;
 use commonware_cryptography::Signer;
 use commonware_math::algebra::Random;
 use commonware_utils::{from_hex_formatted, hex};
@@ -24,9 +21,6 @@ use malachitebft_eth_types::Address;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use tokio::time::Duration;
-
-/// Namespace for emerald-simplex consensus.
-const NAMESPACE: &[u8] = b"emerald-simplex";
 
 /// Emerald Simplex setup tool.
 #[derive(Parser)]
@@ -126,26 +120,20 @@ fn generate_testnet(
     let storage_output = output.join("storage");
     fs::create_dir_all(&storage_output)?;
 
-    // Generate Ed25519 keys for each validator
+    // Generate secp256r1 keys for each validator (used for both P2P and consensus)
     let mut peer_signers: Vec<PrivateKey> =
         (0..n).map(|_| PrivateKey::random(&mut OsRng)).collect();
     peer_signers.sort_by_key(|signer| signer.public_key());
 
     let allowed_peers: Vec<String> = peer_signers
         .iter()
-        .map(|signer| signer.public_key().to_string())
+        .map(|signer| hex(&signer.public_key().encode()))
         .collect();
 
     // Use first validator as bootstrapper
     let bootstrappers = vec![allowed_peers[0].clone()];
 
-    // Generate BLS threshold keys using the fixture helper
-    let n_u32 = n as u32;
-    let Fixture { schemes, .. } =
-        bls12381_threshold::fixture::<MinSig, _>(&mut OsRng, NAMESPACE, n_u32);
-
-    let identity = schemes[0].polynomial().public();
-    println!("  Network identity: {identity}");
+    println!("  Generated {n} secp256r1 key pairs");
 
     // Generate JWT secret (shared by all nodes)
     let jwt_secret: [u8; 32] = rand::random();
@@ -158,7 +146,7 @@ fn generate_testnet(
     let mut port = base_port;
     let mut addresses = HashMap::new();
     for signer in peer_signers.iter() {
-        let name = signer.public_key().to_string();
+        let name = hex(&signer.public_key().encode());
         addresses.insert(name, SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port));
         port += 2;
     }
@@ -174,8 +162,8 @@ fn generate_testnet(
 
     // Generate config for each validator
     port = base_port;
-    for (i, (signer, scheme)) in peer_signers.iter().zip(schemes.iter()).enumerate() {
-        let name = signer.public_key().to_string();
+    for (i, signer) in peer_signers.iter().enumerate() {
+        let name = hex(&signer.public_key().encode());
 
         let emerald = EmeraldConfig {
             moniker: format!("simplex-{i}"),
@@ -199,8 +187,6 @@ fn generate_testnet(
 
         let simplex = SimplexConfig {
             private_key: hex(&signer.encode()),
-            share: hex(&scheme.share().unwrap().encode()),
-            polynomial: hex(&scheme.polynomial().encode()),
             port,
             metrics_port: port + 1,
             directory: format!("{}/storage/{}", output.display(), name),

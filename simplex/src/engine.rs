@@ -11,15 +11,13 @@ use commonware_broadcast::buffered;
 use commonware_consensus::application::marshaled::Marshaled as ConsensusMarshaled;
 use commonware_consensus::marshal::ingress::handler;
 use commonware_consensus::marshal::{self};
-use commonware_consensus::simplex::elector::Random;
+use commonware_consensus::simplex::elector::RoundRobin;
 use commonware_consensus::simplex::{self, Engine as Consensus};
 use commonware_consensus::types::{Epoch, FixedEpocher, ViewDelta};
 use commonware_consensus::{Reporter as ConsensusReporter, Reporters, Viewable};
-use commonware_cryptography::bls12381::primitives::group;
-use commonware_cryptography::bls12381::primitives::sharing::Sharing;
-use commonware_cryptography::bls12381::primitives::variant::MinSig;
 use commonware_cryptography::certificate::{ConstantProvider, Scheme as CertificateScheme};
-use commonware_cryptography::sha256::Digest;
+use commonware_cryptography::sha256::{Digest, Sha256};
+use commonware_cryptography::Signer;
 use commonware_p2p::{Blocker, Receiver, Sender};
 use commonware_parallel::Strategy;
 use commonware_resolver::Resolver;
@@ -28,7 +26,7 @@ use commonware_runtime::{
     spawn_cell, Clock, ContextCell, Handle, Metrics, RayonPoolSpawner, Spawner, Storage,
 };
 use commonware_storage::archive::immutable;
-use commonware_utils::ordered::Set;
+use commonware_utils::ordered::BiMap;
 use commonware_utils::{NZUsize, NZU16, NZU64};
 use futures::channel::mpsc;
 use futures::future::try_join_all;
@@ -40,10 +38,15 @@ use tracing::{debug, error, info, warn};
 
 use crate::application::Application;
 use crate::block::Block;
-use crate::consensus::{Activity, Finalization, PublicKey, Scheme, EPOCH, EPOCH_LENGTH, NAMESPACE};
+use crate::consensus::{
+    Activity, Finalization, PrivateKey, PublicKey, Scheme, EPOCH, EPOCH_LENGTH, NAMESPACE,
+};
 
 /// Reporter type for simplex Engine.
 type EngineReporter = Reporters<Activity, marshal::Mailbox<Scheme, Block>, NotarizationReporter>;
+
+/// Elector type using round-robin with SHA256 for shuffling.
+type Elector = RoundRobin<Sha256>;
 
 #[derive(Clone)]
 struct NotarizationReporter {
@@ -158,10 +161,11 @@ pub struct Config<B: Blocker<PublicKey = PublicKey>, S: Strategy> {
     pub partition_prefix: String,
     pub blocks_freezer_table_initial_size: u32,
     pub finalized_freezer_table_initial_size: u32,
-    pub me: PublicKey,
-    pub polynomial: Sharing<MinSig>,
-    pub share: group::Share,
-    pub participants: Set<PublicKey>,
+    /// The node's secp256r1 private key for signing consensus messages.
+    pub private_key: PrivateKey,
+    /// BiMap of participant public keys (identity key -> signing key).
+    /// For secp256r1, these are the same key, so this is an identity mapping.
+    pub participants: BiMap<PublicKey, PublicKey>,
     pub mailbox_size: usize,
     pub deque_size: usize,
 
@@ -211,7 +215,7 @@ pub struct Engine<
     marshaled: Marshaled<E>,
 
     consensus:
-        Consensus<E, Scheme, Random, B, Digest, Marshaled<E>, Marshaled<E>, EngineReporter, S>,
+        Consensus<E, Scheme, Elector, B, Digest, Marshaled<E>, Marshaled<E>, EngineReporter, S>,
 }
 
 impl<
@@ -232,11 +236,13 @@ impl<
 {
     /// Create a new simplex [Engine].
     pub async fn new(context: E, cfg: Config<B, S>) -> Self {
+        let me = cfg.private_key.public_key();
+
         // Create the buffer
         let (buffer, buffer_mailbox) = buffered::Engine::new(
             context.with_label("buffer"),
             buffered::Config {
-                public_key: cfg.me,
+                public_key: me,
                 mailbox_size: cfg.mailbox_size,
                 deque_size: cfg.deque_size,
                 priority: true,
@@ -325,8 +331,8 @@ impl<
         .expect("failed to initialize finalized blocks archive");
         info!("restored finalized blocks archive");
 
-        // Create marshal
-        let scheme = Scheme::signer(NAMESPACE, cfg.participants, cfg.polynomial, cfg.share)
+        // Create marshal with secp256r1 scheme
+        let scheme = Scheme::signer(NAMESPACE, cfg.participants.clone(), cfg.private_key)
             .expect("failed to create scheme");
         let provider = ConstantProvider::new(scheme.clone());
         let epocher = FixedEpocher::new(EPOCH_LENGTH);
@@ -376,7 +382,8 @@ impl<
             NotarizationReporter::new(app_reporter, marshal_mailbox.clone());
         let reporter: EngineReporter = (marshal_mailbox, notarization_reporter).into();
 
-        // Create the consensus engine
+        // Create the consensus engine with round-robin leader election
+        // Use shuffled round-robin with the namespace as seed for deterministic ordering
         let consensus = Consensus::new(
             context.with_label("consensus"),
             simplex::Config {
@@ -398,7 +405,7 @@ impl<
                 write_buffer: WRITE_BUFFER,
                 blocker: cfg.blocker,
                 buffer_pool,
-                elector: Random,
+                elector: RoundRobin::shuffled(NAMESPACE),
                 strategy: cfg.strategy,
             },
         );

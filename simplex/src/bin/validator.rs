@@ -1,6 +1,7 @@
 //! Emerald Simplex validator node.
 //!
 //! Runs a simplex consensus node with EVM execution.
+//! Uses secp256r1 keys for both P2P authentication and consensus signing.
 
 use core::net::{IpAddr, Ipv4Addr, SocketAddr};
 use core::num::NonZeroU32;
@@ -10,19 +11,16 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use clap::{Arg, Command};
-use commonware_codec::{Decode, DecodeExt};
+use commonware_codec::DecodeExt;
 use commonware_consensus::marshal;
 use commonware_consensus::types::ViewDelta;
-use commonware_cryptography::bls12381::primitives::group;
-use commonware_cryptography::bls12381::primitives::sharing::Sharing;
-use commonware_cryptography::bls12381::primitives::variant::MinSig;
-use commonware_cryptography::ed25519::{PrivateKey, PublicKey};
+use commonware_cryptography::secp256r1::standard::{PrivateKey, PublicKey};
 use commonware_cryptography::Signer;
 use commonware_p2p::authenticated::discovery as authenticated;
 use commonware_p2p::{Ingress, Manager};
 use commonware_runtime::{tokio, Metrics, RayonPoolSpawner, Runner};
-use commonware_utils::ordered::Set;
-use commonware_utils::{from_hex_formatted, union_unique, NZUsize, NZU32};
+use commonware_utils::ordered::BiMap;
+use commonware_utils::{from_hex_formatted, union_unique, NZUsize};
 use emerald_simplex::config::SimplexConfigFile;
 use emerald_simplex::consensus::NAMESPACE;
 use emerald_simplex::engine::{Config as EngineConfig, Engine};
@@ -86,7 +84,7 @@ fn main() {
     let peers_content = std::fs::read_to_string(peers_file).expect("Could not read peers file");
     let peers: Peers = serde_yaml::from_str(&peers_content).expect("Could not parse peers file");
 
-    // Parse private key
+    // Parse secp256r1 private key (used for both P2P and consensus)
     let key = from_hex_formatted(&config.private_key).expect("Could not parse private key");
     let signer = PrivateKey::decode(key.as_ref()).expect("Private key is invalid");
     let public_key = signer.public_key();
@@ -116,7 +114,7 @@ fn main() {
             None,
         );
 
-        // Build peer list
+        // Build peer list (secp256r1 public keys)
         let peers_map: HashMap<PublicKey, SocketAddr> = peers
             .addresses
             .into_iter()
@@ -150,26 +148,10 @@ fn main() {
             .collect();
 
         info!(peers = peer_keys.len(), "loaded peers");
-        let peers_u32 = peer_keys.len() as u32;
 
-        // Parse BLS keys
-        let share = from_hex_formatted(&config.share).expect("Could not parse share");
-        let share = group::Share::decode(share.as_ref()).expect("Share is invalid");
-        let polynomial =
-            from_hex_formatted(&config.polynomial).expect("Could not parse polynomial");
-        let polynomial = Sharing::<MinSig>::decode_cfg(polynomial.as_ref(), &NZU32!(peers_u32))
-            .expect("Polynomial is invalid");
-        let identity = polynomial.public();
+        info!(?public_key, ?ip, port = config.port, "loaded config");
 
-        info!(
-            ?public_key,
-            ?identity,
-            ?ip,
-            port = config.port,
-            "loaded config"
-        );
-
-        // Configure network
+        // Configure network (using secp256r1 keys for P2P authentication)
         let p2p_namespace = union_unique(NAMESPACE, b"_P2P");
         let mut p2p_cfg = if config.local {
             authenticated::Config::local(
@@ -197,8 +179,23 @@ fn main() {
             authenticated::Network::new(context.with_label("network"), p2p_cfg);
 
         // Provide authorized peers
-        let participants: Set<PublicKey> = Set::from_iter_dedup(peer_keys.clone());
-        oracle.update(EPOCH, participants.clone()).await;
+        // Create BiMap for participants (identity mapping: P2P key == signing key)
+        let participant_pairs: Vec<(PublicKey, PublicKey)> =
+            peer_keys.iter().map(|k| (k.clone(), k.clone())).collect();
+        let participants: BiMap<PublicKey, PublicKey> =
+            BiMap::try_from(participant_pairs).expect("duplicate participants");
+        oracle
+            .update(
+                EPOCH,
+                participants
+                    .keys()
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap(),
+            )
+            .await;
 
         // Register channels
         let pending_limit = Quota::per_second(NonZeroU32::new(128).unwrap());
@@ -230,7 +227,7 @@ fn main() {
 
         // Create marshal resolver
         let marshal_resolver_cfg = marshal::resolver::p2p::Config {
-            public_key: public_key.clone(),
+            public_key,
             manager: oracle.clone(),
             blocker: oracle.clone(),
             mailbox_size: config.mailbox_size,
@@ -311,15 +308,13 @@ fn main() {
             emerald.min_block_time
         };
 
-        // Create engine config
+        // Create engine config with secp256r1 keys
         let engine_config = EngineConfig {
             blocker: oracle.clone(),
             partition_prefix: "engine".to_string(),
             blocks_freezer_table_initial_size: BLOCKS_FREEZER_TABLE_INITIAL_SIZE,
             finalized_freezer_table_initial_size: FINALIZED_FREEZER_TABLE_INITIAL_SIZE,
-            me: public_key.clone(),
-            polynomial,
-            share,
+            private_key: signer.clone(),
             participants,
             mailbox_size: config.mailbox_size,
             deque_size: config.deque_size,

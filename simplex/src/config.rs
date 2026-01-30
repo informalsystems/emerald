@@ -3,9 +3,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SimplexConfig {
+    /// secp256r1 private key (hex-encoded) for both P2P and consensus signing.
     pub private_key: String,
-    pub share: String,
-    pub polynomial: String,
     pub port: u16,
     pub metrics_port: u16,
     pub directory: String,

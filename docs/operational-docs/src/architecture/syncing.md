@@ -1,6 +1,6 @@
 # Syncing
 
-## Implementation Overview
+## Overview
 
 ### Reth Sync Overview
 
@@ -112,7 +112,7 @@ The response is processed as follows:
 
 3. Return the reconstructed proposal to Malachite once validation succeeds.
 
-> Note:
+> [!NOTE]
 > In the current Malachite implementation, there is no timeout during validation of syncing values.
 > A configurable syncing timeout has been introduced as part of the `MalakethConfig` to address this.
 >
@@ -131,7 +131,7 @@ Depending on the node type, behavior differs:
   - Follow the same custom pruning rules, or
   - Restrict itself to providing only data available locally.
 
-> Note:
+> [!NOTE]
 > In order for a node to be able to sync, there has to be at least one archival node in the network that can provide historical data. We plan to add snapshot syncing to remove this constraint.
 >
 

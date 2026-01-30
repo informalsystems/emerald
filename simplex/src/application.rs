@@ -25,6 +25,8 @@ use commonware_consensus::types::Height;
 use commonware_consensus::{Heightable, Reporter};
 use commonware_cryptography::sha256::Digest;
 use commonware_cryptography::{Digestible, Hasher, Sha256};
+use commonware_p2p::authenticated::discovery::Oracle;
+use commonware_p2p::Manager;
 use commonware_runtime::{Clock, Metrics, Spawner};
 use commonware_utils::{Acknowledgement, SystemTimeExt};
 use futures::StreamExt;
@@ -123,6 +125,8 @@ pub struct Application {
     prague_time: Option<u64>,
     /// Osaka fork activation timestamp (in seconds). None means Osaka is not activated.
     osaka_time: Option<u64>,
+    /// P2P oracle for updating authorized peers on validator set changes.
+    oracle: Oracle<PublicKey>,
 }
 
 impl Application {
@@ -132,11 +136,13 @@ impl Application {
     /// * `engine` - The emerald Engine API client
     /// * `fee_recipient` - Address to receive block rewards
     /// * `genesis_execution_hash` - The EL genesis block hash
+    /// * `oracle` - P2P oracle for updating authorized peers on validator set changes
     pub fn new(
         engine: EmeraldEngine,
         fee_recipient: Address,
         genesis_execution_hash: ExecutionHash,
         min_block_time: Duration,
+        oracle: Oracle<PublicKey>,
     ) -> Self {
         let genesis = Block::new(
             Sha256::hash(GENESIS_PARENT_MESSAGE),
@@ -154,6 +160,7 @@ impl Application {
             min_block_time,
             prague_time: Some(0), // Prague enabled from genesis by default
             osaka_time: None,     // Osaka disabled by default
+            oracle,
         }
     }
 
@@ -181,7 +188,7 @@ impl Application {
     }
 
     /// Update the EVM state after finalization.
-    pub async fn on_finalized(&self, block: &Block) {
+    pub async fn on_finalized(&mut self, block: &Block) {
         let mut state = self.state.write().await;
 
         let finalized_height = block.height();
@@ -199,6 +206,18 @@ impl Application {
         }
 
         state.finalized_height = finalized_height;
+
+        // TODO: Dynamic validator set updates
+        // To implement validator set changes:
+        // 1. Read validators from on-chain contract at block.execution_hash()
+        // 2. Compare with current validator set
+        // 3. If changed, update self.oracle.update(next_epoch, new_validators).await
+        // 4. Also update the consensus scheme provider for the new epoch
+
+        {
+            let peer_set = self.oracle.peer_set(0).await;
+            info!(?peer_set, "Current authorized peer set from oracle");
+        }
 
         info!(
             height = %finalized_height,

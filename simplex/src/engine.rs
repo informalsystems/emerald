@@ -18,6 +18,7 @@ use commonware_consensus::{Reporter as ConsensusReporter, Reporters, Viewable};
 use commonware_cryptography::certificate::{ConstantProvider, Scheme as CertificateScheme};
 use commonware_cryptography::sha256::{Digest, Sha256};
 use commonware_cryptography::Signer;
+use commonware_p2p::authenticated::discovery::Oracle;
 use commonware_p2p::{Blocker, Receiver, Sender};
 use commonware_parallel::Strategy;
 use commonware_resolver::Resolver;
@@ -188,6 +189,8 @@ pub struct Config<B: Blocker<PublicKey = PublicKey>, S: Strategy> {
     /// The genesis block hash from the execution layer.
     pub genesis_execution_hash: B256,
     pub min_block_time: Duration,
+    /// P2P oracle for updating authorized peers on validator set changes.
+    pub oracle: Oracle<PublicKey>,
 }
 
 type Marshaled<E> = ConsensusMarshaled<E, Scheme, Application, Block, FixedEpocher>;
@@ -368,6 +371,7 @@ impl<
             cfg.fee_recipient,
             cfg.genesis_execution_hash,
             cfg.min_block_time,
+            cfg.oracle,
         );
         let app_reporter = app.clone();
         let marshaled = Marshaled::new(

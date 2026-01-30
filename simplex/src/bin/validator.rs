@@ -323,6 +323,7 @@ fn main() {
             fee_recipient,
             genesis_execution_hash,
             min_block_time,
+            oracle: oracle.clone(),
         };
 
         // Create and start engine

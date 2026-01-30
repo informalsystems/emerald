@@ -82,18 +82,49 @@ The sync request contains the height, while the expected response includes the `
 
 When the application (Emerald) receives the `AppMsg::GetDecidedValue` message, it processes it as follows:
 
-1. Retrieve from storage the _earliest available height_, i.e., the minimum height for which the application can provide a payload (block). 
-   See the [Minimal Node Height](#minimal-node-height) section.
+1. Retrieve from storage the _earliest available height_, i.e., the minimum height for which the application can provide both the `value_bytes` and the commit `certificate`. 
+   See the [Pruning](#pruning) section.
 2. Validate the requested height range:
    - If the requested height is not available (i.e., below the earliest available height or above the latest decided height), return `None`.
    - Otherwise, continue.  
 3. Retrieve from storage the _earliest unpruned height_, i.e., the minimum height for which the full block is available locally (no need to query the EL).
 4. Fetch the block data:
-    - If the requested height is below the earliest unpruned height, try fetching the missing block data from the EL using the Engine API method `engine_getPayloadBodiesByRange`. 
+    - If the requested height is below the earliest unpruned height, try fetching the missing block data from the EL using the Engine API method `engine_getPayloadBodiesByRange`. See the [EL Payload Retrieval](#el-payload-retrieval) section.
     - Otherwise, return the decided value directly from storage.
 
-To support this logic, block headers and certificates are stored for all blocks a node can provide to peers. 
-This is necessary because the EL only stores payload bodies and does not include the metadata or consensus data required for full block reconstruction.
+### EL Payload Retrieval
+
+In order to provide a response to the `AppMsg::GetDecidedValue` message, the application requires both the `value_bytes` and the commit `certificate`.
+
+In the current Emerald implementation, the `value_bytes` consist of an Ethereum payload. 
+The payload bodies can be retrieved using the Engine API method `engine_getPayloadBodiesByRange`, which returns the transactions and withdrawals contained within a payload, but does not include the remaining metadata. 
+Thus, the syncing protocol requires Emerald to store the block headers for the decided value.
+
+An alternative approach would have been to use the `eth_getBlockByNumber` method and store `block_number` instead. However, since `engine_getPayloadBodiesByRange` was specifically designed for syncing purpose and allows for future batching optimizations, it was chosen instead.
+
+### Pruning
+
+The earliest available height is the minimum height for which the application can provide both the `value_bytes` and the commit `certificate`.
+Since certificates are only stored in Emerald (the EL only stores payloads), the earliest available height corresponds to the certificate with the minimum height. 
+
+> TODO: add docs on how Emerald is pruning its store (i.e., with or without certificates) and on the different type of Reth nodes
+
+---
+
+The minimal node height corresponds to the certificate with the lowest available height, since certificates are stored for all supported values.
+
+Currently, there is no direct way to determine the oldest supported height by the execution client (Reth).
+
+Depending on the node type, behavior differs:
+
+- Archival Node - Reth stores all blocks from genesis. The minimal height can directly reflect this.
+- Full Node - Reth stores approximately the last 10,064 blocks, pruning older ones. Logic could be added so that Malachite prunes in parallel with Reth.
+- Custom Node - If Reth uses a custom pruning policy (defined in `reth.toml`), the middleware would need to either:
+  - Follow the same custom pruning rules, or
+  - Restrict itself to providing only data available locally.
+
+> [!WARNING]
+> In order for a node to be able to sync (from any height), there has to be at least one archival node in the network that can provide historical data. We plan to add snapshot syncing to remove this constraint.
 
 ## Sync Response Handling
 
@@ -114,32 +145,6 @@ The application is processing it as follows:
 > [!NOTE]
 > In the current Malachite implementation, there is no timeout during validation of syncing values.
 > A configurable syncing timeout has been introduced as part of the `EmeraldConfig` to address this.
-
-## Minimal Node Height
-
-The minimal node height corresponds to the certificate with the lowest available height, since certificates are stored for all supported values.
-
-Currently, there is no direct way to determine the oldest supported height by the execution client (Reth).
-
-Depending on the node type, behavior differs:
-
-- Archival Node - Reth stores all blocks from genesis. The minimal height can directly reflect this.
-- Full Node - Reth stores approximately the last 10,064 blocks, pruning older ones. Logic could be added so that Malachite prunes in parallel with Reth.
-- Custom Node - If Reth uses a custom pruning policy (defined in `reth.toml`), the middleware would need to either:
-  - Follow the same custom pruning rules, or
-  - Restrict itself to providing only data available locally.
-
-> [!NOTE]
-> In order for a node to be able to sync, there has to be at least one archival node in the network that can provide historical data. We plan to add snapshot syncing to remove this constraint.
->
-
-## Emerald Storage overview
-
-In order to provide a response to the `AppMsg::GetDecidedValue` message for height `h`, a node requires both the appropriate certificate and the corresponding payload. Payload bodies can be retrieved using the Engine API method `engine_getPayloadBodiesByRange`, which returns the transactions and withdrawals contained within a payload but does not include the remaining metadata. The `decided_block_headers` were therefore added to storage to support the syncing protocol.
-
-The `block_header` type is based on `ExecutionPayloadV3`, but with transactions and withdrawals set to empty vectors (code [ref](https://github.com/informalsystems/malaketh-layered-private/blob/main/app/src/state.rs#L524C1-L543C2)).
-
-An alternative approach would have been to use the `eth_getBlockByNumber` method and store `block_number` instead. However, since `engine_getPayloadBodiesByRange` was specifically designed for syncing purpose and allows for future batching optimizations, it was chosen instead.
 
 ## Example flow
 

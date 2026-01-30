@@ -4,19 +4,31 @@
 
 ### Reth Sync Overview
 
-When a Reth node falls behind other Reth nodes while the consensus client is not advancing, Reth continues to receive new blocks through the P2P networking layer (`crates/net/`). Other peers announce new blocks via `NewBlockHashes` and `NewBlock` messages, which Reth can then download and validate locally.
+When a Reth node falls behind other Reth nodes while the consensus layer (CL) is not advancing, Reth continues to receive new blocks through the P2P networking layer (`crates/net/`). 
+Other peers announce new blocks via `NewBlockHashes` and `NewBlock` messages, which Reth can then download and validate locally.
 
-Reth waits for a command from the consensus client through Engine API method calls before advancing the canonical chain. This ensures that the execution layer remains synchronized with the CL decided values.
+Reth waits for a command from the CL through Engine API method calls before advancing the canonical chain. 
+This ensures that the execution layer (EL) remains synchronized with the CL decided values -- the CL is the authority on what's canonical. 
 
 ### Malachite Sync Overview
 
-[Documentation](https://github.com/informalsystems/malachite/tree/main/specs/synchronization)
+[ValueSync](https://github.com/informalsystems/malachite/tree/main/specs/synchronization) is a protocol that runs alongside consensus to help nodes catch up when they fall behind. 
+It operates as a client-server system where each node runs both roles simultaneously.
 
-When a node is behind on the consensus layer, Malachite triggers the sync protocol.
+**How it works**:
 
-The peer node receives an `AppMsg::GetDecidedValue` message in the host app (Emerald).
+- **Height announcements** — Servers periodically broadcast their current consensus height to the network.
+- **Gap detection** — Clients compare their local height against announced remote heights.
+- **Request missing data** — When a client detects it's behind, it requests the missing height(s) from peers.
+- **Serve from store** — The server retrieves the decided value and commit certificate from its local store and sends them back.
+- **Deliver to consensus** — The client passes the synced data to the consensus layer, which processes it identically to data received through normal consensus operations.
 
-The receiving node processes the message and returns a response, which the requesting node then handles via `AppMsg::ProcessSyncedValue`.
+When using Malachite's Channel API, ValueSync interacts with the application through two operations:
+
+- `GetDecidedValue` — Malachite requests a previously decided value from the application's storage (used by the server to fulfill sync requests)
+- `ProcessSyncedValue` — Malachite notifies the application that a value has been synced from the network (used by the client to deliver received data)
+
+This design keeps syncing logic separate from consensus while reusing the same validation and commitment paths, i.e, a synced block goes through the same checks as a block decided in real-time.
 
 ### Emerald Sync Overview
 

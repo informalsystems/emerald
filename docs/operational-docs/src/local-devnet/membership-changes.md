@@ -111,7 +111,7 @@ To remove a validator from the active set:
 
 ```bash
 cargo run --bin emerald-utils poa -r http://127.0.0.1:8645 remove-validator \
-  --validator-pubkey 0x04681eaaa34e491e6c8335abc9ea92b024ef52eb91442ca3b84598c79a79f31b75... \
+  --validator-identifier 0x04681eaaa34e491e6c8335abc9ea92b024ef52eb91442ca3b84598c79a79f31b75... \
   --owner-private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ```
 
@@ -121,7 +121,7 @@ To change a validator's voting weight:
 
 ```bash
 cargo run --bin emerald-utils poa -r http://127.0.0.1:8645 update-validator \
-  --validator-pubkey 0x04681eaaa34e491e6c8335abc9ea92b024ef52eb91442ca3b84598c79a79f31b75... \
+  --validator-identifier 0x04681eaaa34e491e6c8335abc9ea92b024ef52eb91442ca3b84598c79a79f31b75... \
   --power 200 \
   --owner-private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ```

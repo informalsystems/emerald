@@ -18,13 +18,13 @@ use alloy_rpc_types_engine::{
 };
 use caches::lru::AdaptiveCache;
 use caches::Cache;
-use commonware_consensus::marshal::ingress::mailbox::AncestorStream;
+use commonware_consensus::marshal::ingress::mailbox::{AncestorStream, Mailbox};
 use commonware_consensus::marshal::Update;
 use commonware_consensus::simplex::types::{Activity, Context};
 use commonware_consensus::types::Height;
 use commonware_consensus::{Heightable, Reporter};
 use commonware_cryptography::sha256::Digest;
-use commonware_cryptography::{Digestible, Hasher, Sha256};
+use commonware_cryptography::{Committable, Digestible, Hasher, Sha256};
 use commonware_p2p::authenticated::discovery::Oracle;
 use commonware_p2p::Manager;
 use commonware_runtime::{Clock, Metrics, Spawner};
@@ -89,19 +89,16 @@ impl ValidatedPayloadCache {
 /// - EL forkchoice_updated is called with block.execution_hash() directly
 /// - Heights are sufficient for early-exit optimizations in verify()
 pub struct EvmState {
-    /// Height of the last finalized block.
-    pub finalized_height: Height,
-    /// Timestamp (in seconds) of last finalized EVM block, used to enforce minimum block time.
-    pub last_block_timestamp: u64,
+    /// Last finalized block, used for height/timestamp tracking.
+    pub finalized_block: Block,
     /// Cache for validated payloads.
     pub validated_cache: ValidatedPayloadCache,
 }
 
 impl EvmState {
-    pub fn new(finalized_height: Height, last_block_timestamp: u64) -> Self {
+    pub fn new(finalized_block: Block) -> Self {
         Self {
-            finalized_height,
-            last_block_timestamp,
+            finalized_block,
             validated_cache: ValidatedPayloadCache::new(VALIDATED_PAYLOAD_CACHE_SIZE),
         }
     }
@@ -123,6 +120,8 @@ pub struct Application {
     osaka_time: Option<u64>,
     /// P2P oracle for updating authorized peers on validator set changes.
     oracle: Oracle<PublicKey>,
+    /// Mailbox for fetching finalized ancestry via marshal.
+    marshal_mailbox: Mailbox<Scheme, Block>,
 }
 
 /// Reporter that logs consensus activity and forwards to inner reporter.
@@ -224,6 +223,7 @@ impl Application {
         fee_recipient: Address,
         min_block_time: Duration,
         oracle: Oracle<PublicKey>,
+        marshal_mailbox: Mailbox<Scheme, Block>,
     ) -> Self {
         let genesis_execution_block = engine
             .get_genesis_block()
@@ -234,7 +234,7 @@ impl Application {
         let genesis_block =
             Block::new(Sha256::hash(GENESIS_PARENT_MESSAGE), genesis_execution_data);
 
-        let state = EvmState::new(genesis_block.height(), genesis_block.timestamp);
+        let state = EvmState::new(genesis_block.clone());
 
         Self {
             genesis_block,
@@ -246,6 +246,7 @@ impl Application {
             prague_time: Some(0), // Prague enabled from genesis by default
             osaka_time: None,     // Osaka disabled by default
             oracle,
+            marshal_mailbox,
         }
     }
 
@@ -394,7 +395,7 @@ impl Application {
         let finalized_height = block.height();
         let previously_finalized_height = {
             let state = self.state.read().await;
-            state.finalized_height
+            state.finalized_block.height()
         };
 
         if finalized_height <= previously_finalized_height {
@@ -477,7 +478,7 @@ impl Application {
         {
             let mut state = self.state.write().await;
 
-            state.finalized_height = finalized_height;
+            state.finalized_block = block.clone();
         }
 
         // TODO: Dynamic validator set updates
@@ -740,7 +741,7 @@ where
         {
             let last_timestamp_secs = {
                 let state = self.state.read().await;
-                state.last_block_timestamp
+                state.finalized_block.timestamp
             };
             let min_next_timestamp = last_timestamp_secs + self.min_block_time.as_secs();
             let current_secs = runtime_context.current().epoch_millis() / 1000;
@@ -1015,31 +1016,49 @@ impl Reporter for Application {
                 }
             };
 
-            if height > evm_latest {
+            let expected_evm_height = height.previous().unwrap_or_else(Height::zero);
+            if evm_latest < expected_evm_height {
                 warn!(
                     finalized_height = %height,
                     evm_height = %evm_latest,
-                    "EVM is behind finalized height - replaying block in report"
+                    "EVM is behind finalized height - replaying missing blocks"
                 );
 
-                let replay_result = self
-                    .replay_missing_blocks(core::slice::from_ref(&block))
-                    .await;
-                if replay_result.is_none() {
-                    warn!(height = %height, "Failed to replay finalized block in report");
+                let start_commitment = {
+                    let state = self.state.read().await;
+                    state.finalized_block.commitment()
+                };
+
+                // NOTE: doesn't really work. The old commitment is not in the mailbox any more.
+                if let Some(mut ancestry) = self
+                    .marshal_mailbox
+                    .clone()
+                    .ancestry((None, start_commitment))
+                    .await
+                {
+                    let mut blocks_to_replay = Vec::new();
+                    while let Some(ancestor) = ancestry.next().await {
+                        if ancestor.height() <= evm_latest {
+                            break;
+                        }
+                        blocks_to_replay.push(ancestor);
+                    }
+
+                    if blocks_to_replay.is_empty() {
+                        debug!(height = %height, "No blocks to replay in report");
+                    } else {
+                        let replay_result = self.replay_missing_blocks(&blocks_to_replay).await;
+                        if replay_result.is_none() {
+                            warn!(height = %height, "Failed to replay finalized blocks in report");
+                        }
+                    }
+                } else {
+                    warn!(height = %height, "Failed to resolve ancestry for replay");
                 }
             }
 
             // Update finalized state first
             self.on_finalized(&block).await;
-
-            // Update last block timestamp for min_block_time enforcement in propose()
-            // Use the EVM block's timestamp
-            if let Some(payload) = block.payload() {
-                let block_timestamp = payload.payload_inner.payload_inner.timestamp;
-                let mut state = self.state.write().await;
-                state.last_block_timestamp = block_timestamp;
-            }
 
             ack_rx.acknowledge();
 

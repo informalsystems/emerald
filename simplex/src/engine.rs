@@ -275,6 +275,7 @@ impl<
             cfg.fee_recipient,
             cfg.min_block_time,
             cfg.oracle,
+            marshal_mailbox.clone(),
         )
         .await;
         let marshaled = Marshaled::new(

@@ -1,8 +1,12 @@
 //! Block type for simplex consensus with EVM execution.
 
+use core::mem;
+
+use alloy_consensus::Header as ConsensusHeader;
 use alloy_primitives::B256;
+use alloy_rlp::{Decodable, Encodable};
 use alloy_rpc_types_engine::ExecutionPayloadV3;
-use alloy_rpc_types_eth::Block as RpcBlock;
+use alloy_rpc_types_eth::Header;
 use bytes::{Buf, BufMut};
 use commonware_codec::varint::UInt;
 use commonware_codec::{EncodeSize, Error, Read, ReadExt, Write};
@@ -11,32 +15,6 @@ use commonware_consensus::Heightable;
 use commonware_cryptography::sha256::Digest;
 use commonware_cryptography::{Committable, Digestible, Hasher, Sha256};
 use ssz::{Decode, Encode};
-
-/// Execution block hash from the EVM execution layer.
-pub type ExecutionHash = B256;
-
-/// Minimal execution block data used by simplex consensus.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ExecutionBlock {
-    pub block_hash: B256,
-    pub block_number: u64,
-    pub parent_hash: B256,
-    pub timestamp: u64,
-    pub prev_randao: B256,
-}
-
-impl ExecutionBlock {
-    pub fn from_rpc_block(block: RpcBlock) -> Self {
-        let header = block.header;
-        Self {
-            block_hash: header.hash,
-            block_number: header.inner.number,
-            parent_hash: header.inner.parent_hash,
-            timestamp: header.inner.timestamp,
-            prev_randao: header.inner.mix_hash,
-        }
-    }
-}
 
 /// Block for simplex consensus with EVM execution.
 #[derive(Clone, Debug, PartialEq)]
@@ -47,25 +25,30 @@ pub struct Block {
     /// The height of the block in the blockchain.
     pub height: Height,
 
-    /// The timestamp of the block (in milliseconds since the Unix epoch).
+    /// The timestamp of the block (in seconds since the Unix epoch).
     pub timestamp: u64,
 
-    /// EVM execution fields.
-    evm: EvmFields,
+    /// Execution data (header/hash with optional payload).
+    execution_data: ExecutionData,
 
     /// Pre-computed digest of the block.
     digest: Digest,
 }
 
-/// EVM-specific fields in the block.
+/// Execution data retained by the consensus block.
 #[derive(Clone, Debug, PartialEq)]
-pub struct EvmFields {
-    /// Execution block data from the EVM execution layer.
-    pub execution_block: ExecutionBlock,
+pub enum ExecutionData {
+    Genesis { header: ConsensusHeader, hash: B256 },
+    Payload { payload: ExecutionPayloadV3 },
+}
 
-    /// The full execution payload (optional).
-    /// Included in proposals for verification, can be dropped after finalization.
-    pub execution_payload: Option<ExecutionPayloadV3>,
+impl ExecutionData {
+    pub fn from_rpc_header(header: Header) -> Self {
+        Self::Genesis {
+            header: header.inner,
+            hash: header.hash,
+        }
+    }
 }
 
 impl Block {
@@ -73,7 +56,7 @@ impl Block {
         parent: &Digest,
         height: Height,
         timestamp: u64,
-        execution_hash: &ExecutionHash,
+        execution_hash: &B256,
     ) -> Digest {
         let mut hasher = Sha256::new();
         hasher.update(parent);
@@ -84,73 +67,84 @@ impl Block {
     }
 
     /// Create a new block without execution payload.
-    pub fn new(
-        parent: Digest,
-        height: Height,
-        timestamp: u64,
-        execution_block: ExecutionBlock,
-    ) -> Self {
-        let digest = Self::compute_digest(&parent, height, timestamp, &execution_block.block_hash);
+    pub fn new(parent: Digest, execution_data: ExecutionData) -> Self {
+        let (height, timestamp, execution_hash) = match &execution_data {
+            ExecutionData::Genesis { header, hash } => {
+                let height = Height::new(header.number);
+                let timestamp = header.timestamp;
+                (height, timestamp, *hash)
+            }
+            ExecutionData::Payload { payload } => {
+                let payload_inner = &payload.payload_inner.payload_inner;
+                let height = Height::new(payload_inner.block_number);
+                let timestamp = payload_inner.timestamp;
+                (height, timestamp, payload_inner.block_hash)
+            }
+        };
+        let digest = Self::compute_digest(&parent, height, timestamp, &execution_hash);
         Self {
             parent,
             height,
             timestamp,
-            evm: EvmFields {
-                execution_block,
-                execution_payload: None,
-            },
+            execution_data,
             digest,
         }
     }
 
     /// Create a new block with execution payload.
     pub fn new_with_payload(parent: Digest, execution_payload: ExecutionPayloadV3) -> Self {
-        let payload_inner = &execution_payload.payload_inner.payload_inner;
-        let height = Height::new(payload_inner.block_number);
-        let timestamp = payload_inner.timestamp.saturating_mul(1_000);
-        let execution_block = ExecutionBlock {
-            block_hash: payload_inner.block_hash,
-            block_number: payload_inner.block_number,
-            parent_hash: payload_inner.parent_hash,
-            timestamp: payload_inner.timestamp,
-            prev_randao: payload_inner.prev_randao,
+        let execution_data = ExecutionData::Payload {
+            payload: execution_payload,
         };
-        let digest = Self::compute_digest(&parent, height, timestamp, &execution_block.block_hash);
-        Self {
-            parent,
-            height,
-            timestamp,
-            evm: EvmFields {
-                execution_block,
-                execution_payload: Some(execution_payload),
-            },
-            digest,
-        }
+        Self::new(parent, execution_data)
     }
 
     /// Get the execution payload, if present.
     pub fn payload(&self) -> Option<&ExecutionPayloadV3> {
-        self.evm.execution_payload.as_ref()
+        match &self.execution_data {
+            ExecutionData::Payload { payload } => Some(payload),
+            ExecutionData::Genesis { .. } => None,
+        }
     }
 
     /// Take the execution payload out of the block.
     pub fn take_payload(&mut self) -> Option<ExecutionPayloadV3> {
-        self.evm.execution_payload.take()
+        match mem::replace(
+            &mut self.execution_data,
+            ExecutionData::Genesis {
+                header: ConsensusHeader::default(),
+                hash: B256::ZERO,
+            },
+        ) {
+            ExecutionData::Payload { payload } => Some(payload),
+            ExecutionData::Genesis { header, hash } => {
+                self.execution_data = ExecutionData::Genesis { header, hash };
+                None
+            }
+        }
     }
 
     /// Get the execution hash.
-    pub fn execution_hash(&self) -> ExecutionHash {
-        self.evm.execution_block.block_hash
+    pub fn execution_hash(&self) -> B256 {
+        match &self.execution_data {
+            ExecutionData::Genesis { hash, .. } => *hash,
+            ExecutionData::Payload { payload } => payload.payload_inner.payload_inner.block_hash,
+        }
     }
 
     /// Get the parent execution hash.
-    pub fn parent_execution_hash(&self) -> ExecutionHash {
-        self.evm.execution_block.parent_hash
+    pub fn parent_execution_hash(&self) -> B256 {
+        match &self.execution_data {
+            ExecutionData::Genesis { header, .. } => header.parent_hash,
+            ExecutionData::Payload { payload } => payload.payload_inner.payload_inner.parent_hash,
+        }
     }
 
-    /// Get the execution block.
-    pub fn execution_block(&self) -> &ExecutionBlock {
-        &self.evm.execution_block
+    pub fn prev_randao(&self) -> B256 {
+        match &self.execution_data {
+            ExecutionData::Genesis { header, .. } => header.mix_hash,
+            ExecutionData::Payload { payload } => payload.payload_inner.payload_inner.prev_randao,
+        }
     }
 }
 
@@ -159,21 +153,19 @@ impl Write for Block {
         self.parent.write(writer);
         self.height.write(writer);
         UInt(self.timestamp).write(writer);
-        writer.put_slice(self.evm.execution_block.block_hash.as_slice());
-        writer.put_slice(self.evm.execution_block.parent_hash.as_slice());
-        writer.put_slice(self.evm.execution_block.prev_randao.as_slice());
-        UInt(self.evm.execution_block.block_number).write(writer);
-        UInt(self.evm.execution_block.timestamp).write(writer);
-
-        match &self.evm.execution_payload {
-            Some(payload) => {
+        match &self.execution_data {
+            ExecutionData::Genesis { header, hash } => {
+                writer.put_u8(0);
+                writer.put_slice(hash.as_slice());
+                let header_len = header.length();
+                UInt(header_len as u64).write(writer);
+                header.encode(writer);
+            }
+            ExecutionData::Payload { payload } => {
                 writer.put_u8(1);
                 let ssz_bytes = payload.as_ssz_bytes();
                 UInt(ssz_bytes.len() as u64).write(writer);
                 writer.put_slice(&ssz_bytes);
-            }
-            None => {
-                writer.put_u8(0);
             }
         }
     }
@@ -187,24 +179,36 @@ impl Read for Block {
         let height = Height::read(reader)?;
         let timestamp = UInt::read(reader)?.into();
 
-        if reader.remaining() < 96 {
+        if reader.remaining() < 1 {
             return Err(Error::EndOfBuffer);
         }
-        let mut exec_hash = [0u8; 32];
-        reader.copy_to_slice(&mut exec_hash);
-        let execution_hash = B256::from(exec_hash);
-        let mut parent_exec_hash = [0u8; 32];
-        reader.copy_to_slice(&mut parent_exec_hash);
-        let parent_execution_hash = B256::from(parent_exec_hash);
-        let mut prev_randao_bytes = [0u8; 32];
-        reader.copy_to_slice(&mut prev_randao_bytes);
-        let prev_randao = B256::from(prev_randao_bytes);
-        let block_number = UInt::read(reader)?.into();
-        let exec_timestamp = UInt::read(reader)?.into();
 
-        let execution_payload = if reader.remaining() >= 1 {
-            let marker = reader.get_u8();
-            if marker == 1 {
+        let tag = reader.get_u8();
+        let execution_data = match tag {
+            0 => {
+                if reader.remaining() < 32 {
+                    return Err(Error::EndOfBuffer);
+                }
+                let mut exec_hash = [0u8; 32];
+                reader.copy_to_slice(&mut exec_hash);
+                let execution_hash = B256::from(exec_hash);
+
+                let header_len: u64 = UInt::read(reader)?.into();
+                let header_len = header_len as usize;
+                if reader.remaining() < header_len {
+                    return Err(Error::EndOfBuffer);
+                }
+                let mut header_bytes = vec![0u8; header_len];
+                reader.copy_to_slice(&mut header_bytes);
+                let mut header_slice = header_bytes.as_slice();
+                let header = ConsensusHeader::decode(&mut header_slice)
+                    .map_err(|_| Error::Invalid("Block", "failed to decode header"))?;
+                ExecutionData::Genesis {
+                    header,
+                    hash: execution_hash,
+                }
+            }
+            1 => {
                 let payload_len: u64 = UInt::read(reader)?.into();
                 let payload_len = payload_len as usize;
                 if reader.remaining() < payload_len {
@@ -214,31 +218,21 @@ impl Read for Block {
                 reader.copy_to_slice(&mut payload_bytes);
                 let payload = ExecutionPayloadV3::from_ssz_bytes(&payload_bytes)
                     .map_err(|_| Error::Invalid("Block", "failed to decode SSZ payload"))?;
-                Some(payload)
-            } else if marker == 0 {
-                None
-            } else {
-                return Err(Error::Invalid("Block", "invalid payload marker"));
+                ExecutionData::Payload { payload }
             }
-        } else {
-            None
+            _ => return Err(Error::Invalid("Block", "invalid execution data tag")),
         };
 
+        let execution_hash = match &execution_data {
+            ExecutionData::Genesis { hash, .. } => *hash,
+            ExecutionData::Payload { payload } => payload.payload_inner.payload_inner.block_hash,
+        };
         let digest = Self::compute_digest(&parent, height, timestamp, &execution_hash);
         Ok(Self {
             parent,
             height,
             timestamp,
-            evm: EvmFields {
-                execution_block: ExecutionBlock {
-                    block_hash: execution_hash,
-                    block_number,
-                    parent_hash: parent_execution_hash,
-                    timestamp: exec_timestamp,
-                    prev_randao,
-                },
-                execution_payload,
-            },
+            execution_data,
             digest,
         })
     }
@@ -249,15 +243,17 @@ impl EncodeSize for Block {
         let mut size = self.parent.encode_size()
             + self.height.encode_size()
             + UInt(self.timestamp).encode_size()
-            + 96
-            + UInt(self.evm.execution_block.block_number).encode_size()
-            + UInt(self.evm.execution_block.timestamp).encode_size();
+            + 1;
 
-        size += 1;
-        if let Some(payload) = &self.evm.execution_payload {
-            let ssz_len = payload.ssz_bytes_len();
-            size += UInt(ssz_len as u64).encode_size();
-            size += ssz_len;
+        match &self.execution_data {
+            ExecutionData::Genesis { header, .. } => {
+                let header_len = header.length();
+                size += 32 + UInt(header_len as u64).encode_size() + header_len;
+            }
+            ExecutionData::Payload { payload } => {
+                let ssz_len = payload.ssz_bytes_len();
+                size += UInt(ssz_len as u64).encode_size() + ssz_len;
+            }
         }
 
         size

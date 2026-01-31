@@ -10,10 +10,9 @@ use alloy_rpc_types_engine::{
     ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, JwtSecret, PayloadAttributes,
     PayloadId, PayloadStatus,
 };
+use alloy_rpc_types_eth::Block;
 use alloy_transport_http::{AuthLayer, Http, HyperClient};
 use url::Url;
-
-use crate::block::ExecutionBlock;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Fork {
@@ -44,7 +43,7 @@ impl EngineClient {
     }
 
     // Fetch the genesis execution block via eth_getBlockByNumber(earliest).
-    pub async fn get_genesis_block(&self) -> Result<ExecutionBlock, String> {
+    pub async fn get_genesis_block(&self) -> Result<Block, String> {
         let block = self
             .eth
             .get_block_by_number(BlockNumberOrTag::Earliest)
@@ -52,7 +51,7 @@ impl EngineClient {
             .map_err(|e| e.to_string())?
             .ok_or_else(|| "Genesis block not found in execution layer".to_string())?;
 
-        Ok(ExecutionBlock::from_rpc_block(block))
+        Ok(block)
     }
 
     // Fetch a payload built after a forkchoice update (engine_getPayloadV5).

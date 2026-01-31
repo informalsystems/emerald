@@ -35,7 +35,7 @@ use rand::Rng;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-use crate::block::Block;
+use crate::block::{Block, ExecutionData};
 use crate::consensus::{PublicKey, Scheme};
 use crate::execution_engine::{EngineClient, Fork};
 
@@ -43,8 +43,8 @@ use crate::execution_engine::{EngineClient, Fork};
 /// Since the genesis block has no actual parent, this deterministic value is used.
 const GENESIS_PARENT_MESSAGE: &[u8] = b"emerald-simplex genesis";
 
-/// Milliseconds in the future allowed for block timestamps.
-const SYNCHRONY_BOUND: u64 = 2_000;
+/// Seconds in the future allowed for block timestamps.
+const SYNCHRONY_BOUND: u64 = 2;
 
 /// Maximum cache size for validated payloads.
 /// Aligned with emerald's cache size for consistency.
@@ -230,12 +230,9 @@ impl Application {
             .await
             .expect("Failed to fetch genesis block from execution layer");
 
-        let genesis_block = Block::new(
-            Sha256::hash(GENESIS_PARENT_MESSAGE),
-            Height::new(genesis_execution_block.block_number),
-            genesis_execution_block.timestamp.saturating_mul(1_000),
-            genesis_execution_block,
-        );
+        let genesis_execution_data = ExecutionData::from_rpc_header(genesis_execution_block.header);
+        let genesis_block =
+            Block::new(Sha256::hash(GENESIS_PARENT_MESSAGE), genesis_execution_data);
 
         Self {
             genesis_block,
@@ -786,24 +783,22 @@ where
             }
         }
 
-        let mut current_time_millis = runtime_context.current().epoch_millis();
-        let mut current_time_secs = current_time_millis / 1000;
+        let mut current_time_secs = runtime_context.current().epoch_millis() / 1000;
         let parent_el_timestamp_secs = parent
             .payload()
             .map(|p| p.payload_inner.payload_inner.timestamp)
             .unwrap_or(0);
 
         if current_time_secs <= parent_el_timestamp_secs {
-            let target_millis = parent_el_timestamp_secs.saturating_add(1) * 1000;
-            let sleep_for = target_millis.saturating_sub(current_time_millis);
+            let target_secs = parent_el_timestamp_secs.saturating_add(1);
+            let sleep_for = target_secs.saturating_sub(current_time_secs);
             if sleep_for > 0 {
                 debug!(
                     ?sleep_for,
                     parent_el_timestamp_secs, "Waiting for wall clock to reach next EL timestamp"
                 );
-                tokio::time::sleep(Duration::from_millis(sleep_for)).await;
-                current_time_millis = runtime_context.current().epoch_millis();
-                current_time_secs = current_time_millis / 1000;
+                tokio::time::sleep(Duration::from_secs(sleep_for)).await;
+                current_time_secs = runtime_context.current().epoch_millis() / 1000;
             }
         }
 
@@ -819,10 +814,10 @@ where
             );
         }
 
-        let current = el_timestamp * 1000; // consensus timestamp in ms
+        let current = el_timestamp;
 
         // Use prev_randao from the execution parent block
-        let prev_randao = parent.execution_block().prev_randao;
+        let prev_randao = parent.prev_randao();
 
         // Convert fee recipient to emerald Address type
         let parent_hash = parent_execution_hash;
@@ -872,10 +867,10 @@ where
                     }
                 }
 
-                let payload_timestamp_ms = payload.timestamp().saturating_mul(1000);
-                if payload_timestamp_ms != current {
+                let payload_timestamp = payload.timestamp();
+                if payload_timestamp != current {
                     debug!(
-                        payload_timestamp = payload.timestamp(),
+                        payload_timestamp,
                         block_timestamp = current,
                         "Adjusting block timestamp to match payload"
                     );
@@ -985,7 +980,7 @@ where
         // Check timestamp is not too far in the future (synchrony bound)
         // Note: We don't sleep in verify() - if timestamp is beyond synchrony bound, reject.
         // The MIN_BLOCK_TIME enforcement happens in report() after finalization.
-        let current = runtime_context.current().epoch_millis();
+        let current = runtime_context.current().epoch_millis() / 1000;
         if block.timestamp > current + SYNCHRONY_BOUND {
             warn!(
                 height = %block.height(),
@@ -1021,7 +1016,7 @@ where
 
         // Verify payload timestamp matches block timestamp
         let payload_timestamp = execution_payload.timestamp();
-        if payload_timestamp.saturating_mul(1000) != block.timestamp {
+        if payload_timestamp != block.timestamp {
             warn!(
                 height = %block.height(),
                 payload_timestamp,

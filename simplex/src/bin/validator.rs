@@ -241,8 +241,13 @@ fn main() {
 
         // Create Engine API client
         let engine_url = Url::parse(&engine_api_url).expect("Invalid engine_api_url");
-        let eth_url_str = engine_api_url.replace("8551", "8545"); // Assume standard port offset
-        let eth_url = Url::parse(&eth_url_str).expect("Invalid eth RPC URL");
+        let eth_url = {
+            let mut eth_url = engine_url.clone();
+            eth_url
+                .set_port(Some(8545))
+                .expect("Failed to set eth RPC port");
+            eth_url
+        };
 
         // Use JWT directly from the path specified in config - no need to rewrite
         let jwt_path = PathBuf::from(&emerald.jwt_token_path);

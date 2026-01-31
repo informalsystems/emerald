@@ -861,6 +861,8 @@ async function startDevnet(options: {
   const numValidators = options.validators ?? DEFAULT_VALIDATORS;
   const projectName = getProjectName();
 
+  await stopDevnetIfRunning();
+
   // Clean up if requested
   if (options.clean) {
     consola.start("Cleaning up previous run...");
@@ -1037,6 +1039,18 @@ async function stopDevnet(): Promise<void> {
   consola.start("Stopping devnet...");
   await dockerCompose(["down"], runDir, { projectName });
   consola.info("Devnet stopped");
+}
+
+async function stopDevnetIfRunning(): Promise<void> {
+  const scriptDir = getScriptDir();
+  const runDir = await getLatestRunDir(scriptDir);
+  const projectName = getProjectName();
+
+  if (!runDir) {
+    return;
+  }
+
+  await dockerCompose(["down"], runDir, { projectName });
 }
 
 // Clean command

@@ -132,7 +132,7 @@ pub struct ConsensusReporter<R> {
 }
 
 impl<R> ConsensusReporter<R> {
-    pub fn new(inner: R) -> Self {
+    pub const fn new(inner: R) -> Self {
         Self { inner }
     }
 }
@@ -248,7 +248,7 @@ impl Application {
     }
 
     /// Create a new EVM application with custom retry configuration.
-    pub fn with_retry_config(mut self, retry_config: RetryConfig) -> Self {
+    pub const fn with_retry_config(mut self, retry_config: RetryConfig) -> Self {
         self.retry_config = retry_config;
         self
     }
@@ -271,7 +271,7 @@ impl Application {
     }
 
     /// Update safe/head forkchoice for a notarized block.
-    pub async fn on_notarized(&self, block: &Block) {
+    pub fn on_notarized(&self, block: &Block) {
         let _ = block;
     }
 
@@ -705,7 +705,7 @@ impl Application {
     }
 
     /// Check if payload includes blob data (unsupported without versioned hashes).
-    fn payload_has_blobs(payload: &ExecutionPayloadV3) -> bool {
+    const fn payload_has_blobs(payload: &ExecutionPayloadV3) -> bool {
         payload.blob_gas_used != 0 || payload.excess_blob_gas != 0
     }
 }
@@ -741,8 +741,10 @@ where
         // Block time defines how long a transaction needs to wait to be included in a proposal block.
         // We wait to allow the mempool to fill up with transactions to include in the proposed block.
         {
-            let state = self.state.read().await;
-            let last_timestamp_secs = state.last_block_timestamp;
+            let last_timestamp_secs = {
+                let state = self.state.read().await;
+                state.last_block_timestamp
+            };
             let min_next_timestamp = last_timestamp_secs + self.min_block_time.as_secs();
             let current_secs = runtime_context.current().epoch_millis() / 1000;
             if current_secs < min_next_timestamp {
@@ -756,8 +758,7 @@ where
         let mut current_time_secs = runtime_context.current().epoch_millis() / 1000;
         let parent_el_timestamp_secs = parent
             .payload()
-            .map(|p| p.payload_inner.payload_inner.timestamp)
-            .unwrap_or(0);
+            .map_or(0, |p| p.payload_inner.payload_inner.timestamp);
 
         if current_time_secs <= parent_el_timestamp_secs {
             let target_secs = parent_el_timestamp_secs.saturating_add(1);
@@ -803,74 +804,70 @@ where
             )
             .await;
 
-        match payload_result {
-            Some(payload) => {
-                if Self::payload_has_blobs(&payload) {
-                    error!("Payload includes blobs but versioned hashes not supported");
-                    return None;
-                }
+        if let Some(payload) = payload_result {
+            if Self::payload_has_blobs(&payload) {
+                error!("Payload includes blobs but versioned hashes not supported");
+                return None;
+            }
 
-                let payload_parent_hash = payload.payload_inner.payload_inner.parent_hash;
-                if payload_parent_hash != parent_execution_hash {
-                    error!(
-                        ?payload_parent_hash,
-                        ?parent_execution_hash,
-                        "Payload parent hash mismatch"
-                    );
-                    return None;
-                }
-
-                // Import the payload with retry
-                let import_result = self
-                    .new_payload_v4_with_retry(payload.clone(), vec![], parent_hash)
-                    .await;
-
-                match import_result {
-                    Ok(status) if matches!(status.status, PayloadStatusEnum::Valid) => {}
-                    Ok(status) => {
-                        error!(?status, "newPayload returned non-valid status after build");
-                        return None;
-                    }
-                    Err(e) => {
-                        error!(?e, "Failed to import payload via newPayload");
-                        return None;
-                    }
-                }
-
-                let payload_timestamp = payload.timestamp();
-                if payload_timestamp != current {
-                    debug!(
-                        payload_timestamp,
-                        block_timestamp = current,
-                        "Adjusting block timestamp to match payload"
-                    );
-                }
-
-                let block = Block::new_with_payload(parent_digest, payload);
-                let exec_hash = block.execution_hash();
-
-                // Cache as valid since we just built it
-                {
-                    let mut state = self.state.write().await;
-                    state.validated_cache.insert(exec_hash, Validity::Valid);
-                }
-
-                info!(
-                    height = %block.height(),
-                    exec_hash = %exec_hash,
-                    txs = block
-                        .payload()
-                        .map(|p| p.payload_inner.payload_inner.transactions.len())
-                        .unwrap_or(0),
-                    "Proposed EVM block"
+            let payload_parent_hash = payload.payload_inner.payload_inner.parent_hash;
+            if payload_parent_hash != parent_execution_hash {
+                error!(
+                    ?payload_parent_hash,
+                    ?parent_execution_hash,
+                    "Payload parent hash mismatch"
                 );
+                return None;
+            }
 
-                Some(block)
+            // Import the payload with retry
+            let import_result = self
+                .new_payload_v4_with_retry(payload.clone(), vec![], parent_hash)
+                .await;
+
+            match import_result {
+                Ok(status) if matches!(status.status, PayloadStatusEnum::Valid) => {}
+                Ok(status) => {
+                    error!(?status, "newPayload returned non-valid status after build");
+                    return None;
+                }
+                Err(e) => {
+                    error!(?e, "Failed to import payload via newPayload");
+                    return None;
+                }
             }
-            None => {
-                error!("Failed to build execution payload");
-                None
+
+            let payload_timestamp = payload.timestamp();
+            if payload_timestamp != current {
+                debug!(
+                    payload_timestamp,
+                    block_timestamp = current,
+                    "Adjusting block timestamp to match payload"
+                );
             }
+
+            let block = Block::new_with_payload(parent_digest, payload);
+            let exec_hash = block.execution_hash();
+
+            // Cache as valid since we just built it
+            {
+                let mut state = self.state.write().await;
+                state.validated_cache.insert(exec_hash, Validity::Valid);
+            }
+
+            info!(
+                height = %block.height(),
+                exec_hash = %exec_hash,
+                txs = block
+                    .payload()
+                    .map_or(0, |p| p.payload_inner.payload_inner.transactions.len()),
+                "Proposed EVM block"
+            );
+
+            Some(block)
+        } else {
+            error!("Failed to build execution payload");
+            None
         }
     }
 }

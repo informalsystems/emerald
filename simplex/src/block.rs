@@ -174,7 +174,7 @@ impl Write for Block {
 impl Read for Block {
     type Cfg = ();
 
-    fn read_cfg(reader: &mut impl Buf, _: &Self::Cfg) -> Result<Self, Error> {
+    fn read_cfg(reader: &mut impl Buf, (): &Self::Cfg) -> Result<Self, Error> {
         let parent = Digest::read(reader)?;
         let height = Height::read(reader)?;
         let timestamp = UInt::read(reader)?.into();
@@ -194,7 +194,8 @@ impl Read for Block {
                 let execution_hash = B256::from(exec_hash);
 
                 let header_len: u64 = UInt::read(reader)?.into();
-                let header_len = header_len as usize;
+                let header_len = usize::try_from(header_len)
+                    .map_err(|_| Error::Invalid("Block", "header length overflow"))?;
                 if reader.remaining() < header_len {
                     return Err(Error::EndOfBuffer);
                 }
@@ -210,7 +211,8 @@ impl Read for Block {
             }
             1 => {
                 let payload_len: u64 = UInt::read(reader)?.into();
-                let payload_len = payload_len as usize;
+                let payload_len = usize::try_from(payload_len)
+                    .map_err(|_| Error::Invalid("Block", "payload length overflow"))?;
                 if reader.remaining() < payload_len {
                     return Err(Error::EndOfBuffer);
                 }

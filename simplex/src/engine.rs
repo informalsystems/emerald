@@ -98,9 +98,17 @@ pub struct Config<B: Blocker<PublicKey = PublicKey>, S: Strategy> {
 }
 
 type Marshaled<E> = ConsensusMarshaled<E, Scheme, Application, Block, FixedEpocher>;
+type MarshalActor<E, S> = marshal::Actor<
+    E,
+    Block,
+    ConstantProvider<Scheme, Epoch>,
+    immutable::Archive<E, Digest, Finalization>,
+    immutable::Archive<E, Digest, Block>,
+    FixedEpocher,
+    S,
+>;
 
 /// The simplex engine that drives the [Application].
-#[allow(clippy::type_complexity)]
 pub struct Engine<
     E: Clock + GClock + Rng + CryptoRng + Spawner + Storage + Metrics,
     B: Blocker<PublicKey = PublicKey>,
@@ -110,15 +118,7 @@ pub struct Engine<
 
     buffer: buffered::Engine<E, PublicKey, Block>,
     buffer_mailbox: buffered::Mailbox<PublicKey, Block>,
-    marshal: marshal::Actor<
-        E,
-        Block,
-        ConstantProvider<Scheme, Epoch>,
-        immutable::Archive<E, Digest, Finalization>,
-        immutable::Archive<E, Digest, Block>,
-        FixedEpocher,
-        S,
-    >,
+    marshal: MarshalActor<E, S>,
     marshaled: Marshaled<E>,
 
     consensus:
@@ -326,7 +326,6 @@ impl<
     }
 
     /// Start the simplex [Engine].
-    #[allow(clippy::too_many_arguments)]
     pub fn start(
         mut self,
         pending: (
@@ -357,7 +356,6 @@ impl<
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     async fn run(
         self,
         pending: (

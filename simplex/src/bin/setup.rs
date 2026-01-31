@@ -7,7 +7,7 @@ use core::net::{IpAddr, Ipv4Addr, SocketAddr};
 use core::time::Duration;
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use alloy_primitives::Address;
 use alloy_rpc_types_engine::JwtSecret;
@@ -19,6 +19,7 @@ use commonware_math::algebra::Random;
 use commonware_utils::{from_hex_formatted, hex};
 use emerald_simplex::config::{Peers, SimplexConfig, SimplexConfigFile};
 use malachitebft_eth_cli::config::{ElNodeType, EmeraldConfig};
+use malachitebft_eth_types::RetryConfig;
 use rand::rngs::OsRng;
 
 /// Emerald Simplex setup tool.
@@ -77,8 +78,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 output,
                 base_port,
                 base_engine_port,
-                fee_recipient,
-                eth_genesis_path,
+                &fee_recipient,
+                &eth_genesis_path,
             )?;
         }
     }
@@ -91,8 +92,8 @@ fn generate_testnet(
     output: PathBuf,
     base_port: u16,
     base_engine_port: u16,
-    fee_recipient: String,
-    eth_genesis_path: PathBuf,
+    fee_recipient: &str,
+    eth_genesis_path: &Path,
 ) -> Result<(), Box<dyn Error>> {
     println!("Generating testnet with {n} validators...");
 
@@ -129,7 +130,7 @@ fn generate_testnet(
     // Generate peers file
     let mut port = base_port;
     let mut addresses = HashMap::new();
-    for signer in peer_signers.iter() {
+    for signer in &peer_signers {
         let name = hex(&signer.public_key().encode());
         addresses.insert(name, SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port));
         port += 2;
@@ -140,7 +141,7 @@ fn generate_testnet(
     fs::write(&peers_path, serde_yaml::to_string(&peers)?)?;
     println!("  Wrote peers file: {}", peers_path.display());
 
-    let fee_recipient_bytes = from_hex_formatted(&fee_recipient).ok_or("Invalid fee recipient")?;
+    let fee_recipient_bytes = from_hex_formatted(fee_recipient).ok_or("Invalid fee recipient")?;
     let fee_recipient_addr = Address::from_slice(&fee_recipient_bytes);
     let base_http_port = base_engine_port.saturating_sub(6);
 
@@ -148,6 +149,7 @@ fn generate_testnet(
     port = base_port;
     for (i, signer) in peer_signers.iter().enumerate() {
         let name = format!("validator-{i}");
+        let index = u16::try_from(i).map_err(|_| "validator index overflow")?;
 
         // Create validator directories
         let validator_dir = output.join(&name);
@@ -163,17 +165,11 @@ fn generate_testnet(
 
         let emerald = EmeraldConfig {
             moniker: format!("simplex-{i}"),
-            execution_authrpc_address: format!(
-                "http://127.0.0.1:{}",
-                base_http_port + (i as u16 * 100)
-            ),
-            engine_authrpc_address: format!(
-                "http://127.0.0.1:{}",
-                base_engine_port + (i as u16 * 100)
-            ),
+            execution_authrpc_address: format!("http://127.0.0.1:{}", base_http_port + index * 100),
+            engine_authrpc_address: format!("http://127.0.0.1:{}", base_engine_port + index * 100),
             jwt_token_path: jwt_file_path.display().to_string(),
             eth_genesis_path: eth_genesis_path.display().to_string(),
-            retry_config: Default::default(),
+            retry_config: RetryConfig::default(),
             el_node_type: ElNodeType::Archive,
             max_retain_blocks: 0,
             prune_at_block_interval: 10,
@@ -209,11 +205,12 @@ fn generate_testnet(
     println!("\nTo start the testnet:");
     println!("  1. Start {n} Reth nodes with Engine API ports:");
     for i in 0..n {
+        let index = u16::try_from(i).map_err(|_| "validator index overflow")?;
         println!(
             "     - Node {}: --authrpc.port {} --http.port {}",
             i,
-            base_engine_port + (i as u16 * 100),
-            8545 + (i as u16 * 100)
+            base_engine_port + index * 100,
+            8545 + index * 100
         );
     }
     println!("  2. Start validators:");

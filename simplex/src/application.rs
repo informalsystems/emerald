@@ -313,7 +313,6 @@ impl Application {
             state.finalized_height
         };
 
-        // Apply notarized handling during finalization for now.
         if finalized_height <= previously_finalized_height {
             debug!(
                 height = %finalized_height,
@@ -351,14 +350,14 @@ impl Application {
                             Ok(status) if matches!(status.status, PayloadStatusEnum::Syncing) => {
                                 warn!(
                                     height = %finalized_height,
-                                    "EL is syncing during notarized payload import"
+                                    "EL is syncing during finalized payload import"
                                 );
                             }
                             Ok(status) => {
                                 warn!(height = %finalized_height, ?status, "Finalized payload invalid");
                             }
                             Err(e) => {
-                                warn!(height = %finalized_height, ?e, "Failed to import notarized payload");
+                                warn!(height = %finalized_height, ?e, "Failed to import finalized payload");
                             }
                         }
 

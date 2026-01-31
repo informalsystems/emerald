@@ -174,15 +174,6 @@ function generateGenesis(): object {
   };
 }
 
-// Generate random JWT secret
-function generateJwtSecret(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 // Generate docker-compose.yml dynamically
 function generateDockerCompose(
   numValidators: number,
@@ -233,8 +224,7 @@ function generateDockerCompose(
       ports: [`${httpPort}:8545`, `${authPort}:8551`, `${p2pPort}:30303`],
       volumes: [
         `./data/reth-${i}:/data`,
-        "./config/genesis.json:/config/genesis.json:ro",
-        "./config/jwt.hex:/config/jwt.hex:ro",
+        `./simplex-${i}/config:/config:ro`,
       ],
     };
 
@@ -248,8 +238,8 @@ function generateDockerCompose(
         "simplex-net": { ipv4_address: ip },
       },
       command: [
-        `--config=/config/validator-${i}.toml`,
-        "--peers=/config/peers.yaml",
+        `--config=/config/validator.toml`,
+        `--peers=/config/peers.yaml`,
       ],
       environment: [
         "RUST_LOG=info,emerald_simplex=debug",
@@ -261,7 +251,7 @@ function generateDockerCompose(
       ],
       volumes: [
         `./data/simplex-${i}:/data`,
-        "./config:/config:ro",
+        `./simplex-${i}/config:/config:ro`,
         "./logs:/logs",
       ],
       depends_on: [`reth-${i}`],
@@ -695,14 +685,12 @@ async function buildDevnet(): Promise<void> {
 // Generate validator configs
 async function generateConfigs(
   runDir: string,
-  genesisHash: string,
   numValidators: number,
   network: NetworkConfig,
 ): Promise<void> {
   consola.start("Generating simplex validator configs...");
 
   const configDir = join(runDir, "config");
-  const jwtSecret = await Deno.readTextFile(join(configDir, "jwt.hex"));
 
   // Use a temp directory name that will be created by the tool in Docker
   const tempDirName = "config-temp";
@@ -743,22 +731,47 @@ async function generateConfigs(
     "8551",
     "--fee-recipient",
     deriveAccount(0).address,
-    "--genesis-hash",
-    genesisHash,
+    "--eth-genesis-path",
+    "/output/config/genesis.json",
   ], { inherit: true });
 
   if (result.code !== 0) {
     throw new Error("Failed to generate configs");
   }
 
-  // Copy generated files from temp dir to config dir
-  for await (const entry of Deno.readDir(tempDir)) {
-    if (!entry.isFile && !entry.isSymlink) {
-      continue;
+  // Copy peers.yaml from temp dir to config dir (setup.rs generates it at the output root)
+  const srcPeers = join(tempDir, "peers.yaml");
+  const destPeers = join(configDir, "peers.yaml");
+  if (await exists(srcPeers)) {
+    await Deno.copyFile(srcPeers, destPeers);
+    consola.debug("Copied peers.yaml to config directory");
+  }
+
+  // Copy JWT files and validator configs from each validator's directory
+  consola.info("Copying JWT files and configs to validator directories...");
+  for (let i = 0; i < numValidators; i++) {
+    const validatorConfigDir = join(runDir, `simplex-${i}`, "config");
+    await ensureDir(validatorConfigDir);
+
+    // Copy JWT file from validator-{i}/config/jwt.hex (setup.rs structure)
+    const srcJwt = join(tempDir, `validator-${i}`, "config", "jwt.hex");
+    const destJwt = join(validatorConfigDir, "jwt.hex");
+    if (await exists(srcJwt)) {
+      await Deno.copyFile(srcJwt, destJwt);
+      consola.debug(`Copied jwt.hex to simplex-${i}/config/`);
+    } else {
+      consola.warn(`JWT file not found for validator-${i} at ${srcJwt}`);
     }
-    const srcPath = join(tempDir, entry.name);
-    const destPath = join(configDir, entry.name);
-    await Deno.copyFile(srcPath, destPath);
+
+    // Copy validator toml config from validator-{i}/config/validator.toml
+    const srcToml = join(tempDir, `validator-${i}`, "config", "validator.toml");
+    const destToml = join(validatorConfigDir, "validator.toml");
+    if (await exists(srcToml)) {
+      await Deno.copyFile(srcToml, destToml);
+      consola.debug(`Copied validator.toml to simplex-${i}/config/`);
+    } else {
+      consola.warn(`validator.toml not found for validator-${i} at ${srcToml}`);
+    }
   }
 
   // Clean up temp directory
@@ -770,28 +783,30 @@ async function generateConfigs(
     );
   }
 
-  // Fix configs for Docker environment
-  consola.info("Adjusting configs for Docker networking...");
+  // Update each validator toml with correct paths
+  consola.info("Updating validator TOML configs...");
 
   for (let i = 0; i < numValidators; i++) {
-    const configFile = join(configDir, `validator-${i}.toml`);
-    const content = await Deno.readTextFile(configFile);
+    const validatorConfigDir = join(runDir, `simplex-${i}`, "config");
+    const tomlPath = join(validatorConfigDir, `validator.toml`);
+
+    // Read and modify the toml config
+    const content = await Deno.readTextFile(tomlPath);
     const config = toml.parse(content) as Record<string, unknown>;
 
     const simplex = (config.simplex ?? {}) as Record<string, unknown>;
     simplex.directory = "/data";
-    simplex.engine_api_url = `http://reth-${i}:8551`;
-    simplex.engine_jwt_secret = `0x${jwtSecret.trim()}`;
     config.simplex = simplex;
 
     config.execution_authrpc_address = `http://reth-${i}:8545`;
     config.engine_authrpc_address = `http://reth-${i}:8551`;
     config.jwt_token_path = "/config/jwt.hex";
 
-    await Deno.writeTextFile(configFile, toml.stringify(config));
+    await Deno.writeTextFile(tomlPath, toml.stringify(config));
+    consola.debug(`Updated validator.toml`);
   }
 
-  // Update peers file to use Docker static IPs
+  // Update peers file to use Docker static IPs and copy to each validator
   const peersFile = join(configDir, "peers.yaml");
   const peersContent = await Deno.readTextFile(peersFile);
   const peers = yaml.parse(peersContent) as {
@@ -808,9 +823,30 @@ async function generateConfigs(
   }
 
   peers.addresses = newAddresses;
-  await Deno.writeTextFile(peersFile, yaml.stringify(peers));
+
+  // Write updated peers.yaml to each validator's config directory
+  for (let i = 0; i < numValidators; i++) {
+    const validatorConfigDir = join(runDir, `simplex-${i}`, "config");
+    const validatorPeersFile = join(validatorConfigDir, `peers.yaml`);
+    await Deno.writeTextFile(validatorPeersFile, yaml.stringify(peers));
+    consola.debug(`Created peers.yaml for simplex-${i}`);
+  }
 
   consola.info(`Updated peers.yaml with Docker static IPs (${network.subnet})`);
+
+  // Copy genesis.json to each validator's config directory for reth
+  const genesisPath = join(configDir, "genesis.json");
+  if (await exists(genesisPath)) {
+    consola.info("Copying genesis.json to validator config directories...");
+    for (let i = 0; i < numValidators; i++) {
+      const validatorConfigDir = join(runDir, `simplex-${i}`, "config");
+      await ensureDir(validatorConfigDir);
+      const destGenesis = join(validatorConfigDir, "genesis.json");
+      await Deno.copyFile(genesisPath, destGenesis);
+      consola.debug(`Copied genesis.json to simplex-${i}/config/`);
+    }
+  }
+
   consola.info(`Configs generated in ${configDir}`);
 }
 
@@ -862,11 +898,12 @@ async function startDevnet(options: {
     throw new Error("Unable to determine user/group IDs for Docker containers");
   }
 
-  // Ensure data directories exist for bind mounts
+  // Ensure data/config directories exist for bind mounts
   await ensureDir(join(runDir, "data"));
   for (let i = 0; i < numValidators; i++) {
     await ensureDir(join(runDir, "data", `reth-${i}`));
     await ensureDir(join(runDir, "data", `simplex-${i}`));
+    await ensureDir(join(runDir, `simplex-${i}`, "config"));
   }
 
   // Generate docker-compose.yml
@@ -887,10 +924,13 @@ async function startDevnet(options: {
     JSON.stringify(genesis, null, 2),
   );
 
-  // Generate jwt.hex
-  consola.start("Generating JWT secret...");
-  const jwtSecret = generateJwtSecret();
-  await Deno.writeTextFile(join(runDir, "config", "jwt.hex"), jwtSecret);
+  // Copy genesis.json to each validator config directory before starting reth
+  const genesisPath = join(runDir, "config", "genesis.json");
+  for (let i = 0; i < numValidators; i++) {
+    const validatorConfigDir = join(runDir, `simplex-${i}`, "config");
+    const destGenesis = join(validatorConfigDir, "genesis.json");
+    await Deno.copyFile(genesisPath, destGenesis);
+  }
 
   // Generate Otterscan configs
   for (let i = 0; i < numValidators; i++) {
@@ -907,6 +947,10 @@ async function startDevnet(options: {
 
   // Build image
   await buildImage(scriptDir);
+
+  // Generate configs before starting reth (includes jwt + genesis hash)
+  consola.start("Generating validator configs...");
+  await generateConfigs(runDir, numValidators, network);
 
   // Start Reth nodes
   consola.start("Starting Reth nodes...");
@@ -938,17 +982,6 @@ async function startDevnet(options: {
     await waitForRpc(`http://localhost:${port}`, 60);
   }
   consola.info("All Reth nodes are ready");
-
-  // Get genesis hash
-  consola.start("Getting genesis hash from Reth...");
-  const genesisHash = await getGenesisHash("http://localhost:8545");
-  consola.info(`Genesis hash: ${genesisHash}`);
-
-  // Save genesis hash to run directory
-  await Deno.writeTextFile(join(runDir, "genesis_hash.txt"), genesisHash);
-
-  // Generate configs
-  await generateConfigs(runDir, genesisHash, numValidators, network);
 
   // Start simplex validators
   consola.start("Starting Simplex validators...");
@@ -983,7 +1016,7 @@ async function startDevnet(options: {
   await dockerCompose(["ps"], runDir, { projectName });
 
   // Show status
-  showStatus(genesisHash, runDir);
+  showStatus(runDir);
 
   consola.info(
     "Devnet is running! Use 'deno run -A devnet.ts monitor' to watch block production.",
@@ -1099,6 +1132,73 @@ async function showLogs(options: {
   await child.status;
 }
 
+// Crash validator - stop simplex and reth containers for a specific validator
+async function crashValidator(validatorIndex: number): Promise<void> {
+  const scriptDir = getScriptDir();
+  const runDir = await getLatestRunDir(scriptDir);
+  const projectName = getProjectName();
+
+  if (!runDir) {
+    consola.error("No active devnet found");
+    return;
+  }
+
+  const rethService = `reth-${validatorIndex}`;
+  const simplexService = `simplex-${validatorIndex}`;
+
+  consola.start(`Crashing validator ${validatorIndex}...`);
+
+  // Stop both services
+  consola.info(`Stopping ${rethService}...`);
+  await dockerCompose(["stop", rethService], runDir, { projectName });
+
+  consola.info(`Stopping ${simplexService}...`);
+  await dockerCompose(["stop", simplexService], runDir, { projectName });
+
+  consola.success(
+    `Validator ${validatorIndex} crashed (both ${rethService} and ${simplexService} stopped)`,
+  );
+}
+
+// Restart validator - start simplex and reth containers for a specific validator
+async function restartValidator(validatorIndex: number): Promise<void> {
+  const scriptDir = getScriptDir();
+  const runDir = await getLatestRunDir(scriptDir);
+  const projectName = getProjectName();
+
+  if (!runDir) {
+    consola.error("No active devnet found");
+    return;
+  }
+
+  const rethService = `reth-${validatorIndex}`;
+  const simplexService = `simplex-${validatorIndex}`;
+  const httpPort = 8545 + validatorIndex * 100;
+
+  consola.start(`Restarting validator ${validatorIndex}...`);
+
+  // Start reth first (simplex depends on it)
+  consola.info(`Starting ${rethService}...`);
+  await dockerCompose(["start", rethService], runDir, { projectName });
+
+  // Wait for reth to be fully ready before starting simplex
+  consola.info(`Waiting for ${rethService} to be ready...`);
+  const rethReady = await waitForRpc(`http://localhost:${httpPort}`, 60);
+
+  if (!rethReady) {
+    consola.error(`${rethService} failed to become ready`);
+    consola.info(`View logs with: deno run -A devnet.ts logs ${rethService}`);
+    return;
+  }
+
+  consola.info(`${rethService} is ready, starting ${simplexService}...`);
+  await dockerCompose(["start", simplexService], runDir, { projectName });
+
+  consola.success(
+    `Validator ${validatorIndex} restarted (both ${rethService} and ${simplexService} started)`,
+  );
+}
+
 // Monitor command
 async function monitorBlocks(limit = 10): Promise<void> {
   consola.info(`Monitoring block production (up to ${limit} new blocks)...`);
@@ -1129,7 +1229,7 @@ async function monitorBlocks(limit = 10): Promise<void> {
 }
 
 // Status command
-function showStatus(genesisHash?: string, runDir?: string): void {
+function showStatus(runDir?: string): void {
   consola.log(
     colors.blue("════════════════════════════════════════════════════════════"),
   );
@@ -1139,10 +1239,6 @@ function showStatus(genesisHash?: string, runDir?: string): void {
   consola.log(
     colors.blue("════════════════════════════════════════════════════════════"),
   );
-
-  if (genesisHash) {
-    consola.log(`Genesis Hash: ${genesisHash}`);
-  }
 
   if (runDir) {
     consola.log(`Run Directory: ${runDir}`);
@@ -1192,16 +1288,7 @@ async function statusCommand(): Promise<void> {
   const scriptDir = getScriptDir();
   const runDir = await getLatestRunDir(scriptDir);
 
-  let genesisHash: string | undefined;
-  if (runDir) {
-    try {
-      genesisHash = await Deno.readTextFile(join(runDir, "genesis_hash.txt"));
-    } catch (error) {
-      consola.debug(`Failed to read genesis hash: ${formatError(error)}`);
-    }
-  }
-
-  showStatus(genesisHash, runDir ?? undefined);
+  showStatus(runDir ?? undefined);
 }
 
 async function showAccounts(count = PREFUNDED_COUNT): Promise<void> {
@@ -1320,6 +1407,34 @@ cli
   })
   .action(async (options) => {
     await sendTestTransaction(options);
+  });
+
+cli
+  .command(
+    "crash-validator",
+    "Crash a validator by stopping its reth and simplex containers",
+  )
+  .arguments("<validator:number>")
+  .action(async (_, validator) => {
+    if (typeof validator !== "number" || validator < 0) {
+      consola.error("Validator index must be a non-negative number");
+      Deno.exit(1);
+    }
+    await crashValidator(validator);
+  });
+
+cli
+  .command(
+    "restart-validator",
+    "Restart a validator by starting its reth and simplex containers",
+  )
+  .arguments("<validator:number>")
+  .action(async (_, validator) => {
+    if (typeof validator !== "number" || validator < 0) {
+      consola.error("Validator index must be a non-negative number");
+      Deno.exit(1);
+    }
+    await restartValidator(validator);
   });
 
 // Send test transaction

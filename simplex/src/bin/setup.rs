@@ -54,9 +54,9 @@ enum Commands {
         #[arg(long, default_value = "0x4242424242424242424242424242424242424242")]
         fee_recipient: String,
 
-        /// Genesis execution hash (from EL genesis).
-        #[arg(long)]
-        genesis_hash: String,
+        /// Path to the Ethereum genesis JSON file.
+        #[arg(long, default_value = "./assets/genesis.json")]
+        eth_genesis_path: PathBuf,
     },
 }
 
@@ -70,7 +70,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             base_port,
             base_engine_port,
             fee_recipient,
-            genesis_hash,
+            eth_genesis_path,
         } => {
             generate_testnet(
                 validators,
@@ -78,7 +78,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 base_port,
                 base_engine_port,
                 fee_recipient,
-                genesis_hash,
+                eth_genesis_path,
             )?;
         }
     }
@@ -92,7 +92,7 @@ fn generate_testnet(
     base_port: u16,
     base_engine_port: u16,
     fee_recipient: String,
-    genesis_hash: String,
+    eth_genesis_path: PathBuf,
 ) -> Result<(), Box<dyn Error>> {
     println!("Generating testnet with {n} validators...");
 
@@ -110,8 +110,6 @@ fn generate_testnet(
 
     // Create output directory
     fs::create_dir_all(&output)?;
-    let storage_output = output.join("storage");
-    fs::create_dir_all(&storage_output)?;
 
     // Generate secp256r1 keys for each validator (used for both P2P and consensus)
     let mut peer_signers: Vec<PrivateKey> =
@@ -127,13 +125,6 @@ fn generate_testnet(
     let bootstrappers = vec![allowed_peers[0].clone()];
 
     println!("  Generated {n} secp256r1 key pairs");
-
-    // Generate JWT secret (shared by all nodes)
-    let jwt_secret: [u8; 32] = rand::random();
-    let jwt_hex = format!("0x{}", hex::encode(jwt_secret));
-    let jwt_path = output.join("jwt.hex");
-    fs::write(&jwt_path, &jwt_hex)?;
-    println!("  Wrote JWT secret: {}", jwt_path.display());
 
     // Generate peers file
     let mut port = base_port;
@@ -156,7 +147,21 @@ fn generate_testnet(
     // Generate config for each validator
     port = base_port;
     for (i, signer) in peer_signers.iter().enumerate() {
-        let name = hex(&signer.public_key().encode());
+        let name = format!("validator-{i}");
+
+        // Create validator directories
+        let validator_dir = output.join(&name);
+        let config_dir = validator_dir.join("config");
+        let storage_dir = validator_dir.join("storage");
+        fs::create_dir_all(&config_dir)?;
+        fs::create_dir_all(&storage_dir)?;
+
+        // Generate random JWT secret for this validator
+        let jwt_secret: [u8; 32] = rand::random();
+        let jwt_hex = format!("0x{}", hex::encode(jwt_secret));
+        let jwt_file_path = config_dir.join("jwt.hex");
+        fs::write(&jwt_file_path, &jwt_hex)?;
+        println!("    Wrote JWT secret: {}", jwt_file_path.display());
 
         let emerald = EmeraldConfig {
             moniker: format!("simplex-{i}"),
@@ -168,8 +173,8 @@ fn generate_testnet(
                 "http://127.0.0.1:{}",
                 base_engine_port + (i as u16 * 100)
             ),
-            jwt_token_path: jwt_path.display().to_string(),
-            eth_genesis_path: "./assets/genesis.json".to_string(),
+            jwt_token_path: jwt_file_path.display().to_string(),
+            eth_genesis_path: eth_genesis_path.display().to_string(),
             retry_config: Default::default(),
             el_node_type: ElNodeType::Archive,
             max_retain_blocks: 0,
@@ -182,25 +187,20 @@ fn generate_testnet(
             private_key: hex(&signer.encode()),
             port,
             metrics_port: port + 1,
-            directory: format!("{}/storage/{}", output.display(), name),
+            directory: storage_dir.display().to_string(),
             worker_threads: 4,
             log_level: "info".to_string(),
             local: true,
-            allowed_peers: allowed_peers.clone(),
             bootstrappers: bootstrappers.clone(),
             message_backlog: 1024,
             mailbox_size: 1024,
             deque_size: 1024,
             signature_threads: 2,
-            evm_enabled: true,
-            engine_api_url: None,
-            engine_jwt_secret: Some(jwt_hex.clone()),
             fee_recipient: None,
-            genesis_execution_hash: Some(genesis_hash.clone()),
         };
 
         let config_file = SimplexConfigFile { emerald, simplex };
-        let config_path = output.join(format!("validator-{i}.toml"));
+        let config_path = config_dir.join("validator.toml");
         fs::write(&config_path, toml::to_string_pretty(&config_file)?)?;
         println!("  Wrote config: {}", config_path.display());
 
@@ -221,7 +221,7 @@ fn generate_testnet(
     println!("  2. Start validators:");
     for i in 0..n {
         println!(
-            "     emerald-simplex --config {}/validator-{}.toml --peers {}/peers.yaml",
+            "     emerald-simplex --config {}/validator-{}/config/validator.toml --peers {}/peers.yaml",
             output.display(),
             i,
             output.display()

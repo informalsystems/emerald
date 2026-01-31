@@ -6,7 +6,7 @@
 use core::num::NonZero;
 use core::time::Duration;
 
-use alloy_primitives::{Address, B256};
+use alloy_primitives::Address;
 use commonware_broadcast::buffered;
 use commonware_consensus::application::marshaled::Marshaled as ConsensusMarshaled;
 use commonware_consensus::marshal::ingress::handler;
@@ -92,8 +92,6 @@ pub struct Config<B: Blocker<PublicKey = PublicKey>, S: Strategy> {
     /// The emerald Engine API client.
     pub engine: EmeraldEngine,
     pub fee_recipient: Address,
-    /// The genesis block hash from the execution layer.
-    pub genesis_execution_hash: B256,
     pub min_block_time: Duration,
     /// P2P oracle for updating authorized peers on validator set changes.
     pub oracle: Oracle<PublicKey>,
@@ -275,10 +273,10 @@ impl<
         let app = Application::new(
             cfg.engine,
             cfg.fee_recipient,
-            cfg.genesis_execution_hash,
             cfg.min_block_time,
             cfg.oracle,
-        );
+        )
+        .await;
         let marshaled = Marshaled::new(
             context.with_label("marshaled"),
             app,

@@ -20,10 +20,6 @@ path = "src/bin/validator.rs"
 name = "emerald-simplex-setup"
 path = "src/bin/setup.rs"
 
-[[bin]]
-name = "genesis-hash"
-path = "src/bin/genesis_hash.rs"
-
 [dependencies]
 # Emerald dependencies - reuse existing infrastructure
 malachitebft-eth-engine = { workspace = true }

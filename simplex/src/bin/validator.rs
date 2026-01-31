@@ -230,55 +230,25 @@ fn main() {
         let marshal_resolver =
             marshal::resolver::p2p::init(&context, marshal_resolver_cfg, marshal);
 
-        // Check if EVM is enabled
-        if !config.evm_enabled {
-            error!("EVM mode is required for emerald-simplex");
-            return;
-        }
+        // Use engine address from emerald config
+        let engine_api_url = emerald.engine_authrpc_address.clone();
 
-        // Parse EVM config
-        let engine_api_url = config
-            .engine_api_url
-            .clone()
-            .unwrap_or_else(|| emerald.engine_authrpc_address.clone());
-        let jwt_secret = config.engine_jwt_secret.clone().unwrap_or_else(|| {
-            std::fs::read_to_string(&emerald.jwt_token_path)
-                .expect("engine_jwt_secret or jwt_token_path required")
-                .trim()
-                .to_string()
-        });
         let fee_recipient_hex = config
             .fee_recipient
             .clone()
             .unwrap_or_else(|| format!("0x{:x}", emerald.fee_recipient.to_alloy_address()));
-        let genesis_hash_hex = config
-            .genesis_execution_hash
-            .clone()
-            .expect("genesis_execution_hash required");
 
         let fee_recipient_bytes =
             from_hex_formatted(&fee_recipient_hex).expect("Invalid fee_recipient");
         let fee_recipient = alloy_primitives::Address::from_slice(&fee_recipient_bytes);
-
-        let genesis_hash_bytes =
-            from_hex_formatted(&genesis_hash_hex).expect("Invalid genesis_hash");
-        let genesis_execution_hash = alloy_primitives::B256::from_slice(&genesis_hash_bytes);
 
         // Create Engine API client
         let engine_url = Url::parse(&engine_api_url).expect("Invalid engine_api_url");
         let eth_url_str = engine_api_url.replace("8551", "8545"); // Assume standard port offset
         let eth_url = Url::parse(&eth_url_str).expect("Invalid eth RPC URL");
 
-        // Write JWT to temp file
-        let jwt_secret = if jwt_secret.starts_with("0x") {
-            jwt_secret
-        } else {
-            format!("0x{jwt_secret}")
-        };
-        let jwt_bytes = from_hex_formatted(&jwt_secret).expect("Invalid JWT secret");
-        let jwt_path = PathBuf::from(&config.directory).join("jwt.hex");
-        std::fs::create_dir_all(&config.directory).ok();
-        std::fs::write(&jwt_path, hex::encode(&jwt_bytes)).expect("Failed to write JWT file");
+        // Use JWT directly from the path specified in config - no need to rewrite
+        let jwt_path = PathBuf::from(&emerald.jwt_token_path);
 
         let emerald_engine = EmeraldEngine::new(
             EngineRPC::new(engine_url, &jwt_path).expect("Failed to create EngineRPC"),
@@ -321,7 +291,6 @@ fn main() {
             strategy,
             engine: emerald_engine,
             fee_recipient,
-            genesis_execution_hash,
             min_block_time,
             oracle: oracle.clone(),
         };

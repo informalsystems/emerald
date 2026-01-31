@@ -9,13 +9,14 @@ use commonware_consensus::types::Height;
 use commonware_consensus::Heightable;
 use commonware_cryptography::sha256::Digest;
 use commonware_cryptography::{Committable, Digestible, Hasher, Sha256};
+use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use ssz::{Decode, Encode};
 
 /// Execution block hash from the EVM execution layer.
 pub type ExecutionHash = B256;
 
 /// Block for simplex consensus with EVM execution.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Block {
     /// The parent block's digest.
     pub parent: Digest,
@@ -34,10 +35,10 @@ pub struct Block {
 }
 
 /// EVM-specific fields in the block.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct EvmFields {
-    /// Execution block hash from the EVM execution layer.
-    pub execution_hash: ExecutionHash,
+    /// Execution block data from the EVM execution layer.
+    pub execution_block: ExecutionBlock,
 
     /// The full execution payload (optional).
     /// Included in proposals for verification, can be dropped after finalization.
@@ -64,15 +65,15 @@ impl Block {
         parent: Digest,
         height: Height,
         timestamp: u64,
-        execution_hash: ExecutionHash,
+        execution_block: ExecutionBlock,
     ) -> Self {
-        let digest = Self::compute_digest(&parent, height, timestamp, &execution_hash);
+        let digest = Self::compute_digest(&parent, height, timestamp, &execution_block.block_hash);
         Self {
             parent,
             height,
             timestamp,
             evm: EvmFields {
-                execution_hash,
+                execution_block,
                 execution_payload: None,
             },
             digest,
@@ -80,20 +81,24 @@ impl Block {
     }
 
     /// Create a new block with execution payload.
-    pub fn new_with_payload(
-        parent: Digest,
-        height: Height,
-        timestamp: u64,
-        execution_payload: ExecutionPayloadV3,
-    ) -> Self {
-        let execution_hash = execution_payload.payload_inner.payload_inner.block_hash;
-        let digest = Self::compute_digest(&parent, height, timestamp, &execution_hash);
+    pub fn new_with_payload(parent: Digest, execution_payload: ExecutionPayloadV3) -> Self {
+        let payload_inner = &execution_payload.payload_inner.payload_inner;
+        let height = Height::new(payload_inner.block_number);
+        let timestamp = payload_inner.timestamp.saturating_mul(1_000);
+        let execution_block = ExecutionBlock {
+            block_hash: payload_inner.block_hash,
+            block_number: payload_inner.block_number,
+            parent_hash: payload_inner.parent_hash,
+            timestamp: payload_inner.timestamp,
+            prev_randao: payload_inner.prev_randao,
+        };
+        let digest = Self::compute_digest(&parent, height, timestamp, &execution_block.block_hash);
         Self {
             parent,
             height,
             timestamp,
             evm: EvmFields {
-                execution_hash,
+                execution_block,
                 execution_payload: Some(execution_payload),
             },
             digest,
@@ -112,7 +117,17 @@ impl Block {
 
     /// Get the execution hash.
     pub fn execution_hash(&self) -> ExecutionHash {
-        self.evm.execution_hash
+        self.evm.execution_block.block_hash
+    }
+
+    /// Get the parent execution hash.
+    pub fn parent_execution_hash(&self) -> ExecutionHash {
+        self.evm.execution_block.parent_hash
+    }
+
+    /// Get the execution block.
+    pub fn execution_block(&self) -> &ExecutionBlock {
+        &self.evm.execution_block
     }
 }
 
@@ -121,7 +136,11 @@ impl Write for Block {
         self.parent.write(writer);
         self.height.write(writer);
         UInt(self.timestamp).write(writer);
-        writer.put_slice(self.evm.execution_hash.as_slice());
+        writer.put_slice(self.evm.execution_block.block_hash.as_slice());
+        writer.put_slice(self.evm.execution_block.parent_hash.as_slice());
+        writer.put_slice(self.evm.execution_block.prev_randao.as_slice());
+        UInt(self.evm.execution_block.block_number).write(writer);
+        UInt(self.evm.execution_block.timestamp).write(writer);
 
         match &self.evm.execution_payload {
             Some(payload) => {
@@ -145,12 +164,20 @@ impl Read for Block {
         let height = Height::read(reader)?;
         let timestamp = UInt::read(reader)?.into();
 
-        if reader.remaining() < 32 {
+        if reader.remaining() < 96 {
             return Err(Error::EndOfBuffer);
         }
         let mut exec_hash = [0u8; 32];
         reader.copy_to_slice(&mut exec_hash);
         let execution_hash = B256::from(exec_hash);
+        let mut parent_exec_hash = [0u8; 32];
+        reader.copy_to_slice(&mut parent_exec_hash);
+        let parent_execution_hash = B256::from(parent_exec_hash);
+        let mut prev_randao_bytes = [0u8; 32];
+        reader.copy_to_slice(&mut prev_randao_bytes);
+        let prev_randao = B256::from(prev_randao_bytes);
+        let block_number = UInt::read(reader)?.into();
+        let exec_timestamp = UInt::read(reader)?.into();
 
         let execution_payload = if reader.remaining() >= 1 {
             let marker = reader.get_u8();
@@ -180,7 +207,13 @@ impl Read for Block {
             height,
             timestamp,
             evm: EvmFields {
-                execution_hash,
+                execution_block: ExecutionBlock {
+                    block_hash: execution_hash,
+                    block_number,
+                    parent_hash: parent_execution_hash,
+                    timestamp: exec_timestamp,
+                    prev_randao,
+                },
                 execution_payload,
             },
             digest,
@@ -193,7 +226,9 @@ impl EncodeSize for Block {
         let mut size = self.parent.encode_size()
             + self.height.encode_size()
             + UInt(self.timestamp).encode_size()
-            + 32;
+            + 96
+            + UInt(self.evm.execution_block.block_number).encode_size()
+            + UInt(self.evm.execution_block.timestamp).encode_size();
 
         size += 1;
         if let Some(payload) = &self.evm.execution_payload {

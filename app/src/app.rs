@@ -27,8 +27,9 @@ alloy_sol_types::sol!(
     "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
 );
 
-use crate::state::{assemble_value_from_parts, decode_value, State};
-use crate::sync_handler::{get_decided_value_for_sync, validate_payload};
+use crate::payload::validate_execution_payload;
+use crate::state::{decode_value, State};
+use crate::sync_handler::get_decided_value_for_sync;
 
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
     // Get the genesis block from the execution engine
@@ -396,54 +397,21 @@ pub async fn on_started_round(
     );
 
     for parts in &pending_parts {
-        match state.validate_proposal_parts(parts) {
-            Ok(()) => {
-                // Validate execution payload with the execution engine before storing it as undecided proposal
-                let (value, data) = assemble_value_from_parts(parts.clone());
+        // Validate and store the pending proposal
+        let result = state
+            .process_complete_proposal_parts(parts, engine, &emerald_config.retry_config)
+            .await?;
 
-                let validity = state
-                    .validate_execution_payload(
-                        &data,
-                        parts.height,
-                        parts.round,
-                        engine,
-                        &emerald_config.retry_config,
-                    )
-                    .await?;
+        if result.is_some() {
+            info!(
+                height = %parts.height,
+                round = %parts.round,
+                proposer = %parts.proposer,
+                "Moved valid pending proposal to undecided after validation"
+            );
+        }
 
-                if validity == Validity::Invalid {
-                    warn!(
-                        height = %parts.height,
-                        round = %parts.round,
-                        "Pending proposal has invalid execution payload, rejecting"
-                    );
-                    continue;
-                }
-
-                state.store.store_undecided_proposal(value.clone()).await?;
-
-                state
-                    .store
-                    .store_undecided_block_data(value.height, value.round, value.value.id(), data)
-                    .await?;
-                info!(
-                    height = %parts.height,
-                    round = %parts.round,
-                    proposer = %parts.proposer,
-                    "Moved valid pending proposal to undecided after validation"
-                );
-            }
-            Err(error) => {
-                // Validation failed, log error
-                error!(
-                    height = %parts.height,
-                    round = %parts.round,
-                    proposer = %parts.proposer,
-                    error = ?error,
-                    "Removed invalid pending proposal"
-                );
-            }
-        } // Remove the parts from pending
+        // Remove the parts from pending regardless of validation outcome
         state
             .store
             .remove_pending_proposal_parts(parts.clone())
@@ -596,15 +564,20 @@ pub async fn on_received_proposal_part(
         "Received proposal part"
     );
 
-    // Try to reassemble the proposal from received parts. If present,
-    // validate it with the execution engine and mark invalid when
-    // parsing or validation fails. Keep the outer `Option` and send it
-    // back to the caller (consensus) regardless.
-    let proposed_value = state
-        .received_proposal_part(from, part, engine, &emerald_config.retry_config)
-        .await?;
+    // Try to reassemble the proposal from received parts
+    let parts = state.reassemble_proposal(from, part).await?;
 
-    if let Some(proposed_value) = proposed_value.clone() {
+    // If we have complete parts, validate and store the proposal
+    let proposed_value = match parts {
+        Some(parts) => {
+            state
+                .process_complete_proposal_parts(&parts, engine, &emerald_config.retry_config)
+                .await?
+        }
+        None => None,
+    };
+
+    if let Some(ref proposed_value) = proposed_value {
         debug!("✅ Received complete proposal: {:?}", proposed_value);
     }
 
@@ -680,36 +653,16 @@ pub async fn on_decided(
         .block_hash;
     assert_eq!(latest_block_hash, parent_block_hash);
 
-    // Get validation status from cache or call newPayload
-    let validity = if let Some(cached) = state.validated_cache_mut().get(&block_hash) {
-        cached
-    } else {
-        // Collect hashes from blob transactions
-        let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
-            eyre::eyre!(
-                "Failed to convert decided ExecutionPayloadV3 to Block at height {}: {}",
-                height,
-                e
-            )
-        })?;
-        let versioned_hashes: Vec<BlockHash> =
-            block.body.blob_versioned_hashes_iter().copied().collect();
-
-        // Ask the EL to validate the execution payload
-        let payload_status = engine
-            .notify_new_block(execution_payload, versioned_hashes)
-            .await?;
-
-        let validity = if payload_status.status.is_valid() {
-            Validity::Valid
-        } else {
-            Validity::Invalid
-        };
-
-        // TODO: insert validation outcome into cache also when calling notify_new_block_with_retry in validate_payload
-        state.validated_cache_mut().insert(block_hash, validity);
-        validity
-    };
+    // Validate the execution payload (uses cache internally)
+    let validity = validate_execution_payload(
+        state.validated_cache_mut(),
+        &block_bytes,
+        height,
+        round,
+        engine,
+        &emerald_config.retry_config,
+    )
+    .await?;
 
     if validity == Validity::Invalid {
         return Err(eyre!("Block validation failed for hash: {}", block_hash));
@@ -808,38 +761,16 @@ pub async fn on_process_synced_value(
     info!(%height, %round, "🟢🟢 Processing synced value");
 
     let value = decode_value(value_bytes);
-
-    // Extract execution payload from the synced value for validation
     let block_bytes = value.extensions.clone();
-    let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_bytes).map_err(|e| {
-        eyre::eyre!(
-            "Failed to decode synced ExecutionPayloadV3 at height {}: {:?}",
-            height,
-            e
-        )
-    })?;
-    let new_block_hash = execution_payload.payload_inner.payload_inner.block_hash;
-
-    // Collect hashes from blob transactions
-    let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
-        eyre::eyre!(
-            "Failed to convert synced ExecutionPayloadV3 to Block at height {}: {}",
-            height,
-            e
-        )
-    })?;
-    let versioned_hashes: Vec<BlockHash> =
-        block.body.blob_versioned_hashes_iter().copied().collect();
 
     // Validate the synced block
-    let validity = validate_payload(
+    let validity = validate_execution_payload(
         state.validated_cache_mut(),
-        engine,
-        &execution_payload,
-        &versioned_hashes,
-        &emerald_config.retry_config,
+        &block_bytes,
         height,
         round,
+        engine,
+        &emerald_config.retry_config,
     )
     .await?;
 
@@ -861,10 +792,7 @@ pub async fn on_process_synced_value(
         return Ok(());
     }
 
-    debug!(
-        "💡 Sync block validated at height {} with hash: {}",
-        height, new_block_hash
-    );
+    debug!(%height, "💡 Sync block validated");
     let proposed_value: ProposedValue<EmeraldContext> = ProposedValue {
         height,
         round,
@@ -875,16 +803,7 @@ pub async fn on_process_synced_value(
     };
 
     if let Err(e) = state
-        .store
-        .store_undecided_block_data(height, round, proposed_value.value.id(), block_bytes)
-        .await
-    {
-        error!(%height, %round, error = %e, "Failed to store synced block data");
-    }
-    // Store the synced value and block data
-    if let Err(e) = state
-        .store
-        .store_undecided_proposal(proposed_value.clone())
+        .store_undecided_value(&proposed_value, block_bytes)
         .await
     {
         error!(%height, %round, error = %e, "Failed to store synced value");

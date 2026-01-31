@@ -24,11 +24,9 @@ use commonware_utils::{from_hex_formatted, union_unique, NZUsize};
 use emerald_simplex::config::{Peers, SimplexConfigFile};
 use emerald_simplex::consensus::{EPOCH, NAMESPACE};
 use emerald_simplex::engine::{Config as EngineConfig, Engine};
+use emerald_simplex::execution_engine::EngineClient;
 use futures::future::try_join_all;
 use governor::Quota;
-use malachitebft_eth_engine::engine::Engine as EmeraldEngine;
-use malachitebft_eth_engine::engine_rpc::EngineRPC;
-use malachitebft_eth_engine::ethereum_rpc::EthereumRPC;
 use tracing::{error, info, warn, Level};
 use url::Url;
 
@@ -233,14 +231,13 @@ fn main() {
         // Use engine address from emerald config
         let engine_api_url = emerald.engine_authrpc_address.clone();
 
-        let fee_recipient_hex = config
-            .fee_recipient
-            .clone()
-            .unwrap_or_else(|| format!("0x{:x}", emerald.fee_recipient.to_alloy_address()));
-
-        let fee_recipient_bytes =
-            from_hex_formatted(&fee_recipient_hex).expect("Invalid fee_recipient");
-        let fee_recipient = alloy_primitives::Address::from_slice(&fee_recipient_bytes);
+        let fee_recipient = if let Some(fee_recipient_hex) = config.fee_recipient.clone() {
+            let fee_recipient_bytes =
+                from_hex_formatted(&fee_recipient_hex).expect("Invalid fee_recipient");
+            alloy_primitives::Address::from_slice(&fee_recipient_bytes)
+        } else {
+            emerald.fee_recipient.to_alloy_address()
+        };
 
         // Create Engine API client
         let engine_url = Url::parse(&engine_api_url).expect("Invalid engine_api_url");
@@ -250,10 +247,8 @@ fn main() {
         // Use JWT directly from the path specified in config - no need to rewrite
         let jwt_path = PathBuf::from(&emerald.jwt_token_path);
 
-        let emerald_engine = EmeraldEngine::new(
-            EngineRPC::new(engine_url, &jwt_path).expect("Failed to create EngineRPC"),
-            EthereumRPC::new(eth_url).expect("Failed to create EthereumRPC"),
-        );
+        let emerald_engine = EngineClient::new(engine_url, eth_url, &jwt_path)
+            .expect("Failed to create Engine client");
 
         info!("Connected to Engine API at {}", engine_api_url);
 

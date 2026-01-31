@@ -30,8 +30,6 @@ use commonware_p2p::Manager;
 use commonware_runtime::{Clock, Metrics, Spawner};
 use commonware_utils::{Acknowledgement, SystemTimeExt};
 use futures::StreamExt;
-use malachitebft_eth_engine::engine::Engine as EmeraldEngine;
-use malachitebft_eth_engine::engine_rpc::Fork;
 use malachitebft_eth_types::RetryConfig;
 use rand::Rng;
 use tokio::sync::RwLock;
@@ -39,6 +37,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::block::Block;
 use crate::consensus::{PublicKey, Scheme};
+use crate::execution_engine::{EngineClient, Fork};
 
 /// Message that is hashed to create the parent digest for the genesis block.
 /// Since the genesis block has no actual parent, this deterministic value is used.
@@ -112,7 +111,7 @@ impl Default for EvmState {
 #[derive(Clone)]
 pub struct Application {
     genesis_block: Block,
-    engine: Arc<EmeraldEngine>,
+    engine: Arc<EngineClient>,
     state: Arc<RwLock<EvmState>>,
     retry_config: RetryConfig,
     min_block_time: Duration,
@@ -221,17 +220,15 @@ impl Application {
     /// * `fee_recipient` - Address to receive block rewards
     /// * `oracle` - P2P oracle for updating authorized peers on validator set changes
     pub async fn new(
-        engine: EmeraldEngine,
+        engine: EngineClient,
         fee_recipient: Address,
         min_block_time: Duration,
         oracle: Oracle<PublicKey>,
     ) -> Self {
         let genesis_execution_block = engine
-            .eth
-            .get_block_by_number("earliest")
+            .get_genesis_block()
             .await
-            .expect("Failed to fetch genesis block from execution layer")
-            .expect("Genesis block not found in execution layer");
+            .expect("Failed to fetch genesis block from execution layer");
 
         let genesis_block = Block::new(
             Sha256::hash(GENESIS_PARENT_MESSAGE),
@@ -260,7 +257,7 @@ impl Application {
     }
 
     /// Get the Engine API client.
-    pub fn engine(&self) -> &EmeraldEngine {
+    pub fn engine(&self) -> &EngineClient {
         &self.engine
     }
 
@@ -351,17 +348,23 @@ impl Application {
                                 debug!(height = %height, "Block replayed successfully");
 
                                 // Update forkchoice to this block
-                                if let Err(e) = self
-                                    .engine
-                                    .set_latest_forkchoice_state(
-                                        block.execution_hash(),
-                                        &self.retry_config,
-                                    )
+                                match self
+                                    .forkchoice_updated_with_retry(block.execution_hash(), None)
                                     .await
                                 {
-                                    warn!(height = %height, error = %e, "Failed to update forkchoice during replay");
-                                } else {
-                                    last_replayed_height = Some(height);
+                                    Ok(response) if response.payload_status.status.is_valid() => {
+                                        last_replayed_height = Some(height);
+                                    }
+                                    Ok(response) => {
+                                        warn!(
+                                            height = %height,
+                                            status = ?response.payload_status.status,
+                                            "Failed to update forkchoice during replay"
+                                        );
+                                    }
+                                    Err(e) => {
+                                        warn!(height = %height, error = %e, "Failed to update forkchoice during replay");
+                                    }
                                 }
                             }
                             PayloadStatusEnum::Invalid { validation_error } => {
@@ -463,12 +466,17 @@ impl Application {
             }
 
             // Always update forkchoice to the new finalized block
-            if let Err(e) = self
-                .engine
-                .set_latest_forkchoice_state(block.execution_hash(), &self.retry_config)
+            match self
+                .forkchoice_updated_with_retry(block.execution_hash(), None)
                 .await
             {
-                warn!(height = %finalized_height, ?e, "Failed to update forkchoice");
+                Ok(response) if response.payload_status.status.is_valid() => {}
+                Ok(response) => {
+                    warn!(height = %finalized_height, status = ?response.payload_status.status, "Failed to update forkchoice");
+                }
+                Err(e) => {
+                    warn!(height = %finalized_height, ?e, "Failed to update forkchoice");
+                }
             }
         }
 
@@ -507,8 +515,7 @@ impl Application {
             loop {
                 let result = self
                     .engine
-                    .api
-                    .forkchoice_updated(head_block_hash, payload_attributes.clone())
+                    .fork_choice_updated_v3(head_block_hash, payload_attributes.clone())
                     .await;
 
                 match result {
@@ -523,7 +530,7 @@ impl Application {
 
                         return Ok(forkchoice_updated);
                     }
-                    Err(e) => return Err(format!("{e}")),
+                    Err(e) => return Err(e),
                 }
             }
         };
@@ -549,14 +556,12 @@ impl Application {
 
             loop {
                 // Use new_payload method with Prague fork (V4)
-                let result: Result<PayloadStatus, _> = self
+                let result = self
                     .engine
-                    .api
-                    .new_payload(
+                    .new_payload_v4(
                         execution_payload.clone(),
                         versioned_hashes.clone(),
                         parent_hash,
-                        vec![], // execution_requests (empty for now)
                     )
                     .await;
 
@@ -572,7 +577,7 @@ impl Application {
 
                         return Ok(payload_status);
                     }
-                    Err(e) => return Err(format!("{e}")),
+                    Err(e) => return Err(e),
                 }
             }
         };
@@ -593,12 +598,12 @@ impl Application {
         el_timestamp: u64,
         prev_randao: B256,
         parent_hash: B256,
-        fee_recipient: &malachitebft_eth_types::Address,
+        fee_recipient: &Address,
     ) -> Option<ExecutionPayloadV3> {
         let payload_attributes = PayloadAttributes {
             timestamp: el_timestamp,
             prev_randao,
-            suggested_fee_recipient: fee_recipient.to_alloy_address(),
+            suggested_fee_recipient: *fee_recipient,
             withdrawals: Some(vec![]),
             parent_beacon_block_root: Some(parent_hash),
         };
@@ -631,7 +636,13 @@ impl Application {
         let fork = self.get_fork(el_timestamp);
 
         // Use get_payload method with the determined fork
-        let payload_envelope = match self.engine.api.get_payload(payload_id, fork).await {
+        let payload_envelope = match fork {
+            Fork::Osaka => self.engine.get_payload_v5(payload_id).await,
+            Fork::Prague => self.engine.get_payload_v4(payload_id).await,
+            Fork::Unsupported => Err("Unsupported fork".to_string()),
+        };
+
+        let payload_envelope = match payload_envelope {
             Ok(payload) => Some(payload),
             Err(e) => {
                 error!(error = %e, fork = ?fork, "Failed to fetch execution payload via get_payload");
@@ -814,10 +825,6 @@ where
         let prev_randao = parent.execution_block().prev_randao;
 
         // Convert fee recipient to emerald Address type
-        let fee_recipient = malachitebft_eth_types::Address::from(alloy_primitives::Address::from(
-            self.fee_recipient.0 .0,
-        ));
-
         let parent_hash = parent_execution_hash;
 
         // Build execution payload via Engine API with retry
@@ -827,7 +834,7 @@ where
                 el_timestamp,
                 prev_randao,
                 parent_hash,
-                &fee_recipient,
+                &self.fee_recipient,
             )
             .await;
 

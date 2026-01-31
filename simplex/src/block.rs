@@ -2,6 +2,7 @@
 
 use alloy_primitives::B256;
 use alloy_rpc_types_engine::ExecutionPayloadV3;
+use alloy_rpc_types_eth::Block as RpcBlock;
 use bytes::{Buf, BufMut};
 use commonware_codec::varint::UInt;
 use commonware_codec::{EncodeSize, Error, Read, ReadExt, Write};
@@ -9,11 +10,33 @@ use commonware_consensus::types::Height;
 use commonware_consensus::Heightable;
 use commonware_cryptography::sha256::Digest;
 use commonware_cryptography::{Committable, Digestible, Hasher, Sha256};
-use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use ssz::{Decode, Encode};
 
 /// Execution block hash from the EVM execution layer.
 pub type ExecutionHash = B256;
+
+/// Minimal execution block data used by simplex consensus.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExecutionBlock {
+    pub block_hash: B256,
+    pub block_number: u64,
+    pub parent_hash: B256,
+    pub timestamp: u64,
+    pub prev_randao: B256,
+}
+
+impl ExecutionBlock {
+    pub fn from_rpc_block(block: RpcBlock) -> Self {
+        let header = block.header;
+        Self {
+            block_hash: header.hash,
+            block_number: header.inner.number,
+            parent_hash: header.inner.parent_hash,
+            timestamp: header.inner.timestamp,
+            prev_randao: header.inner.mix_hash,
+        }
+    }
+}
 
 /// Block for simplex consensus with EVM execution.
 #[derive(Clone, Debug, PartialEq)]

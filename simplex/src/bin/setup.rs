@@ -4,11 +4,13 @@
 
 use core::error::Error;
 use core::net::{IpAddr, Ipv4Addr, SocketAddr};
+use core::time::Duration;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use alloy_primitives::Address as AlloyAddress;
+use alloy_primitives::Address;
+use alloy_rpc_types_engine::JwtSecret;
 use clap::{Parser, Subcommand};
 use commonware_codec::Encode;
 use commonware_cryptography::secp256r1::standard::PrivateKey;
@@ -17,9 +19,7 @@ use commonware_math::algebra::Random;
 use commonware_utils::{from_hex_formatted, hex};
 use emerald_simplex::config::{Peers, SimplexConfig, SimplexConfigFile};
 use malachitebft_eth_cli::config::{ElNodeType, EmeraldConfig};
-use malachitebft_eth_types::Address;
 use rand::rngs::OsRng;
-use tokio::time::Duration;
 
 /// Emerald Simplex setup tool.
 #[derive(Parser)]
@@ -141,7 +141,7 @@ fn generate_testnet(
     println!("  Wrote peers file: {}", peers_path.display());
 
     let fee_recipient_bytes = from_hex_formatted(&fee_recipient).ok_or("Invalid fee recipient")?;
-    let fee_recipient_addr = Address::from(AlloyAddress::from_slice(&fee_recipient_bytes));
+    let fee_recipient_addr = Address::from_slice(&fee_recipient_bytes);
     let base_http_port = base_engine_port.saturating_sub(6);
 
     // Generate config for each validator
@@ -157,10 +157,8 @@ fn generate_testnet(
         fs::create_dir_all(&storage_dir)?;
 
         // Generate random JWT secret for this validator
-        let jwt_secret: [u8; 32] = rand::random();
-        let jwt_hex = format!("0x{}", hex::encode(jwt_secret));
         let jwt_file_path = config_dir.join("jwt.hex");
-        fs::write(&jwt_file_path, &jwt_hex)?;
+        JwtSecret::try_create_random(&jwt_file_path)?;
         println!("    Wrote JWT secret: {}", jwt_file_path.display());
 
         let emerald = EmeraldConfig {
@@ -180,7 +178,7 @@ fn generate_testnet(
             max_retain_blocks: 0,
             prune_at_block_interval: 10,
             min_block_time: Duration::from_millis(500),
-            fee_recipient: fee_recipient_addr,
+            fee_recipient: fee_recipient_addr.into(),
         };
 
         let simplex = SimplexConfig {

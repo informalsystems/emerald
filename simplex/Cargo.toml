@@ -22,7 +22,6 @@ path = "src/bin/setup.rs"
 
 [dependencies]
 # Emerald dependencies - reuse existing infrastructure
-malachitebft-eth-engine = { workspace = true }
 malachitebft-eth-types = { workspace = true }
 malachitebft-eth-cli = { workspace = true }
 
@@ -40,12 +39,17 @@ commonware-parallel = "0.0.65"
 commonware-math = "0.0.65"
 
 # Alloy for EVM types
-alloy-primitives = { workspace = true }
+alloy-primitives = { workspace = true, features = ["serde"] }
+alloy-eips = { workspace = true }
+alloy-provider = { version = "1.4.3", features = ["engine-api"] }
+alloy-rpc-client = "1.4.3"
 alloy-rpc-types-engine = { workspace = true }
+alloy-rpc-types-eth = { workspace = true }
 alloy-rlp = "0.3"
 alloy-consensus = { workspace = true }
 alloy-trie = "0.9"
 alloy-genesis = "1.4.3"
+alloy-transport-http = { version = "1.4.3", features = ["hyper", "jwt-auth"] }
 
 # Serialization
 bytes = { workspace = true }

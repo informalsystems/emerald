@@ -32,7 +32,6 @@ use futures::channel::mpsc;
 use futures::future::try_join_all;
 use governor::clock::Clock as GClock;
 use governor::Quota;
-use malachitebft_eth_engine::engine::Engine as EmeraldEngine;
 use rand::{CryptoRng, Rng};
 use tracing::{error, info, warn};
 
@@ -41,6 +40,7 @@ use crate::block::Block;
 use crate::consensus::{
     Finalization, PrivateKey, PublicKey, Scheme, EPOCH, EPOCH_LENGTH, NAMESPACE,
 };
+use crate::execution_engine::EngineClient;
 
 /// Reporter type for simplex Engine.
 type EngineReporter = ConsensusReporter<marshal::Mailbox<Scheme, Block>>;
@@ -90,7 +90,7 @@ pub struct Config<B: Blocker<PublicKey = PublicKey>, S: Strategy> {
     pub strategy: S,
 
     /// The emerald Engine API client.
-    pub engine: EmeraldEngine,
+    pub engine: EngineClient,
     pub fee_recipient: Address,
     pub min_block_time: Duration,
     /// P2P oracle for updating authorized peers on validator set changes.

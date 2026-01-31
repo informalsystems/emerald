@@ -260,7 +260,7 @@ impl Application {
 
     /// Determine the current fork based on timestamp (in seconds).
     /// This follows the same pattern as emerald's get_fork() method.
-    fn get_fork(&self, timestamp_secs: u64) -> Fork {
+    fn fork_for_timestamp(&self, timestamp_secs: u64) -> Fork {
         if self.osaka_time.is_some_and(|time| time <= timestamp_secs) {
             return Fork::Osaka;
         }
@@ -336,7 +336,7 @@ impl Application {
 
                 // Try to import the payload
                 match self
-                    .notify_new_block_with_retry(payload.clone(), vec![], parent_hash)
+                    .new_payload_v4_with_retry(payload.clone(), vec![], parent_hash)
                     .await
                 {
                     Ok(status) => {
@@ -346,7 +346,7 @@ impl Application {
 
                                 // Update forkchoice to this block
                                 match self
-                                    .forkchoice_updated_with_retry(block.execution_hash(), None)
+                                    .forkchoice_updated_v3_with_retry(block.execution_hash(), None)
                                     .await
                                 {
                                     Ok(response) if response.payload_status.status.is_valid() => {
@@ -426,7 +426,7 @@ impl Application {
                         // Import the payload with retry for syncing nodes
                         let parent_hash = block.parent_execution_hash();
                         let import_result = self
-                            .notify_new_block_with_retry(payload, vec![], parent_hash)
+                            .new_payload_v4_with_retry(payload, vec![], parent_hash)
                             .await;
 
                         let mut import_ok = false;
@@ -464,7 +464,7 @@ impl Application {
 
             // Always update forkchoice to the new finalized block
             match self
-                .forkchoice_updated_with_retry(block.execution_hash(), None)
+                .forkchoice_updated_v3_with_retry(block.execution_hash(), None)
                 .await
             {
                 Ok(response) if response.payload_status.status.is_valid() => {}
@@ -496,53 +496,68 @@ impl Application {
         }
     }
 
-    /// Check if payload includes blob data (unsupported without versioned hashes).
-    fn payload_has_blobs(payload: &ExecutionPayloadV3) -> bool {
-        payload.blob_gas_used != 0 || payload.excess_blob_gas != 0
-    }
-
-    async fn forkchoice_updated_with_retry(
+    async fn get_payload_with_retry(
         &self,
-        head_block_hash: B256,
-        payload_attributes: Option<PayloadAttributes>,
-    ) -> Result<ForkchoiceUpdated, String> {
-        let fcu_future = async {
-            let mut retry_delay = self.retry_config.initial_delay;
+        parent_exec_hash: B256,
+        el_timestamp: u64,
+        prev_randao: B256,
+        parent_hash: B256,
+        fee_recipient: &Address,
+    ) -> Option<ExecutionPayloadV3> {
+        let payload_attributes = PayloadAttributes {
+            timestamp: el_timestamp,
+            prev_randao,
+            suggested_fee_recipient: *fee_recipient,
+            withdrawals: Some(vec![]),
+            parent_beacon_block_root: Some(parent_hash),
+        };
 
-            loop {
-                let result = self
-                    .engine
-                    .fork_choice_updated_v3(head_block_hash, payload_attributes.clone())
-                    .await;
-
-                match result {
-                    Ok(forkchoice_updated) => {
-                        if forkchoice_updated.payload_status.status.is_syncing() {
-                            warn!("Execution client SYNCING, retrying in {:?}", retry_delay);
-
-                            tokio::time::sleep(retry_delay).await;
-                            retry_delay = self.retry_config.next_delay(retry_delay);
-                            continue;
-                        }
-
-                        return Ok(forkchoice_updated);
-                    }
-                    Err(e) => return Err(e),
-                }
+        let ForkchoiceUpdated {
+            payload_status,
+            payload_id,
+        } = match self
+            .forkchoice_updated_v3_with_retry(parent_exec_hash, Some(payload_attributes))
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => {
+                error!(error = %e, "Failed to update forkchoice for payload build");
+                return None;
             }
         };
 
-        tokio::time::timeout(self.retry_config.max_elapsed_time, fcu_future)
-            .await
-            .map_err(|_| {
-                format!(
-                    "Timeout after {:?} waiting for execution client to sync",
-                    self.retry_config.max_elapsed_time
-                )
-            })?
+        if !payload_status.status.is_valid() {
+            error!(status = ?payload_status.status, "Forkchoice returned non-valid status");
+            return None;
+        }
+
+        let Some(payload_id) = payload_id else {
+            error!("Payload ID missing after forkchoice update");
+            return None;
+        };
+
+        // Determine fork based on EL timestamp
+        let fork = self.fork_for_timestamp(el_timestamp);
+
+        // Use get_payload method with the determined fork
+        let payload_envelope = match fork {
+            Fork::Osaka => self.engine.get_payload_v5(payload_id).await,
+            Fork::Prague => self.engine.get_payload_v4(payload_id).await,
+            Fork::Unsupported => Err("Unsupported fork".to_string()),
+        };
+
+        let payload_envelope = match payload_envelope {
+            Ok(payload) => Some(payload),
+            Err(e) => {
+                error!(error = %e, fork = ?fork, "Failed to fetch execution payload via get_payload");
+                None
+            }
+        };
+
+        payload_envelope
     }
 
-    async fn notify_new_block_with_retry(
+    async fn new_payload_v4_with_retry(
         &self,
         execution_payload: ExecutionPayloadV3,
         versioned_hashes: Vec<B256>,
@@ -589,70 +604,50 @@ impl Application {
             })?
     }
 
-    async fn build_execution_payload(
+    async fn forkchoice_updated_v3_with_retry(
         &self,
-        parent_exec_hash: B256,
-        el_timestamp: u64,
-        prev_randao: B256,
-        parent_hash: B256,
-        fee_recipient: &Address,
-    ) -> Option<ExecutionPayloadV3> {
-        let payload_attributes = PayloadAttributes {
-            timestamp: el_timestamp,
-            prev_randao,
-            suggested_fee_recipient: *fee_recipient,
-            withdrawals: Some(vec![]),
-            parent_beacon_block_root: Some(parent_hash),
+        head_block_hash: B256,
+        payload_attributes: Option<PayloadAttributes>,
+    ) -> Result<ForkchoiceUpdated, String> {
+        let fcu_future = async {
+            let mut retry_delay = self.retry_config.initial_delay;
+
+            loop {
+                let result = self
+                    .engine
+                    .fork_choice_updated_v3(head_block_hash, payload_attributes.clone())
+                    .await;
+
+                match result {
+                    Ok(forkchoice_updated) => {
+                        if forkchoice_updated.payload_status.status.is_syncing() {
+                            warn!("Execution client SYNCING, retrying in {:?}", retry_delay);
+
+                            tokio::time::sleep(retry_delay).await;
+                            retry_delay = self.retry_config.next_delay(retry_delay);
+                            continue;
+                        }
+
+                        return Ok(forkchoice_updated);
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
         };
 
-        let ForkchoiceUpdated {
-            payload_status,
-            payload_id,
-        } = match self
-            .forkchoice_updated_with_retry(parent_exec_hash, Some(payload_attributes))
+        tokio::time::timeout(self.retry_config.max_elapsed_time, fcu_future)
             .await
-        {
-            Ok(response) => response,
-            Err(e) => {
-                error!(error = %e, "Failed to update forkchoice for payload build");
-                return None;
-            }
-        };
-
-        if !payload_status.status.is_valid() {
-            error!(status = ?payload_status.status, "Forkchoice returned non-valid status");
-            return None;
-        }
-
-        let Some(payload_id) = payload_id else {
-            error!("Payload ID missing after forkchoice update");
-            return None;
-        };
-
-        // Determine fork based on EL timestamp
-        let fork = self.get_fork(el_timestamp);
-
-        // Use get_payload method with the determined fork
-        let payload_envelope = match fork {
-            Fork::Osaka => self.engine.get_payload_v5(payload_id).await,
-            Fork::Prague => self.engine.get_payload_v4(payload_id).await,
-            Fork::Unsupported => Err("Unsupported fork".to_string()),
-        };
-
-        let payload_envelope = match payload_envelope {
-            Ok(payload) => Some(payload),
-            Err(e) => {
-                error!(error = %e, fork = ?fork, "Failed to fetch execution payload via get_payload");
-                None
-            }
-        };
-
-        payload_envelope
+            .map_err(|_| {
+                format!(
+                    "Timeout after {:?} waiting for execution client to sync",
+                    self.retry_config.max_elapsed_time
+                )
+            })?
     }
 
     /// Validate execution payload with the execution engine.
     /// Uses cache to avoid duplicate validation calls.
-    async fn validate_execution_payload(
+    async fn validate_new_payload_v4(
         &self,
         payload: &ExecutionPayloadV3,
         height: Height,
@@ -677,7 +672,7 @@ impl Application {
 
         // Validate with execution engine using retry mechanism
         let result = self
-            .notify_new_block_with_retry(payload.clone(), versioned_hashes, parent_hash)
+            .new_payload_v4_with_retry(payload.clone(), versioned_hashes, parent_hash)
             .await;
 
         let validity = match result {
@@ -707,6 +702,11 @@ impl Application {
         }
 
         validity
+    }
+
+    /// Check if payload includes blob data (unsupported without versioned hashes).
+    fn payload_has_blobs(payload: &ExecutionPayloadV3) -> bool {
+        payload.blob_gas_used != 0 || payload.excess_blob_gas != 0
     }
 }
 
@@ -824,7 +824,7 @@ where
 
         // Build execution payload via Engine API with retry
         let payload_result = self
-            .build_execution_payload(
+            .get_payload_with_retry(
                 parent_execution_hash,
                 el_timestamp,
                 prev_randao,
@@ -852,7 +852,7 @@ where
 
                 // Import the payload with retry
                 let import_result = self
-                    .notify_new_block_with_retry(payload.clone(), vec![], parent_hash)
+                    .new_payload_v4_with_retry(payload.clone(), vec![], parent_hash)
                     .await;
 
                 match import_result {
@@ -1041,7 +1041,7 @@ where
         // Validate execution payload with EL (uses cache)
         let parent_hash = block.parent_execution_hash();
         let validity = self
-            .validate_execution_payload(&execution_payload, block.height(), parent_hash)
+            .validate_new_payload_v4(&execution_payload, block.height(), parent_hash)
             .await;
 
         if validity == Validity::Invalid {

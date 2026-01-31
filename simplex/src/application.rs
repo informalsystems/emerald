@@ -97,11 +97,11 @@ pub struct EvmState {
     pub validated_cache: ValidatedPayloadCache,
 }
 
-impl Default for EvmState {
-    fn default() -> Self {
+impl EvmState {
+    pub fn new(finalized_height: Height, last_block_timestamp: u64) -> Self {
         Self {
-            finalized_height: Height::zero(),
-            last_block_timestamp: 0,
+            finalized_height,
+            last_block_timestamp,
             validated_cache: ValidatedPayloadCache::new(VALIDATED_PAYLOAD_CACHE_SIZE),
         }
     }
@@ -234,10 +234,12 @@ impl Application {
         let genesis_block =
             Block::new(Sha256::hash(GENESIS_PARENT_MESSAGE), genesis_execution_data);
 
+        let state = EvmState::new(genesis_block.height(), genesis_block.timestamp);
+
         Self {
             genesis_block,
             engine: Arc::new(engine),
-            state: Arc::new(RwLock::new(EvmState::default())),
+            state: Arc::new(RwLock::new(state)),
             fee_recipient,
             retry_config: RetryConfig::default(),
             min_block_time,

@@ -272,11 +272,6 @@ impl Application {
         Fork::Unsupported
     }
 
-    /// Update safe/head forkchoice for a notarized block.
-    pub fn on_notarized(&self, block: &Block) {
-        let _ = block;
-    }
-
     /// Replay blocks from ancestry to the EVM execution client.
     /// This is called when we detect that the EVM is behind the consensus ancestry.
     /// Takes the blocks that need to be checked (already collected from ancestry).

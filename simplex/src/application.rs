@@ -20,7 +20,7 @@ use caches::lru::AdaptiveCache;
 use caches::Cache;
 use commonware_consensus::marshal::ingress::mailbox::AncestorStream;
 use commonware_consensus::marshal::Update;
-use commonware_consensus::simplex::types::Context;
+use commonware_consensus::simplex::types::{Activity, Context};
 use commonware_consensus::types::Height;
 use commonware_consensus::{Heightable, Reporter};
 use commonware_cryptography::sha256::Digest;
@@ -124,6 +124,93 @@ pub struct Application {
     osaka_time: Option<u64>,
     /// P2P oracle for updating authorized peers on validator set changes.
     oracle: Oracle<PublicKey>,
+}
+
+/// Reporter that logs consensus activity and forwards to inner reporter.
+#[derive(Clone)]
+pub struct ConsensusReporter<R> {
+    inner: R,
+}
+
+impl<R> ConsensusReporter<R> {
+    pub fn new(inner: R) -> Self {
+        Self { inner }
+    }
+}
+
+impl<R> Reporter for ConsensusReporter<R>
+where
+    R: Reporter<Activity = Activity<Scheme, Digest>>,
+{
+    type Activity = Activity<Scheme, Digest>;
+
+    async fn report(&mut self, activity: Self::Activity) {
+        match &activity {
+            Activity::Notarize(vote) => {
+                debug!(
+                    round = %vote.proposal.round,
+                    parent = %vote.proposal.parent,
+                    payload = %vote.proposal.payload,
+                    "Consensus notarize"
+                );
+            }
+            Activity::Notarization(cert) => {
+                info!(
+                    round = %cert.proposal.round,
+                    parent = %cert.proposal.parent,
+                    payload = %cert.proposal.payload,
+                    "Consensus notarization"
+                );
+            }
+            Activity::Certification(cert) => {
+                info!(
+                    round = %cert.proposal.round,
+                    parent = %cert.proposal.parent,
+                    payload = %cert.proposal.payload,
+                    "Consensus certification"
+                );
+            }
+            Activity::Nullify(vote) => {
+                debug!(
+                    round = %vote.round,
+                    "Consensus nullify"
+                );
+            }
+            Activity::Nullification(cert) => {
+                info!(
+                    round = %cert.round,
+                    "Consensus nullification"
+                );
+            }
+            Activity::Finalize(vote) => {
+                debug!(
+                    round = %vote.proposal.round,
+                    parent = %vote.proposal.parent,
+                    payload = %vote.proposal.payload,
+                    "Consensus finalize"
+                );
+            }
+            Activity::Finalization(cert) => {
+                info!(
+                    round = %cert.proposal.round,
+                    parent = %cert.proposal.parent,
+                    payload = %cert.proposal.payload,
+                    "Consensus finalization"
+                );
+            }
+            Activity::ConflictingNotarize(evidence) => {
+                warn!(?evidence, "Consensus conflicting notarize");
+            }
+            Activity::ConflictingFinalize(evidence) => {
+                warn!(?evidence, "Consensus conflicting finalize");
+            }
+            Activity::NullifyFinalize(evidence) => {
+                warn!(?evidence, "Consensus nullify/finalize");
+            }
+        }
+
+        self.inner.report(activity).await;
+    }
 }
 
 impl Application {
@@ -641,6 +728,36 @@ where
         let parent = ancestry.next().await?;
         let parent_digest = parent.digest();
         let parent_execution_hash = parent.execution_hash();
+
+        // Check and replay missing blocks if EVM is behind
+        if let Ok(evm_height) = self.engine.get_latest_block_number().await {
+            let evm_latest = evm_height.map(Height::new).unwrap_or_else(Height::zero);
+
+            if parent.height() > evm_latest {
+                let mut blocks_to_replay: Vec<Block> = vec![parent.clone()];
+                while let Some(ancestor) = ancestry.next().await {
+                    if ancestor.height() <= evm_latest {
+                        break;
+                    }
+                    blocks_to_replay.push(ancestor);
+                }
+
+                warn!(
+                    parent_height = %parent.height(),
+                    evm_height = %evm_latest,
+                    blocks_to_replay = blocks_to_replay.len(),
+                    "EVM is behind consensus ancestry - replaying missing blocks"
+                );
+
+                let replay_result = self.replay_missing_blocks(&blocks_to_replay).await;
+                if replay_result.is_none() {
+                    warn!(
+                        parent_height = %parent.height(),
+                        "Failed to replay missing blocks - proceeding with proposal anyway"
+                    );
+                }
+            }
+        }
 
         // Enforce minimum block time - wait if we're proposing too quickly.
         // Block time defines how long a transaction needs to wait to be included in a proposal block.

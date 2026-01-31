@@ -36,14 +36,14 @@ use malachitebft_eth_engine::engine::Engine as EmeraldEngine;
 use rand::{CryptoRng, Rng};
 use tracing::{error, info, warn};
 
-use crate::application::Application;
+use crate::application::{Application, ConsensusReporter};
 use crate::block::Block;
 use crate::consensus::{
     Finalization, PrivateKey, PublicKey, Scheme, EPOCH, EPOCH_LENGTH, NAMESPACE,
 };
 
 /// Reporter type for simplex Engine.
-type EngineReporter = marshal::Mailbox<Scheme, Block>;
+type EngineReporter = ConsensusReporter<marshal::Mailbox<Scheme, Block>>;
 
 /// Elector type using round-robin with SHA256 for shuffling.
 type Elector = RoundRobin<Sha256>;
@@ -285,7 +285,7 @@ impl<
         );
 
         // Create the reporter
-        let reporter: EngineReporter = marshal_mailbox;
+        let reporter: EngineReporter = ConsensusReporter::new(marshal_mailbox);
 
         // Create the consensus engine with round-robin leader election
         // Use shuffled round-robin with the namespace as seed for deterministic ordering

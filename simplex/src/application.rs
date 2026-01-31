@@ -737,36 +737,6 @@ where
         let parent_digest = parent.digest();
         let parent_execution_hash = parent.execution_hash();
 
-        // Check and replay missing blocks if EVM is behind
-        if let Ok(evm_height) = self.engine.get_latest_block_number().await {
-            let evm_latest = evm_height.map(Height::new).unwrap_or_else(Height::zero);
-
-            if parent.height() > evm_latest {
-                let mut blocks_to_replay: Vec<Block> = vec![parent.clone()];
-                while let Some(ancestor) = ancestry.next().await {
-                    if ancestor.height() <= evm_latest {
-                        break;
-                    }
-                    blocks_to_replay.push(ancestor);
-                }
-
-                warn!(
-                    parent_height = %parent.height(),
-                    evm_height = %evm_latest,
-                    blocks_to_replay = blocks_to_replay.len(),
-                    "EVM is behind consensus ancestry - replaying missing blocks"
-                );
-
-                let replay_result = self.replay_missing_blocks(&blocks_to_replay).await;
-                if replay_result.is_none() {
-                    warn!(
-                        parent_height = %parent.height(),
-                        "Failed to replay missing blocks - proceeding with proposal anyway"
-                    );
-                }
-            }
-        }
-
         // Enforce minimum block time - wait if we're proposing too quickly.
         // Block time defines how long a transaction needs to wait to be included in a proposal block.
         // We wait to allow the mempool to fill up with transactions to include in the proposed block.
@@ -922,41 +892,6 @@ where
             return false;
         };
 
-        // Check and replay missing blocks if EVM is behind
-        // Only collect and replay when parent.height() > evm_latest
-        if let Ok(evm_height) = self.engine.get_latest_block_number().await {
-            let evm_latest = evm_height.map(Height::new).unwrap_or_else(Height::zero);
-
-            if parent.height() > evm_latest {
-                // Collect ancestry blocks that need replay (excluding the top block being verified)
-                // and stop when we reach EVM's latest height
-                let mut blocks_to_replay: Vec<Block> = vec![parent.clone()];
-                while let Some(ancestor) = ancestry.next().await {
-                    if ancestor.height() <= evm_latest {
-                        break;
-                    }
-                    blocks_to_replay.push(ancestor);
-                }
-
-                warn!(
-                    block_height = %block.height(),
-                    parent_height = %parent.height(),
-                    evm_height = %evm_latest,
-                    blocks_to_replay = blocks_to_replay.len(),
-                    "EVM is behind consensus ancestry - replaying missing blocks"
-                );
-
-                // Replay missing blocks (reverse order to replay oldest first)
-                let replay_result = self.replay_missing_blocks(&blocks_to_replay).await;
-                if replay_result.is_none() {
-                    warn!(
-                        block_height = %block.height(),
-                        "Failed to replay missing blocks - proceeding with verification anyway"
-                    );
-                }
-            }
-        }
-
         // Check if execution hash is already in validated cache
         {
             let mut state = self.state.write().await;
@@ -1076,36 +1011,28 @@ impl Reporter for Application {
         if let Update::Block(block, ack_rx) = activity {
             let height = block.height();
 
-            // Before processing finalization, check if EVM needs to replay missing blocks
-            // Get the latest height from EVM and compare with what we expect
+            // Before processing finalization, check if EVM needs to replay missing blocks.
             let evm_latest = match self.engine.get_latest_block_number().await {
                 Ok(Some(h)) => Height::new(h),
                 Ok(None) => Height::zero(),
                 Err(e) => {
                     warn!(error = %e, "Failed to get EVM latest height in report");
-                    // Proceed with finalization anyway
                     Height::zero()
                 }
             };
 
-            // If the EVM is behind the block we're finalizing, we need to replay intermediate blocks
-            // We check if the parent height is greater than EVM's latest
-            // This indicates we're missing at least the parent block on the EVM
-            let should_check_replay = height > Height::zero();
+            if height > evm_latest {
+                warn!(
+                    finalized_height = %height,
+                    evm_height = %evm_latest,
+                    "EVM is behind finalized height - replaying block in report"
+                );
 
-            if should_check_replay {
-                if let Some(block_parent_height) = height.previous() {
-                    if block_parent_height > evm_latest {
-                        warn!(
-                            finalized_height = %height,
-                            parent_height = %block_parent_height,
-                            evm_height = %evm_latest,
-                            "EVM is missing blocks detected in report - will attempt replay on next verify"
-                        );
-
-                        // The blocks will be replayed when they are next verified
-                        // We can't replay here because we don't have the ancestry stream in report()
-                    }
+                let replay_result = self
+                    .replay_missing_blocks(core::slice::from_ref(&block))
+                    .await;
+                if replay_result.is_none() {
+                    warn!(height = %height, "Failed to replay finalized block in report");
                 }
             }
 

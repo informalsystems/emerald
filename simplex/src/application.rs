@@ -18,16 +18,17 @@ use alloy_rpc_types_engine::{
 };
 use caches::lru::AdaptiveCache;
 use caches::Cache;
-use commonware_consensus::marshal::ingress::mailbox::{AncestorStream, Mailbox};
+use commonware_consensus::marshal::ingress::mailbox::{AncestorStream, Identifier, Mailbox};
 use commonware_consensus::marshal::Update;
 use commonware_consensus::simplex::types::{Activity, Context};
 use commonware_consensus::types::Height;
 use commonware_consensus::{Heightable, Reporter};
 use commonware_cryptography::sha256::Digest;
-use commonware_cryptography::{Committable, Digestible, Hasher, Sha256};
+use commonware_cryptography::{Digestible, Hasher, Sha256};
 use commonware_p2p::authenticated::discovery::Oracle;
 use commonware_p2p::Manager;
 use commonware_runtime::{Clock, Metrics, Spawner};
+use commonware_utils::vec::NonEmptyVec;
 use commonware_utils::{Acknowledgement, SystemTimeExt};
 use futures::StreamExt;
 use malachitebft_eth_types::RetryConfig;
@@ -36,7 +37,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 use crate::block::{Block, ExecutionData};
-use crate::consensus::{PublicKey, Scheme};
+use crate::consensus::{PublicKey, Scheme, EPOCH};
 use crate::execution_engine::{EngineClient, Fork};
 
 /// Message that is hashed to create the parent digest for the genesis block.
@@ -45,6 +46,8 @@ const GENESIS_PARENT_MESSAGE: &[u8] = b"emerald-simplex genesis";
 
 /// Seconds in the future allowed for block timestamps.
 const SYNCHRONY_BOUND: u64 = 2;
+const BACKFILL_POLL_INTERVAL: Duration = Duration::from_millis(200);
+const BACKFILL_MAX_WAIT: Duration = Duration::from_secs(10);
 
 /// Maximum cache size for validated payloads.
 /// Aligned with emerald's cache size for consistency.
@@ -153,7 +156,7 @@ where
                 );
             }
             Activity::Notarization(cert) => {
-                info!(
+                debug!(
                     round = %cert.proposal.round,
                     parent = %cert.proposal.parent,
                     payload = %cert.proposal.payload,
@@ -161,7 +164,7 @@ where
                 );
             }
             Activity::Certification(cert) => {
-                info!(
+                debug!(
                     round = %cert.proposal.round,
                     parent = %cert.proposal.parent,
                     payload = %cert.proposal.payload,
@@ -175,7 +178,7 @@ where
                 );
             }
             Activity::Nullification(cert) => {
-                info!(
+                debug!(
                     round = %cert.round,
                     "Consensus nullification"
                 );
@@ -189,7 +192,7 @@ where
                 );
             }
             Activity::Finalization(cert) => {
-                info!(
+                debug!(
                     round = %cert.proposal.round,
                     parent = %cert.proposal.parent,
                     payload = %cert.proposal.payload,
@@ -234,7 +237,25 @@ impl Application {
         let genesis_block =
             Block::new(Sha256::hash(GENESIS_PARENT_MESSAGE), genesis_execution_data);
 
-        let state = EvmState::new(genesis_block.clone());
+        let latest_execution_block = engine
+            .get_latest_block()
+            .await
+            .expect("Failed to fetch latest block from execution layer");
+
+        let latest_execution_data = ExecutionData::from_rpc_header(latest_execution_block.header);
+
+        // not a correct parent hash in simplex context, but sufficient for initializing state
+        let latest_block = Block::new(Sha256::hash(GENESIS_PARENT_MESSAGE), latest_execution_data);
+
+        let state = EvmState::new(latest_block.clone());
+
+        info!(
+            gensis_height = %genesis_block.height(),
+            gensis_exec_hash = %genesis_block.execution_hash(),
+            latest_height = %latest_block.height(),
+            latest_exec_hash = %latest_block.execution_hash(),
+            "EVM Application initialized"
+        );
 
         Self {
             genesis_block,
@@ -277,117 +298,102 @@ impl Application {
     /// This is called when we detect that the EVM is behind the consensus ancestry.
     /// Takes the blocks that need to be checked (already collected from ancestry).
     /// Returns the highest height successfully replayed, or None if no replay was needed.
-    async fn replay_missing_blocks(&self, blocks_to_check: &[Block]) -> Option<Height> {
-        if blocks_to_check.is_empty() {
+    async fn backfill_targets(&mut self) -> Option<NonEmptyVec<PublicKey>> {
+        let Some(peers) = self.oracle.peer_set(EPOCH.get()).await else {
+            warn!("No peer set available for backfill");
+            return None;
+        };
+        if peers.is_empty() {
+            warn!("Peer set is empty; cannot request backfill");
             return None;
         }
 
-        // Get the latest block number from the EVM
-        let evm_latest = match self.engine.get_latest_block_number().await {
-            Ok(Some(height)) => Height::new(height),
-            Ok(None) => {
-                // EVM has no blocks (genesis case), start from height 0
-                Height::zero()
+        let peer_vec: Vec<PublicKey> = peers.iter().cloned().collect();
+        match NonEmptyVec::try_from(peer_vec) {
+            Ok(targets) => Some(targets),
+            Err(_) => {
+                warn!("Peer set was empty after conversion; cannot request backfill");
+                None
             }
-            Err(e) => {
-                warn!(error = %e, "Failed to get latest block number from EVM");
-                return None;
+        }
+    }
+
+    async fn fetch_finalized_block_with_hint(
+        &self,
+        height: Height,
+        targets: &NonEmptyVec<PublicKey>,
+    ) -> Option<Block> {
+        let mut marshal = self.marshal_mailbox.clone();
+        if let Some(block) = marshal.get_block(height).await {
+            info!(
+                height = %height,
+                "Finalized block found locally without backfill"
+            );
+            return Some(block);
+        }
+
+        marshal.hint_finalized(height, targets.clone()).await;
+
+        let poll = async {
+            loop {
+                if let Some(block) = marshal.get_block(height).await {
+                    info!(
+                        height = %height,
+                        "Finalized block fetched via backfill"
+                    );
+                    return Some(block);
+                }
+                tokio::time::sleep(BACKFILL_POLL_INTERVAL).await;
             }
         };
 
-        // Find blocks that need to be replayed (those with height > evm_latest)
-        let blocks_to_replay: Vec<&Block> = blocks_to_check
-            .iter()
-            .filter(|b| b.height() > evm_latest)
-            .collect();
+        tokio::time::timeout(BACKFILL_MAX_WAIT, poll)
+            .await
+            .unwrap_or_default()
+    }
 
-        if blocks_to_replay.is_empty() {
-            debug!(
-                evm_height = %evm_latest,
-                ancestry_tip = %blocks_to_check.first().unwrap().height(),
-                "No blocks need replaying - EVM is up to date"
-            );
-            return None;
+    async fn collect_missing_finalized_blocks(
+        &mut self,
+        evm_latest: Height,
+        target_height: Height,
+    ) -> Vec<Block> {
+        if evm_latest >= target_height {
+            return Vec::new();
         }
+
+        let latest_info = self.marshal_mailbox.get_info(Identifier::Latest).await;
+        let global_finalized_height = latest_info.map(|(h, _)| h);
 
         info!(
             evm_height = %evm_latest,
-            start_height = %blocks_to_replay.last().unwrap().height(),
-            end_height = %blocks_to_replay.first().unwrap().height(),
-            count = blocks_to_replay.len(),
-            "Replaying missing blocks to EVM"
+            global_finalized_height = ?global_finalized_height,
+            "Fetching missing finalized blocks"
         );
 
-        let mut last_replayed_height = None;
+        let Some(targets) = self.backfill_targets().await else {
+            return Vec::new();
+        };
 
-        // Replay blocks in reverse order (oldest first)
-        for block in blocks_to_replay.iter().rev() {
-            let height = block.height();
+        let mut blocks = Vec::new();
+        let mut height = target_height;
+        while height > evm_latest {
+            let block = self.fetch_finalized_block_with_hint(height, &targets).await;
+            let Some(block) = block else {
+                warn!(
+                    height = %height,
+                    "Failed to fetch finalized block for replay"
+                );
+                return Vec::new();
+            };
+            blocks.push(block);
 
-            if let Some(payload) = block.payload() {
-                if Self::payload_has_blobs(payload) {
-                    warn!(height = %height, "Cannot replay block with blobs");
-                    continue;
-                }
-
-                let parent_hash = block.parent_execution_hash();
-
-                // Try to import the payload
-                match self
-                    .new_payload_v4_with_retry(payload.clone(), vec![], parent_hash)
-                    .await
-                {
-                    Ok(status) => {
-                        match status.status {
-                            PayloadStatusEnum::Valid => {
-                                debug!(height = %height, "Block replayed successfully");
-
-                                // Update forkchoice to this block
-                                match self
-                                    .forkchoice_updated_v3_with_retry(block.execution_hash(), None)
-                                    .await
-                                {
-                                    Ok(response) if response.payload_status.status.is_valid() => {
-                                        last_replayed_height = Some(height);
-                                    }
-                                    Ok(response) => {
-                                        warn!(
-                                            height = %height,
-                                            status = ?response.payload_status.status,
-                                            "Failed to update forkchoice during replay"
-                                        );
-                                    }
-                                    Err(e) => {
-                                        warn!(height = %height, error = %e, "Failed to update forkchoice during replay");
-                                    }
-                                }
-                            }
-                            PayloadStatusEnum::Invalid { validation_error } => {
-                                warn!(height = %height, error = validation_error, "Block replay failed: invalid payload");
-                            }
-                            PayloadStatusEnum::Accepted => {
-                                warn!(height = %height, "Block replay returned ACCEPTED - treating as success");
-                                last_replayed_height = Some(height);
-                            }
-                            PayloadStatusEnum::Syncing => {
-                                warn!(height = %height, "Block replay: EVM is syncing, will retry later");
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        warn!(height = %height, error = %e, "Failed to replay block");
-                    }
-                }
-            } else {
-                warn!(height = %height, "Cannot replay block: missing execution payload");
-            }
+            let Some(prev) = height.previous() else {
+                break;
+            };
+            height = prev;
         }
-
-        if let Some(height) = last_replayed_height {
-            info!(height = %height, "Block replay completed");
-        }
-
-        last_replayed_height
+        blocks.reverse();
+        blocks
     }
 
     /// Update the EVM state after finalization.
@@ -405,59 +411,47 @@ impl Application {
                 "Block skipped: already processed"
             );
         } else {
-            // Check if the block already exists on EVM
-            let evm_latest = match self.engine.get_latest_block_number().await {
-                Ok(Some(height)) => Height::new(height),
-                Ok(None) => Height::zero(),
-                Err(e) => {
-                    warn!(height = %finalized_height, error = %e, "Failed to get EVM latest height during finalization");
-                    Height::zero()
-                }
-            };
+            if let Some(payload) = block.payload().cloned() {
+                if Self::payload_has_blobs(&payload) {
+                    warn!(height = %finalized_height, "Finalized payload includes blobs");
+                } else {
+                    // Import the payload with retry for syncing nodes
+                    let parent_hash = block.parent_execution_hash();
+                    let import_result = self
+                        .new_payload_v4_with_retry(payload, vec![], parent_hash)
+                        .await;
 
-            // Only execute if the block is not already present on EVM
-            if finalized_height > evm_latest {
-                if let Some(payload) = block.payload().cloned() {
-                    if Self::payload_has_blobs(&payload) {
-                        warn!(height = %finalized_height, "Finalized payload includes blobs");
-                    } else {
-                        // Import the payload with retry for syncing nodes
-                        let parent_hash = block.parent_execution_hash();
-                        let import_result = self
-                            .new_payload_v4_with_retry(payload, vec![], parent_hash)
-                            .await;
-
-                        let mut import_ok = false;
-                        match import_result {
-                            Ok(status) if matches!(status.status, PayloadStatusEnum::Valid) => {
-                                import_ok = true;
-                            }
-                            Ok(status) if matches!(status.status, PayloadStatusEnum::Syncing) => {
-                                warn!(
-                                    height = %finalized_height,
-                                    "EL is syncing during finalized payload import"
-                                );
-                            }
-                            Ok(status) => {
-                                warn!(height = %finalized_height, ?status, "Finalized payload invalid");
-                            }
-                            Err(e) => {
-                                warn!(height = %finalized_height, ?e, "Failed to import finalized payload");
-                            }
+                    let mut import_ok = false;
+                    match import_result {
+                        Ok(status) if matches!(status.status, PayloadStatusEnum::Valid) => {
+                            import_ok = true;
                         }
-
-                        if !import_ok {
-                            warn!(height = %finalized_height, "Failed to import finalized payload to EVM");
+                        Ok(status) if matches!(status.status, PayloadStatusEnum::Syncing) => {
+                            warn!(
+                                height = %finalized_height,
+                                "EL is syncing during finalized payload import"
+                            );
+                        }
+                        Ok(status) => {
+                            warn!(height = %finalized_height, ?status, "Finalized payload invalid");
+                        }
+                        Err(e) => {
+                            warn!(height = %finalized_height, ?e, "Failed to import finalized payload");
                         }
                     }
-                } else {
-                    warn!(
-                        height = %finalized_height,
-                        "Finalized block missing execution payload"
-                    );
+
+                    if !import_ok {
+                        warn!(
+                            height = %finalized_height,
+                            "Failed to import finalized payload to EVM"
+                        );
+                    }
                 }
             } else {
-                debug!(height = %finalized_height, "Block already exists on EVM, skipping import");
+                warn!(
+                    height = %finalized_height,
+                    "Finalized block missing execution payload"
+                );
             }
 
             // Always update forkchoice to the new finalized block
@@ -1004,69 +998,54 @@ impl Reporter for Application {
 
     async fn report(&mut self, activity: Self::Activity) {
         if let Update::Block(block, ack_rx) = activity {
-            let height = block.height();
-
-            // Before processing finalization, check if EVM needs to replay missing blocks.
-            let evm_latest = match self.engine.get_latest_block_number().await {
-                Ok(Some(h)) => Height::new(h),
-                Ok(None) => Height::zero(),
-                Err(e) => {
-                    warn!(error = %e, "Failed to get EVM latest height in report");
-                    Height::zero()
-                }
-            };
-
-            let expected_evm_height = height.previous().unwrap_or_else(Height::zero);
-            if evm_latest < expected_evm_height {
-                warn!(
-                    finalized_height = %height,
-                    evm_height = %evm_latest,
-                    "EVM is behind finalized height - replaying missing blocks"
-                );
-
-                let start_commitment = {
-                    let state = self.state.read().await;
-                    state.finalized_block.commitment()
+            // report() is invoked on the marshal actor task. We must not block that task
+            // or issue marshal mailbox requests inline, or we can deadlock marshal.
+            // Spawn work onto a separate task and acknowledge only after it completes.
+            let mut app = self.clone();
+            tokio::spawn(async move {
+                let height = block.height();
+                let evm_latest = match app.engine.get_latest_block_number().await {
+                    Ok(Some(h)) => Height::new(h),
+                    Ok(None) => Height::zero(),
+                    Err(e) => {
+                        warn!(error = %e, "Failed to get EVM latest height in report");
+                        Height::zero()
+                    }
                 };
 
-                // NOTE: doesn't really work. The old commitment is not in the mailbox any more.
-                if let Some(mut ancestry) = self
-                    .marshal_mailbox
-                    .clone()
-                    .ancestry((None, start_commitment))
-                    .await
-                {
-                    let mut blocks_to_replay = Vec::new();
-                    while let Some(ancestor) = ancestry.next().await {
-                        if ancestor.height() <= evm_latest {
-                            break;
-                        }
-                        blocks_to_replay.push(ancestor);
-                    }
-
-                    if blocks_to_replay.is_empty() {
-                        debug!(height = %height, "No blocks to replay in report");
-                    } else {
-                        let replay_result = self.replay_missing_blocks(&blocks_to_replay).await;
-                        if replay_result.is_none() {
-                            warn!(height = %height, "Failed to replay finalized blocks in report");
-                        }
-                    }
+                let expected_evm_height = height.previous().unwrap_or_else(Height::zero);
+                let mut blocks = if evm_latest < expected_evm_height {
+                    info!(
+                        height = %height,
+                        evm_latest = %evm_latest,
+                        expected_evm_height = %expected_evm_height,
+                        "EVM behind finalized height, collecting missing blocks"
+                    );
+                    app.collect_missing_finalized_blocks(evm_latest, expected_evm_height)
+                        .await
                 } else {
-                    warn!(height = %height, "Failed to resolve ancestry for replay");
+                    Vec::new()
+                };
+
+                if evm_latest < expected_evm_height && blocks.is_empty() {
+                    warn!(
+                        height = %height,
+                        "Missing finalized blocks could not be fetched for replay"
+                    );
+                    return;
                 }
-            }
 
-            // Update finalized state first
-            self.on_finalized(&block).await;
-
-            ack_rx.acknowledge();
-
-            info!(
-                height = %height,
-                exec_hash = %block.execution_hash(),
-                "EVM block finalized"
-            );
+                blocks.push(block);
+                for block in blocks {
+                    app.on_finalized(&block).await;
+                    info!(
+                        height = %block.height(),
+                        exec_hash = %block.execution_hash(),
+                        "EVM block finalized"
+                    );
+                }
+                ack_rx.acknowledge();
+            });
         }
     }
 }

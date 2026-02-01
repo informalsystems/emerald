@@ -54,6 +54,18 @@ impl EngineClient {
         Ok(block)
     }
 
+    // Fetch the latest execution block via eth_getBlockByNumber(latest).
+    pub async fn get_latest_block(&self) -> Result<Block, String> {
+        let block = self
+            .eth
+            .get_block_by_number(BlockNumberOrTag::Latest)
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "Latest block not found in execution layer".to_string())?;
+
+        Ok(block)
+    }
+
     // Fetch a payload built after a forkchoice update (engine_getPayloadV5).
     pub async fn get_payload_v5(
         &self,

@@ -5,7 +5,6 @@
 //!
 //! Handles the same behaviors as the original emerald node:
 //! - Validated payload caching to avoid redundant EL calls
-//! - Retry handling for syncing EL nodes
 //! - Proper timestamp validation
 //! - Minimum block time enforcement
 
@@ -31,7 +30,6 @@ use commonware_runtime::{Clock, Metrics, Spawner};
 use commonware_utils::vec::NonEmptyVec;
 use commonware_utils::{Acknowledgement, SystemTimeExt};
 use futures::StreamExt;
-use malachitebft_eth_types::RetryConfig;
 use rand::Rng;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
@@ -53,17 +51,10 @@ const BACKFILL_MAX_WAIT: Duration = Duration::from_secs(10);
 /// Aligned with emerald's cache size for consistency.
 const VALIDATED_PAYLOAD_CACHE_SIZE: usize = 10;
 
-/// Validity result for payload validation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Validity {
-    Valid,
-    Invalid,
-}
-
 /// Cache for tracking recently validated execution payloads.
 /// Stores both the block hash and its validity result.
 pub struct ValidatedPayloadCache {
-    cache: AdaptiveCache<B256, Validity>,
+    cache: AdaptiveCache<B256, PayloadStatusEnum>,
 }
 
 impl ValidatedPayloadCache {
@@ -75,13 +66,13 @@ impl ValidatedPayloadCache {
     }
 
     /// Check if a block hash has been validated and return its cached validity.
-    pub fn get(&mut self, block_hash: &B256) -> Option<Validity> {
-        self.cache.get(block_hash).copied()
+    pub fn get(&mut self, block_hash: &B256) -> Option<PayloadStatusEnum> {
+        self.cache.get(block_hash).cloned()
     }
 
     /// Insert a block hash and its validity result into the cache.
-    pub fn insert(&mut self, block_hash: B256, validity: Validity) {
-        self.cache.put(block_hash, validity);
+    pub fn insert(&mut self, block_hash: B256, status: PayloadStatusEnum) {
+        self.cache.put(block_hash, status);
     }
 }
 
@@ -113,7 +104,6 @@ pub struct Application {
     genesis_block: Block,
     engine: Arc<EngineClient>,
     state: Arc<RwLock<EvmState>>,
-    retry_config: RetryConfig,
     min_block_time: Duration,
     /// Fee recipient address for block building (immutable after initialization).
     fee_recipient: Address,
@@ -262,19 +252,12 @@ impl Application {
             engine: Arc::new(engine),
             state: Arc::new(RwLock::new(state)),
             fee_recipient,
-            retry_config: RetryConfig::default(),
             min_block_time,
             prague_time: Some(0), // Prague enabled from genesis by default
             osaka_time: None,     // Osaka disabled by default
             oracle,
             marshal_mailbox,
         }
-    }
-
-    /// Create a new EVM application with custom retry configuration.
-    pub const fn with_retry_config(mut self, retry_config: RetryConfig) -> Self {
-        self.retry_config = retry_config;
-        self
     }
 
     /// Get the Engine API client.
@@ -404,16 +387,11 @@ impl Application {
                 panic!("Finalized payload includes blobs at height {finalized_height}");
             }
 
-            // Import the payload with retry for syncing nodes
+            // Import the payload
             let parent_hash = block.parent_execution_hash();
-            let status = self
-                .new_payload_v4_with_retry(payload, vec![], parent_hash)
-                .await
-                .unwrap_or_else(|e| {
-                    panic!("Failed to import finalized payload at height {finalized_height}: {e}")
-                });
+            let status = self.new_payload_v4(payload, vec![], parent_hash).await;
 
-            if !matches!(status.status, PayloadStatusEnum::Valid) {
+            if !status.status.is_valid() {
                 panic!(
                     "Finalized payload invalid at height {}: {:?}",
                     finalized_height, status.status
@@ -422,11 +400,8 @@ impl Application {
 
             // Always update forkchoice to the new finalized block
             let response = self
-                .forkchoice_updated_v3_with_retry(block.execution_hash(), None)
-                .await
-                .unwrap_or_else(|e| {
-                    panic!("Failed to update forkchoice at height {finalized_height}: {e}")
-                });
+                .forkchoice_updated_v3(block.execution_hash(), None)
+                .await;
             if !response.payload_status.status.is_valid() {
                 panic!(
                     "Forkchoice update returned non-valid status at height {}: {:?}",
@@ -454,14 +429,14 @@ impl Application {
         }
     }
 
-    async fn get_payload_with_retry(
+    async fn get_payload(
         &self,
         parent_exec_hash: B256,
         el_timestamp: u64,
         prev_randao: B256,
         parent_hash: B256,
         fee_recipient: &Address,
-    ) -> ExecutionPayloadV3 {
+    ) -> Option<ExecutionPayloadV3> {
         let payload_attributes = PayloadAttributes {
             timestamp: el_timestamp,
             prev_randao,
@@ -474,13 +449,12 @@ impl Application {
             payload_status,
             payload_id,
         } = self
-            .forkchoice_updated_v3_with_retry(parent_exec_hash, Some(payload_attributes))
-            .await
-            .unwrap_or_else(|e| {
-                panic!(
-                    "Failed to update forkchoice for payload build (parent_exec_hash {parent_exec_hash}): {e}"
-                )
-            });
+            .forkchoice_updated_v3(parent_exec_hash, Some(payload_attributes))
+            .await;
+
+        if payload_status.status.is_syncing() {
+            return None;
+        }
 
         if !payload_status.status.is_valid() {
             panic!(
@@ -505,99 +479,45 @@ impl Application {
         };
 
         match payload_envelope {
-            Ok(payload) => payload,
+            Ok(payload) => Some(payload),
             Err(e) => {
                 panic!("Failed to fetch execution payload via get_payload (fork {fork:?}): {e}")
             }
         }
     }
 
-    async fn new_payload_v4_with_retry(
+    async fn new_payload_v4(
         &self,
         execution_payload: ExecutionPayloadV3,
         versioned_hashes: Vec<B256>,
         parent_hash: B256,
-    ) -> Result<PayloadStatus, String> {
-        let validation_future = async {
-            let mut retry_delay = self.retry_config.initial_delay;
+    ) -> PayloadStatus {
+        // Use new_payload method with Prague fork (V4)
+        let result = self
+            .engine
+            .new_payload_v4(execution_payload, versioned_hashes, parent_hash)
+            .await;
 
-            loop {
-                // Use new_payload method with Prague fork (V4)
-                let result = self
-                    .engine
-                    .new_payload_v4(
-                        execution_payload.clone(),
-                        versioned_hashes.clone(),
-                        parent_hash,
-                    )
-                    .await;
-
-                match result {
-                    Ok(payload_status) => {
-                        if payload_status.status.is_syncing() {
-                            warn!("Execution client SYNCING, retrying in {:?}", retry_delay);
-
-                            tokio::time::sleep(retry_delay).await;
-                            retry_delay = self.retry_config.next_delay(retry_delay);
-                            continue;
-                        }
-
-                        return Ok(payload_status);
-                    }
-                    Err(e) => return Err(e),
-                }
-            }
-        };
-
-        tokio::time::timeout(self.retry_config.max_elapsed_time, validation_future)
-            .await
-            .map_err(|_| {
-                format!(
-                    "Timeout after {:?} waiting for execution client to sync",
-                    self.retry_config.max_elapsed_time
-                )
-            })?
+        match result {
+            Ok(payload_status) => payload_status,
+            Err(e) => panic!("newPayload failed: {e}"),
+        }
     }
 
-    async fn forkchoice_updated_v3_with_retry(
+    async fn forkchoice_updated_v3(
         &self,
         head_block_hash: B256,
         payload_attributes: Option<PayloadAttributes>,
-    ) -> Result<ForkchoiceUpdated, String> {
-        let fcu_future = async {
-            let mut retry_delay = self.retry_config.initial_delay;
+    ) -> ForkchoiceUpdated {
+        let result = self
+            .engine
+            .fork_choice_updated_v3(head_block_hash, payload_attributes)
+            .await;
 
-            loop {
-                let result = self
-                    .engine
-                    .fork_choice_updated_v3(head_block_hash, payload_attributes.clone())
-                    .await;
-
-                match result {
-                    Ok(forkchoice_updated) => {
-                        if forkchoice_updated.payload_status.status.is_syncing() {
-                            warn!("Execution client SYNCING, retrying in {:?}", retry_delay);
-
-                            tokio::time::sleep(retry_delay).await;
-                            retry_delay = self.retry_config.next_delay(retry_delay);
-                            continue;
-                        }
-
-                        return Ok(forkchoice_updated);
-                    }
-                    Err(e) => return Err(e),
-                }
-            }
-        };
-
-        tokio::time::timeout(self.retry_config.max_elapsed_time, fcu_future)
-            .await
-            .map_err(|_| {
-                format!(
-                    "Timeout after {:?} waiting for execution client to sync",
-                    self.retry_config.max_elapsed_time
-                )
-            })?
+        match result {
+            Ok(forkchoice_updated) => forkchoice_updated,
+            Err(e) => panic!("forkchoiceUpdated failed: {e}"),
+        }
     }
 
     /// Validate execution payload with the execution engine.
@@ -607,7 +527,7 @@ impl Application {
         payload: &ExecutionPayloadV3,
         height: Height,
         parent_hash: B256,
-    ) -> Validity {
+    ) -> PayloadStatusEnum {
         let block_hash = payload.payload_inner.payload_inner.block_hash;
 
         // Check cache first
@@ -625,29 +545,20 @@ impl Application {
         // Extract versioned hashes for blob transactions (empty for non-blob txs)
         let versioned_hashes: Vec<B256> = vec![];
 
-        // Validate with execution engine using retry mechanism
-        let result = self
-            .new_payload_v4_with_retry(payload.clone(), versioned_hashes, parent_hash)
+        // Validate with execution engine
+        let status = self
+            .new_payload_v4(payload.clone(), versioned_hashes, parent_hash)
             .await;
 
-        let validity = match result {
-            Ok(status) if status.status.is_valid() => Validity::Valid,
-            Ok(status) => panic!(
-                "Payload validation returned non-valid status at height {} (block_hash {}): {:?}",
-                height, block_hash, status.status
-            ),
-            Err(e) => panic!(
-                "Payload validation failed at height {height} (block_hash {block_hash}): {e}"
-            ),
-        };
+        let status = status.status;
 
         // Cache the result
         {
             let mut state = self.state.write().await;
-            state.validated_cache.insert(block_hash, validity);
+            state.validated_cache.insert(block_hash, status.clone());
         }
 
-        validity
+        status
     }
 
     /// Check if payload includes blob data (unsupported without versioned hashes).
@@ -758,16 +669,23 @@ where
         // Convert fee recipient to emerald Address type
         let parent_hash = parent_execution_hash;
 
-        // Build execution payload via Engine API with retry
-        let payload = self
-            .get_payload_with_retry(
+        // Build execution payload via Engine API
+        let Some(payload) = self
+            .get_payload(
                 parent_execution_hash,
                 el_timestamp,
                 prev_randao,
                 parent_hash,
                 &self.fee_recipient,
             )
-            .await;
+            .await
+        else {
+            warn!(
+                parent_exec_hash = %parent_execution_hash,
+                "Execution client syncing; skipping proposal"
+            );
+            return None;
+        };
 
         if Self::payload_has_blobs(&payload) {
             panic!("Payload includes blobs but versioned hashes not supported");
@@ -780,12 +698,18 @@ where
             );
         }
 
-        // Import the payload with retry
+        // Import the payload
         let import_status = self
-            .new_payload_v4_with_retry(payload.clone(), vec![], parent_hash)
-            .await
-            .unwrap_or_else(|e| panic!("Failed to import payload via newPayload: {e}"));
-        if !matches!(import_status.status, PayloadStatusEnum::Valid) {
+            .new_payload_v4(payload.clone(), vec![], parent_hash)
+            .await;
+        if import_status.status.is_syncing() {
+            warn!(
+                parent_exec_hash = %parent_execution_hash,
+                "Execution client syncing during payload import; skipping proposal"
+            );
+            return None;
+        }
+        if !import_status.status.is_valid() {
             panic!(
                 "newPayload returned non-valid status after build: {:?}",
                 import_status.status
@@ -807,7 +731,9 @@ where
         // Cache as valid since we just built it
         {
             let mut state = self.state.write().await;
-            state.validated_cache.insert(exec_hash, Validity::Valid);
+            state
+                .validated_cache
+                .insert(exec_hash, PayloadStatusEnum::Valid);
         }
 
         info!(
@@ -851,14 +777,14 @@ where
         // Check if execution hash is already in validated cache
         {
             let mut state = self.state.write().await;
-            if let Some(validity) = state.validated_cache.get(&block.execution_hash()) {
+            if let Some(status) = state.validated_cache.get(&block.execution_hash()) {
                 info!(
                     height = %block.height(),
                     exec_hash = %block.execution_hash(),
-                    ?validity,
+                    ?status,
                     "Using cached validation result"
                 );
-                return matches!(validity, Validity::Valid);
+                return status.is_valid();
             }
         }
 
@@ -931,14 +857,14 @@ where
 
         // Validate execution payload with EL (uses cache)
         let parent_hash = block.parent_execution_hash();
-        let validity = self
+        let status = self
             .validate_new_payload_v4(&execution_payload, block.height(), parent_hash)
             .await;
 
-        if !matches!(validity, Validity::Valid) {
+        if !status.is_valid() {
             warn!(
                 height = %block.height(),
-                validity = ?validity,
+                status = ?status,
                 "Execution payload validation failed",
             );
             return false;

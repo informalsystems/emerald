@@ -33,7 +33,7 @@ use futures::future::try_join_all;
 use governor::clock::Clock as GClock;
 use governor::Quota;
 use rand::{CryptoRng, Rng};
-use tracing::{error, info, warn};
+use tracing::info;
 
 use crate::application::{Application, ConsensusReporter};
 use crate::block::Block;
@@ -392,10 +392,9 @@ impl<
         let consensus_handle = self.consensus.start(pending, recovered, resolver);
 
         // Wait for any actor to finish
-        if let Err(e) = try_join_all(vec![buffer_handle, marshal_handle, consensus_handle]).await {
-            error!(?e, "Simplex engine failed");
-        } else {
-            warn!("Simplex engine stopped");
+        match try_join_all(vec![buffer_handle, marshal_handle, consensus_handle]).await {
+            Ok(_) => panic!("Simplex engine stopped unexpectedly"),
+            Err(e) => panic!("Simplex engine failed: {e:?}"),
         }
     }
 }

@@ -51,31 +51,6 @@ const BACKFILL_MAX_WAIT: Duration = Duration::from_secs(10);
 /// Aligned with emerald's cache size for consistency.
 const VALIDATED_PAYLOAD_CACHE_SIZE: usize = 10;
 
-/// Cache for tracking recently validated execution payloads.
-/// Stores both the block hash and its validity result.
-pub struct ValidatedPayloadCache {
-    cache: AdaptiveCache<B256, PayloadStatusEnum>,
-}
-
-impl ValidatedPayloadCache {
-    pub fn new(max_size: usize) -> Self {
-        Self {
-            cache: AdaptiveCache::new(max_size)
-                .expect("Failed to create AdaptiveCache: invalid cache size"),
-        }
-    }
-
-    /// Check if a block hash has been validated and return its cached validity.
-    pub fn get(&mut self, block_hash: &B256) -> Option<PayloadStatusEnum> {
-        self.cache.get(block_hash).cloned()
-    }
-
-    /// Insert a block hash and its validity result into the cache.
-    pub fn insert(&mut self, block_hash: B256, status: PayloadStatusEnum) {
-        self.cache.put(block_hash, status);
-    }
-}
-
 /// State tracked for EVM execution.
 ///
 /// Note: We only track heights, not hashes. Hash tracking is unnecessary because:
@@ -86,14 +61,15 @@ pub struct EvmState {
     /// Last finalized block, used for height/timestamp tracking.
     pub finalized_block: Block,
     /// Cache for validated payloads.
-    pub validated_cache: ValidatedPayloadCache,
+    pub validated_cache: AdaptiveCache<B256, PayloadStatusEnum>,
 }
 
 impl EvmState {
     pub fn new(finalized_block: Block) -> Self {
         Self {
             finalized_block,
-            validated_cache: ValidatedPayloadCache::new(VALIDATED_PAYLOAD_CACHE_SIZE),
+            validated_cache: AdaptiveCache::new(VALIDATED_PAYLOAD_CACHE_SIZE)
+                .expect("Failed to create AdaptiveCache: invalid cache size"),
         }
     }
 }
@@ -533,7 +509,7 @@ impl Application {
         // Check cache first
         {
             let mut state = self.state.write().await;
-            if let Some(cached_validity) = state.validated_cache.get(&block_hash) {
+            if let Some(cached_validity) = state.validated_cache.get(&block_hash).cloned() {
                 debug!(
                     %height, %block_hash, validity = ?cached_validity,
                     "Returning cached payload validation result"
@@ -555,7 +531,7 @@ impl Application {
         // Cache the result
         {
             let mut state = self.state.write().await;
-            state.validated_cache.insert(block_hash, status.clone());
+            state.validated_cache.put(block_hash, status.clone());
         }
 
         status
@@ -733,7 +709,7 @@ where
             let mut state = self.state.write().await;
             state
                 .validated_cache
-                .insert(exec_hash, PayloadStatusEnum::Valid);
+                .put(exec_hash, PayloadStatusEnum::Valid);
         }
 
         info!(
@@ -777,7 +753,7 @@ where
         // Check if execution hash is already in validated cache
         {
             let mut state = self.state.write().await;
-            if let Some(status) = state.validated_cache.get(&block.execution_hash()) {
+            if let Some(status) = state.validated_cache.get(&block.execution_hash()).cloned() {
                 info!(
                     height = %block.height(),
                     exec_hash = %block.execution_hash(),

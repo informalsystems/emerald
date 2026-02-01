@@ -903,8 +903,14 @@ impl Reporter for Application {
                 let height = block.height();
                 let evm_latest = match app.engine.get_latest_block_number().await {
                     Ok(Some(h)) => Height::new(h),
-                    Ok(None) => panic!("EVM latest block number missing in report"),
-                    Err(e) => panic!("Failed to get EVM latest height in report: {e}"),
+                    Ok(None) => {
+                        ack_rx.acknowledge();
+                        panic!("EVM latest block number missing in report");
+                    }
+                    Err(e) => {
+                        ack_rx.acknowledge();
+                        panic!("Failed to get EVM latest height in report: {e}");
+                    }
                 };
 
                 info!(

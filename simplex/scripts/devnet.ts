@@ -18,17 +18,21 @@ import { dirname, fromFileUrl, join } from "jsr:@std/path@1";
 import { delay } from "jsr:@std/async@1";
 import * as yaml from "jsr:@std/yaml@1";
 import * as toml from "jsr:@std/toml@1";
+import { encodeHex } from "jsr:@std/encoding@1/hex";
 import { consola } from "npm:consola@3";
-import { HDNodeWallet } from "npm:ethers@6";
+import ip from "npm:ip@2";
 import {
+  type Chain,
   createPublicClient,
   createWalletClient,
+  defineChain,
   formatEther,
   http,
   parseEther,
+  type PublicClient,
 } from "npm:viem@2";
-import { privateKeyToAccount } from "npm:viem@2/accounts";
-import { mainnet } from "npm:viem@2/chains";
+import { HDKey, privateKeyToAccount } from "npm:viem@2/accounts";
+import { mnemonicToSeedSync } from "npm:@scure/bip39@1";
 
 // Constants
 const DEFAULT_PROJECT_NAME = "simplex-devnet";
@@ -39,9 +43,10 @@ const ANVIL_MNEMONIC =
 
 type NetworkConfig = {
   subnet: string;
-  base: number;
-  mask: number;
-  size: number;
+  networkAddress: string;
+  broadcastAddress: string;
+  subnetMaskLength: number;
+  length: number;
 };
 
 function getProjectName(): string {
@@ -52,55 +57,36 @@ function getProjectName(): string {
   return DEFAULT_PROJECT_NAME;
 }
 
-function deriveAccount(index: number): { address: string; privateKey: string } {
+// Create HD key once for efficient derivation
+const masterSeed = mnemonicToSeedSync(ANVIL_MNEMONIC);
+const masterHdKey = HDKey.fromMasterSeed(masterSeed);
+
+function deriveAccount(
+  index: number,
+): { address: `0x${string}`; privateKey: `0x${string}` } {
   const path = `m/44'/60'/0'/0/${index}`;
-  const wallet = HDNodeWallet.fromPhrase(ANVIL_MNEMONIC, undefined, path);
-  return { address: wallet.address, privateKey: wallet.privateKey };
-}
-
-function ipToInt(ip: string): number {
-  const parts = ip.split(".");
-  if (parts.length !== 4) {
-    throw new Error(`Invalid IP address: ${ip}`);
-  }
-  let value = 0;
-  for (const part of parts) {
-    const octet = Number(part);
-    if (!Number.isInteger(octet) || octet < 0 || octet > 255) {
-      throw new Error(`Invalid IP address: ${ip}`);
-    }
-    value = value * 256 + octet;
-  }
-  return value;
-}
-
-function intToIp(value: number): string {
-  const parts = [24, 16, 8, 0].map((shift) =>
-    Math.floor(value / 2 ** shift) % 256
-  );
-  return parts.join(".");
+  const derived = masterHdKey.derive(path);
+  const privateKey = `0x${encodeHex(derived.privateKey!)}` as `0x${string}`;
+  const account = privateKeyToAccount(privateKey);
+  return { address: account.address, privateKey };
 }
 
 function parseCidr(cidr: string): NetworkConfig {
-  const [ipStr, maskStr] = cidr.split("/");
-  if (!ipStr || !maskStr) {
-    throw new Error(`Invalid CIDR: ${cidr}`);
-  }
-  const mask = Number(maskStr);
-  if (!Number.isInteger(mask) || mask < 0 || mask > 32) {
-    throw new Error(`Invalid CIDR mask: ${cidr}`);
-  }
-  const baseIp = ipToInt(ipStr);
-  const size = 2 ** (32 - mask);
-  const base = Math.floor(baseIp / size) * size;
-  return { subnet: `${intToIp(base)}/${mask}`, base, mask, size };
+  const parsed = ip.cidrSubnet(cidr);
+  return {
+    subnet: `${parsed.networkAddress}/${parsed.subnetMaskLength}`,
+    networkAddress: parsed.networkAddress,
+    broadcastAddress: parsed.broadcastAddress,
+    subnetMaskLength: parsed.subnetMaskLength,
+    length: parsed.length,
+  };
 }
 
 function cidrOverlaps(a: NetworkConfig, b: NetworkConfig): boolean {
-  const aStart = a.base;
-  const aEnd = a.base + a.size - 1;
-  const bStart = b.base;
-  const bEnd = b.base + b.size - 1;
+  const aStart = ip.toLong(a.networkAddress);
+  const aEnd = ip.toLong(a.broadcastAddress);
+  const bStart = ip.toLong(b.networkAddress);
+  const bEnd = ip.toLong(b.broadcastAddress);
   return aStart <= bEnd && bStart <= aEnd;
 }
 
@@ -109,7 +95,7 @@ function ensureSubnetCapacity(
   numValidators: number,
 ): void {
   const maxOffset = 10 + numValidators - 1;
-  if (maxOffset >= cidr.size) {
+  if (maxOffset >= cidr.length) {
     throw new Error(
       `Subnet ${cidr.subnet} is too small for ${numValidators} validators`,
     );
@@ -117,7 +103,7 @@ function ensureSubnetCapacity(
 }
 
 function ipAtOffset(cidr: NetworkConfig, offset: number): string {
-  return intToIp(cidr.base + offset);
+  return ip.fromLong(ip.toLong(cidr.networkAddress) + offset);
 }
 
 // Get script directory
@@ -496,27 +482,31 @@ async function dockerCompose(
   return await runCommand(cmd, { cwd: runDir, inherit: true });
 }
 
+// Define devnet chain for viem clients
+const devnetChain: Chain = defineChain({
+  id: 1,
+  name: "Emerald Simplex Devnet",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: {
+    default: { http: ["http://localhost:8545"] },
+  },
+});
+
+// Create a public client for a given RPC URL
+function getPublicClient(rpcUrl: string): PublicClient {
+  return createPublicClient({
+    chain: devnetChain,
+    transport: http(rpcUrl),
+  });
+}
+
 // Wait for RPC endpoint to be ready
 async function waitForRpc(url: string, maxRetries = 120): Promise<boolean> {
+  const client = getPublicClient(url);
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "eth_blockNumber",
-          params: [],
-          id: 1,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.result !== undefined) {
-          return true;
-        }
-      }
+      await client.getBlockNumber();
+      return true;
     } catch (error) {
       consola.debug(`RPC not ready at ${url}: ${formatError(error)}`);
     }
@@ -528,37 +518,16 @@ async function waitForRpc(url: string, maxRetries = 120): Promise<boolean> {
 
 // Get genesis hash from Reth
 async function getGenesisHash(rpcUrl: string): Promise<string> {
-  const response = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      method: "eth_getBlockByNumber",
-      params: ["0x0", false],
-      id: 1,
-    }),
-  });
-
-  const data = await response.json();
-  return data.result.hash;
+  const client = getPublicClient(rpcUrl);
+  const block = await client.getBlock({ blockNumber: 0n });
+  return block.hash;
 }
 
 // Get current block number
 async function getBlockNumber(rpcUrl: string): Promise<bigint | null> {
   try {
-    const response = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "eth_blockNumber",
-        params: [],
-        id: 1,
-      }),
-    });
-
-    const data = await response.json();
-    return BigInt(data.result);
+    const client = getPublicClient(rpcUrl);
+    return await client.getBlockNumber();
   } catch (error) {
     consola.debug(
       `Failed to get block number from ${rpcUrl}: ${formatError(error)}`,
@@ -1459,6 +1428,7 @@ async function sendTestTransaction(options: {
   count: number;
 }): Promise<void> {
   const { from, to, amount, count } = options;
+  const rpcUrl = "http://localhost:8545";
 
   if (
     from < 0 ||
@@ -1477,35 +1447,20 @@ async function sendTestTransaction(options: {
 
   const fromAccount = deriveAccount(from);
   const toAccount = deriveAccount(to);
-  const fromAddress = fromAccount.address as `0x${string}`;
-  const toAddress = toAccount.address as `0x${string}`;
-  const privateKey = fromAccount.privateKey as `0x${string}`;
+  const { address: toAddress } = toAccount;
 
-  // Create a custom chain definition for the devnet
-  const devnetChain = {
-    ...mainnet,
-    id: 1,
-    name: "Emerald Simplex Devnet",
-    rpcUrls: {
-      default: { http: ["http://localhost:8545"] },
-    },
-  };
-
-  const account = privateKeyToAccount(privateKey);
+  const account = privateKeyToAccount(fromAccount.privateKey);
 
   const walletClient = createWalletClient({
     account,
     chain: devnetChain,
-    transport: http("http://localhost:8545"),
+    transport: http(rpcUrl),
   });
 
-  const publicClient = createPublicClient({
-    chain: devnetChain,
-    transport: http("http://localhost:8545"),
-  });
+  const publicClient = getPublicClient(rpcUrl);
 
   consola.info(`Sending ${count} transaction(s) of ${amount} ETH`);
-  consola.info(`From: ${fromAddress} (account ${from})`);
+  consola.info(`From: ${fromAccount.address} (account ${from})`);
   consola.info(`To:   ${toAddress} (account ${to})`);
 
   const value = parseEther(amount);
@@ -1538,9 +1493,7 @@ async function sendTestTransaction(options: {
   consola.info("Account balances after transactions:");
   for (let i = 0; i < PREFUNDED_COUNT; i++) {
     const { address } = deriveAccount(i);
-    const balance = await publicClient.getBalance({
-      address: address as `0x${string}`,
-    });
+    const balance = await publicClient.getBalance({ address });
     consola.log(`  Account ${i}: ${formatEther(balance)} ETH`);
   }
 }

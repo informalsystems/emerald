@@ -585,7 +585,7 @@ where
         {
             let last_timestamp_secs = {
                 let state = self.state.read().await;
-                state.finalized_block.timestamp
+                state.finalized_block.timestamp()
             };
             let min_next_timestamp = last_timestamp_secs + self.min_block_time.as_secs();
             let current_secs = runtime_context.current().epoch_millis() / 1000;
@@ -765,11 +765,11 @@ where
         }
 
         // Basic consensus verification - timestamps must be increasing
-        if block.timestamp <= parent.timestamp {
+        if block.timestamp() <= parent.timestamp() {
             warn!(
                 height = %block.height(),
-                parent_timestamp = %parent.timestamp,
-                block_timestamp = %block.timestamp,
+                parent_timestamp = %parent.timestamp(),
+                block_timestamp = %block.timestamp(),
                 "Block timestamp not increasing",
             );
             return false;
@@ -779,10 +779,10 @@ where
         // Note: We don't sleep in verify() - if timestamp is beyond synchrony bound, reject.
         // The MIN_BLOCK_TIME enforcement happens in report() after finalization.
         let current = runtime_context.current().epoch_millis() / 1000;
-        if block.timestamp > current + SYNCHRONY_BOUND {
+        if block.timestamp() > current + SYNCHRONY_BOUND {
             warn!(
                 height = %block.height(),
-                block_timestamp = %block.timestamp,
+                block_timestamp = %block.timestamp(),
                 current = %current,
                 SYNCHRONY_BOUND = %SYNCHRONY_BOUND,
                 "Block timestamp too far in the future",
@@ -821,11 +821,11 @@ where
 
         // Verify payload timestamp matches block timestamp
         let payload_timestamp = execution_payload.timestamp();
-        if payload_timestamp != block.timestamp {
+        if payload_timestamp != block.timestamp() {
             warn!(
                 height = %block.height(),
                 payload_timestamp = %payload_timestamp,
-                block_timestamp = %block.timestamp,
+                block_timestamp = %block.timestamp(),
                 "Payload timestamp mismatch",
             );
             return false;

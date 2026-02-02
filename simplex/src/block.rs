@@ -1,7 +1,5 @@
 //! Block type for simplex consensus with EVM execution.
 
-use core::mem;
-
 use alloy_consensus::Header as ConsensusHeader;
 use alloy_primitives::B256;
 use alloy_rlp::{Decodable, Encodable};
@@ -22,13 +20,8 @@ pub struct Block {
     /// The parent block's digest.
     pub parent: Digest,
 
-    /// The height of the block in the blockchain.
-    pub height: Height,
-
-    /// The timestamp of the block (in seconds since the Unix epoch).
-    pub timestamp: u64,
-
     /// Execution data (header/hash with optional payload).
+    /// Height and timestamp are derived from this data.
     execution_data: ExecutionData,
 
     /// Pre-computed digest of the block.
@@ -52,12 +45,24 @@ impl ExecutionData {
 }
 
 impl Block {
-    fn compute_digest(
-        parent: &Digest,
-        height: Height,
-        timestamp: u64,
-        execution_hash: &B256,
-    ) -> Digest {
+    fn execution_metadata(execution_data: &ExecutionData) -> (Height, u64, B256) {
+        match execution_data {
+            ExecutionData::Genesis { header, hash } => {
+                (Height::new(header.number), header.timestamp, *hash)
+            }
+            ExecutionData::Payload { payload } => {
+                let payload_inner = &payload.payload_inner.payload_inner;
+                (
+                    Height::new(payload_inner.block_number),
+                    payload_inner.timestamp,
+                    payload_inner.block_hash,
+                )
+            }
+        }
+    }
+
+    fn compute_digest(parent: &Digest, execution_data: &ExecutionData) -> Digest {
+        let (height, timestamp, execution_hash) = Self::execution_metadata(execution_data);
         let mut hasher = Sha256::new();
         hasher.update(parent);
         hasher.update(&height.get().to_be_bytes());
@@ -68,24 +73,9 @@ impl Block {
 
     /// Create a new block without execution payload.
     pub fn new(parent: Digest, execution_data: ExecutionData) -> Self {
-        let (height, timestamp, execution_hash) = match &execution_data {
-            ExecutionData::Genesis { header, hash } => {
-                let height = Height::new(header.number);
-                let timestamp = header.timestamp;
-                (height, timestamp, *hash)
-            }
-            ExecutionData::Payload { payload } => {
-                let payload_inner = &payload.payload_inner.payload_inner;
-                let height = Height::new(payload_inner.block_number);
-                let timestamp = payload_inner.timestamp;
-                (height, timestamp, payload_inner.block_hash)
-            }
-        };
-        let digest = Self::compute_digest(&parent, height, timestamp, &execution_hash);
+        let digest = Self::compute_digest(&parent, &execution_data);
         Self {
             parent,
-            height,
-            timestamp,
             execution_data,
             digest,
         }
@@ -104,23 +94,6 @@ impl Block {
         match &self.execution_data {
             ExecutionData::Payload { payload } => Some(payload),
             ExecutionData::Genesis { .. } => None,
-        }
-    }
-
-    /// Take the execution payload out of the block.
-    pub fn take_payload(&mut self) -> Option<ExecutionPayloadV3> {
-        match mem::replace(
-            &mut self.execution_data,
-            ExecutionData::Genesis {
-                header: ConsensusHeader::default(),
-                hash: B256::ZERO,
-            },
-        ) {
-            ExecutionData::Payload { payload } => Some(payload),
-            ExecutionData::Genesis { header, hash } => {
-                self.execution_data = ExecutionData::Genesis { header, hash };
-                None
-            }
         }
     }
 
@@ -146,13 +119,17 @@ impl Block {
             ExecutionData::Payload { payload } => payload.payload_inner.payload_inner.prev_randao,
         }
     }
+
+    /// Get the timestamp of the block (in seconds since the Unix epoch).
+    pub fn timestamp(&self) -> u64 {
+        let (_, timestamp, _) = Self::execution_metadata(&self.execution_data);
+        timestamp
+    }
 }
 
 impl Write for Block {
     fn write(&self, writer: &mut impl BufMut) {
         self.parent.write(writer);
-        self.height.write(writer);
-        UInt(self.timestamp).write(writer);
         match &self.execution_data {
             ExecutionData::Genesis { header, hash } => {
                 writer.put_u8(0);
@@ -176,8 +153,6 @@ impl Read for Block {
 
     fn read_cfg(reader: &mut impl Buf, (): &Self::Cfg) -> Result<Self, Error> {
         let parent = Digest::read(reader)?;
-        let height = Height::read(reader)?;
-        let timestamp = UInt::read(reader)?.into();
 
         if reader.remaining() < 1 {
             return Err(Error::EndOfBuffer);
@@ -225,15 +200,9 @@ impl Read for Block {
             _ => return Err(Error::Invalid("Block", "invalid execution data tag")),
         };
 
-        let execution_hash = match &execution_data {
-            ExecutionData::Genesis { hash, .. } => *hash,
-            ExecutionData::Payload { payload } => payload.payload_inner.payload_inner.block_hash,
-        };
-        let digest = Self::compute_digest(&parent, height, timestamp, &execution_hash);
+        let digest = Self::compute_digest(&parent, &execution_data);
         Ok(Self {
             parent,
-            height,
-            timestamp,
             execution_data,
             digest,
         })
@@ -242,10 +211,7 @@ impl Read for Block {
 
 impl EncodeSize for Block {
     fn encode_size(&self) -> usize {
-        let mut size = self.parent.encode_size()
-            + self.height.encode_size()
-            + UInt(self.timestamp).encode_size()
-            + 1;
+        let mut size = self.parent.encode_size() + 1;
 
         match &self.execution_data {
             ExecutionData::Genesis { header, .. } => {
@@ -286,6 +252,7 @@ impl commonware_consensus::Block for Block {
 
 impl Heightable for Block {
     fn height(&self) -> Height {
-        self.height
+        let (height, _, _) = Self::execution_metadata(&self.execution_data);
+        height
     }
 }

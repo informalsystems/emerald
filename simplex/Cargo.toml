@@ -7,10 +7,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [features]
-default = ["byzantine-test"]
-# Enable Byzantine behavior for testing: randomly reject valid blocks with 38% probability.
-# Use with n=4 validators for ~50% progress / ~50% nullification rate.
-byzantine-test = []
+default = []
 
 [[bin]]
 name = "emerald-simplex"

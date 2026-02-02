@@ -45,7 +45,6 @@ alloy-rpc-types-eth = { workspace = true }
 alloy-rlp = "0.3"
 alloy-consensus = { workspace = true }
 alloy-trie = "0.9"
-alloy-genesis = "1.4.3"
 alloy-transport-http = { version = "1.4.3", features = ["hyper", "jwt-auth"] }
 
 # Serialization

@@ -1,13 +1,13 @@
 [package]
-name = "emerald-simplex"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-rust-version.workspace = true
-publish.workspace = true
+name         = "emerald-simplex"
+version      = { workspace = true }
+edition      = { workspace = true }
+license      = { workspace = true }
+rust-version = { workspace = true }
+publish      = { workspace = true }
 
 [features]
-default = []
+default = [  ]
 
 [[bin]]
 name = "emerald-simplex"
@@ -19,61 +19,55 @@ path = "src/bin/setup.rs"
 
 [dependencies]
 # Emerald dependencies - reuse existing infrastructure
+malachitebft-eth-cli   = { workspace = true }
 malachitebft-eth-types = { workspace = true }
-malachitebft-eth-cli = { workspace = true }
 
 # Commonware dependencies for simplex consensus
-commonware-broadcast = "0.0.65"
-commonware-codec = "0.0.65"
-commonware-consensus = { version = "0.0.65", features = ["mocks"] }
-commonware-cryptography = { version = "0.0.65", features = ["mocks"] }
-commonware-p2p = "0.0.65"
-commonware-resolver = "0.0.65"
-commonware-runtime = "0.0.65"
-commonware-storage = "0.0.65"
-commonware-utils = "0.0.65"
-commonware-parallel = "0.0.65"
-commonware-math = "0.0.65"
+commonware-broadcast    = { version = "0.0.65" }
+commonware-codec        = { version = "0.0.65" }
+commonware-consensus    = { version = "0.0.65" }
+commonware-cryptography = { version = "0.0.65" }
+commonware-p2p          = { version = "0.0.65" }
+commonware-resolver     = { version = "0.0.65" }
+commonware-runtime      = { version = "0.0.65" }
+commonware-storage      = { version = "0.0.65" }
+commonware-utils        = { version = "0.0.65" }
+commonware-parallel     = { version = "0.0.65" }
+commonware-math         = { version = "0.0.65" }
 
 # Alloy for EVM types
-alloy-primitives = { workspace = true, features = ["serde"] }
-alloy-eips = { workspace = true }
-alloy-provider = { version = "1.4.3", features = ["engine-api"] }
-alloy-rpc-client = "1.4.3"
+alloy-primitives       = { workspace = true, features = [ "serde" ] }
+alloy-eips             = { workspace = true }
+alloy-provider         = { version = "1.4.3", features = [ "engine-api" ] }
+alloy-rpc-client       = { version = "1.4.3" }
 alloy-rpc-types-engine = { workspace = true }
-alloy-rpc-types-eth = { workspace = true }
-alloy-rlp = "0.3"
-alloy-consensus = { workspace = true }
-alloy-trie = "0.9"
-alloy-transport-http = { version = "1.4.3", features = ["hyper", "jwt-auth"] }
+alloy-rpc-types-eth    = { workspace = true }
+alloy-rlp              = { version = "0.3" }
+alloy-consensus        = { workspace = true }
+alloy-transport-http   = { version = "1.4.3", features = [ "hyper", "jwt-auth" ] }
 
 # Serialization
-bytes = { workspace = true }
-ssz = { package = "ethereum_ssz", version = "0.9" }
+bytes        = { workspace = true }
+ethereum_ssz = { version = "0.9" }
+serde        = { workspace = true, features = [ "derive" ] }
 
 # Async runtime
-async-trait = { workspace = true }
-futures = "0.3"
-tokio = { workspace = true, features = ["sync", "time"] }
+futures = { version = "0.3" }
+tokio   = { workspace = true, features = [ "sync", "time" ] }
 
 # Caching
-caches = "0.2"
+caches = { version = "0.2" }
 
 # Utils
-governor = "0.10"
-rand = { workspace = true }
-tracing = { workspace = true }
-thiserror = { workspace = true }
+governor = { version = "0.10" }
+rand     = { workspace = true }
+tracing  = { workspace = true }
+url      = { workspace = true }
 
-# CLI and serialization (for binaries)
-clap = { version = "4", features = ["derive"] }
-hex = "0.4"
-serde = { workspace = true, features = ["derive"] }
-serde_yaml = "0.9"
-serde_json = "1"
-toml = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-url = "2"
+# CLI and config formats (used by binaries)
+clap       = { workspace = true, features = [ "derive" ] }
+serde_yaml = { version = "0.9" }
+toml       = { workspace = true }
 
 [lints]
 workspace = true

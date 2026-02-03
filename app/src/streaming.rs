@@ -65,35 +65,44 @@ struct StreamState {
     fin_received: bool,
 }
 
+enum StreamProgress {
+    Incomplete(StreamState),
+    Complete(ProposalParts),
+}
+
 impl StreamState {
     fn is_done(&self) -> bool {
         self.init_info.is_some() && self.fin_received && self.buffer.len() == self.total_messages
     }
 
-    fn insert(&mut self, msg: StreamMessage<ProposalPart>) -> Option<ProposalParts> {
-        if msg.is_first() {
-            self.init_info = msg.content.as_data().and_then(|p| p.as_init()).cloned();
+    fn insert(mut self, msg: StreamMessage<ProposalPart>) -> StreamProgress {
+        if self.seen_sequences.insert(msg.sequence) {
+            if msg.is_first() {
+                self.init_info = msg.content.as_data().and_then(|p| p.as_init()).cloned();
+            }
+
+            if msg.is_fin() {
+                self.fin_received = true;
+                self.total_messages = msg.sequence as usize + 1;
+            }
+
+            self.buffer.push(msg);
+
+            if self.is_done() {
+                let init_info = self.init_info.take().expect("init_info must exist if done");
+
+                let parts = ProposalParts {
+                    height: init_info.height,
+                    round: init_info.round,
+                    proposer: init_info.proposer,
+                    parts: self.buffer.drain(),
+                };
+
+                return StreamProgress::Complete(parts);
+            }
         }
 
-        if msg.is_fin() {
-            self.fin_received = true;
-            self.total_messages = msg.sequence as usize + 1;
-        }
-
-        self.buffer.push(msg);
-
-        if self.is_done() {
-            let init_info = self.init_info.take()?;
-
-            Some(ProposalParts {
-                height: init_info.height,
-                round: init_info.round,
-                proposer: init_info.proposer,
-                parts: self.buffer.drain(),
-            })
-        } else {
-            None
-        }
+        StreamProgress::Incomplete(self)
     }
 }
 
@@ -131,23 +140,74 @@ impl PartStreamsMap {
         msg: StreamMessage<ProposalPart>,
     ) -> Option<ProposalParts> {
         let stream_id = msg.stream_id.clone();
+        let stream_key = (peer_id, stream_id);
+        let state_ref = self.streams.entry(stream_key.clone()).or_default();
 
-        let state = self
-            .streams
-            .entry((peer_id, stream_id.clone()))
-            .or_default();
+        // Temporarily take ownership over the stream state since it's consumed
+        // by `insert`. Return ownership if the stream isn't completed yet.
+        let state = core::mem::take(state_ref);
 
-        if !state.seen_sequences.insert(msg.sequence) {
-            // We have already seen a message with this sequence number.
-            return None;
+        match state.insert(msg) {
+            StreamProgress::Incomplete(state) => {
+                *state_ref = state;
+                None
+            }
+            StreamProgress::Complete(parts) => {
+                self.streams.remove(&stream_key);
+                Some(parts)
+            }
         }
+    }
+}
 
-        let result = state.insert(msg);
+#[cfg(test)]
+mod tests {
+    use bytes::Bytes;
+    use malachitebft_app_channel::app::streaming::StreamContent;
+    use malachitebft_eth_types::secp256k1::Signature;
+    use malachitebft_eth_types::ProposalData;
 
-        if state.is_done() {
-            self.streams.remove(&(peer_id, stream_id));
-        }
+    use super::*;
 
-        result
+    #[test]
+    fn test_insert_prune_completed_streams() {
+        let peer_id = PeerId::from_multihash(Default::default()).unwrap();
+        let stream_id = StreamId::new(Bytes::new());
+        let address = Address::new([0; 20]);
+        let signature = Signature::from_slice(&[
+            1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+        ])
+        .unwrap();
+
+        let init = ProposalPart::Init(ProposalInit::new(
+            Height::new(1),
+            Round::Some(0),
+            Round::Nil,
+            address,
+        ));
+        let data = ProposalPart::Data(ProposalData::new(Bytes::new()));
+        let fin = ProposalPart::Fin(ProposalFin::new(signature));
+
+        let part0 = StreamMessage::new(stream_id.clone(), 0, StreamContent::Data(init));
+        let part1 = StreamMessage::new(stream_id.clone(), 1, StreamContent::Data(data));
+        let part2 = StreamMessage::new(stream_id.clone(), 2, StreamContent::Data(fin));
+        let part3 = StreamMessage::new(stream_id, 3, StreamContent::Fin);
+
+        let mut streams_map = PartStreamsMap::new();
+        assert!(streams_map.insert(peer_id, part0).is_none()); // incomplete
+        assert!(
+            !streams_map.streams.is_empty(),
+            "streams map must track active stream"
+        );
+        assert!(streams_map.insert(peer_id, part1.clone()).is_none()); // incomplete
+        assert!(streams_map.insert(peer_id, part1).is_none()); // repeated seq; no-op
+        assert!(streams_map.insert(peer_id, part2).is_none()); // incomplete
+        assert!(streams_map.insert(peer_id, part3).is_some()); // complete
+        assert!(
+            streams_map.streams.is_empty(),
+            "streams map must drop complete streams"
+        );
     }
 }

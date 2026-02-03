@@ -208,6 +208,7 @@ enum ConsensusConfig {
 - Execution logic is testable via mock adapters.
 - Clear crate boundaries reduce accidental coupling.
 - Single binary simplifies deployment and distribution.
+- Decoupling enables testing each component in isolation by mocking other parts.
 
 ### Cons
 

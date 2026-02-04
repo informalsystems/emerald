@@ -7,6 +7,7 @@ use std::process::Command;
 use clap::Parser;
 use color_eyre::eyre::eyre;
 use color_eyre::Result;
+use tracing::{debug, info, warn};
 
 #[derive(Parser, Debug, Clone, PartialEq)]
 pub struct TestnetDestroyCmd {
@@ -19,19 +20,15 @@ impl TestnetDestroyCmd {
     /// Execute the destroy command
     pub fn run(&self, home_dir: &Path) -> Result<()> {
         if !home_dir.exists() {
-            println!(
-                "⚠️  Testnet directory does not exist at {}",
-                home_dir.display()
-            );
+            warn!("Testnet directory does not exist at {}", home_dir.display());
             return Ok(());
         }
 
         // Confirm with user unless --force is specified
         if !self.force {
-            println!("⚠️  This will stop all nodes and permanently delete all testnet data at:");
+            println!("This will stop all nodes and permanently delete all testnet data at:");
             println!("   {}", home_dir.display());
-            println!();
-            print!("   Are you sure? (y/N): ");
+            println!("Are you sure? (y/N): ");
 
             use std::io::{self, Write};
             io::stdout().flush()?;
@@ -41,21 +38,21 @@ impl TestnetDestroyCmd {
 
             let input = input.trim().to_lowercase();
             if input != "y" && input != "yes" {
-                println!("Cancelled.");
+                info!("Cancelled.");
                 return Ok(());
             }
         }
 
         // First, stop all running processes
-        println!("🛑 Stopping all running nodes...");
+        info!("Stopping all running nodes");
         self.stop_all_nodes(home_dir)?;
 
-        println!("\n🗑️  Removing testnet data...");
+        info!("Removing testnet data");
 
         // Remove the entire directory
         fs::remove_dir_all(home_dir).map_err(|e| eyre!("Failed to remove directory: {}", e))?;
 
-        println!("✅ Testnet data removed successfully");
+        info!("Testnet data removed successfully");
 
         Ok(())
     }
@@ -105,7 +102,7 @@ impl TestnetDestroyCmd {
         }
 
         if stopped_count > 0 {
-            println!("   Stopped {stopped_count} process(es)");
+            debug!("Stopped {stopped_count} process(es)");
         }
 
         Ok(())

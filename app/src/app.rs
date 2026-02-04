@@ -28,7 +28,7 @@ alloy_sol_types::sol!(
 );
 
 use crate::state::{assemble_value_from_parts, decode_value, State};
-use crate::sync_handler::{get_decided_value_for_sync, validate_payload};
+use crate::sync_handler::{get_decided_value_for_sync, get_raw_value_from_store, validate_payload};
 
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
     // Get the genesis block from the execution engine
@@ -66,7 +66,7 @@ async fn replay_heights_to_engine(
         let height = Height::new(height);
 
         // Sending the whole block to the execution engine.
-        let value_bytes = get_decided_value_for_sync(&state.store, engine, height, height)
+        let value_bytes = get_raw_value_from_store(&state.store, height)
             .await?
             .ok_or_eyre("Missing block for height {height}")
             .unwrap()

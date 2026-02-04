@@ -65,6 +65,21 @@ pub async fn validate_payload(
     }
 }
 
+pub async fn get_raw_value_from_store(
+    store: &Store,
+    height: Height,
+) -> eyre::Result<Option<RawDecidedValue<EmeraldContext>>> {
+    let decided_value = store
+        .get_decided_value(height)
+        .await?
+        .ok_or_else(|| eyre!("Decided value not found at height {height}, data integrity error"))?;
+
+    Ok(Some(RawDecidedValue {
+        certificate: decided_value.certificate,
+        value_bytes: ProtobufCodec.encode(&decided_value.value)?,
+    }))
+}
+
 /// Retrieves a decided value for sync at the given height.
 /// If the value is pruned from storage, reconstructs it from the block header and execution layer.
 pub async fn get_decided_value_for_sync(
@@ -76,14 +91,7 @@ pub async fn get_decided_value_for_sync(
     if height >= earliest_unpruned_height {
         // Height is in our decided values table - get it directly
         info!(%height, earliest_unpruned_height = %earliest_unpruned_height, "Getting decided value from local storage");
-        let decided_value = store.get_decided_value(height).await?.ok_or_else(|| {
-            eyre!("Decided value not found at height {height}, data integrity error")
-        })?;
-
-        Ok(Some(RawDecidedValue {
-            certificate: decided_value.certificate,
-            value_bytes: ProtobufCodec.encode(&decided_value.value)?,
-        }))
+        get_raw_value_from_store(store, height).await
     } else {
         // Height has been pruned from decided values - try to reconstruct from header + EL
         info!(%height, earliest_unpruned_height = %earliest_unpruned_height, "Height pruned from storage, reconstructing from block header + EL");

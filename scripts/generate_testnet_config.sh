@@ -246,9 +246,9 @@ retry_config.max_delay = "2s"
 retry_config.max_elapsed_time = "20s"
 eth_genesis_path="$ROOT_DIR/assets/genesis.json"
 EOF
- # Set max_retain_blocks for pruning nodes
+ # Set certificate_retain_height for pruning nodes
       if [[ ${#PRUNING_NODES[@]} -gt 0 && " ${PRUNING_NODES[@]} " =~ " ${i} " ]]; then
-          echo "max_retain_blocks = 10064" >> "$TESTNET_DIR/config/$i/config.toml"
+          echo "certificate_retain_height = 10064" >> "$TESTNET_DIR/config/$i/config.toml"
           echo "el_node_type = \"custom\"" >> "$TESTNET_DIR/config/$i/config.toml"
       else
           echo "el_node_type = \"archive\"" >> "$TESTNET_DIR/config/$i/config.toml"

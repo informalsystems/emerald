@@ -107,15 +107,30 @@ pub struct State {
     pub start_time: Instant,
     pub metrics: Metrics,
 
-    pub max_retain_blocks: u64,
+    /// Maximum number of certificates to keep in store.
+    /// Note that when a certificate is pruend we will not be
+    /// able to validated blocks on this node.
+    pub certificate_retain_height: u64,
+
+    /// The certificates are pruned every prune_at_block_interval heights.
+    /// This is done to avoid DB access overhead.
     pub prune_at_block_interval: u64,
+
+    /// Minimum time of a block. If set to something > 0
+    /// and a block is produces in `t` where `t` < `min_block_time`
+    /// we will sleep for `min_block_time - t`.
     pub min_block_time: Duration,
 
+    /// Time it took to execute last block.
+    /// Used to decide on whether we should sleep in case min_block_time
+    /// is set.
     pub last_block_time: Instant,
 
     /// Tracks when the previous block was committed (for per-block TPS calculation)
     pub previous_block_commit_time: Instant,
 
+    /// Needed to extract chain configuration contained in the ethereum genesis file.
+    /// Currently used to read information on the fork supported by the chain.
     pub eth_chain_config: ChainConfig,
 }
 
@@ -196,7 +211,7 @@ impl State {
         height: Height,
         store: Store,
         state_metrics: StateMetrics,
-        max_retain_blocks: u64,
+        certificate_retain_height: u64,
         prune_at_interval: u64,
         min_block_time: Duration,
         eth_chain_config: ChainConfig,
@@ -227,7 +242,7 @@ impl State {
             chain_bytes: state_metrics.chain_bytes,
             start_time,
             metrics: state_metrics.metrics,
-            max_retain_blocks,
+            certificate_retain_height,
             prune_at_block_interval: prune_at_interval,
             min_block_time,
             last_block_time: Instant::now(),
@@ -604,7 +619,7 @@ impl State {
                 .await?;
         }
 
-        let prune_certificates = self.max_retain_blocks != u64::MAX
+        let prune_certificates = self.certificate_retain_height != u64::MAX
             && certificate.height.as_u64() % self.prune_at_block_interval == 0;
 
         // This will compute the retain heigth for the certificates which is based on the
@@ -615,7 +630,7 @@ impl State {
             certificate
                 .height
                 .as_u64()
-                .saturating_sub(self.max_retain_blocks),
+                .saturating_sub(self.certificate_retain_height),
         );
 
         // If storege becomes a bottleneck, consider optimizing this by pruning every INTERVAL heights

@@ -52,17 +52,14 @@ pub struct EmeraldConfig {
 
     /// Number of certificates to retain.
     /// Default is retain all (u64::MAX).
-    /// This is different from `num_temp_blocks_retained`
-    /// as it refers to pruning certificates
-    /// needed for validation of blocks stored in Reth.
-    /// Once the certificates are delited those blocks
+    /// Once the certificates are deleted those blocks
     /// cannot be validated on this node.
-    #[serde(default = "max_retain_block_default")]
-    pub max_retain_blocks: u64,
+    #[serde(default = "default_certificate_retain_height")]
+    pub certificate_retain_height: u64,
 
     /// Number of blocks to wait before attempting pruning
     /// Note that this applies only to pruning certificates.
-    /// Certificates are pruned based on max_retain_blocks.
+    /// Certificates are pruned based on certificate_retain_height.
     /// This value cannot be 0.
     /// Defatul: 10.
     #[serde(default = "prune_at_interval_default")]
@@ -96,7 +93,7 @@ fn default_min_block_time() -> Duration {
     Duration::from_millis(500)
 }
 
-fn max_retain_block_default() -> u64 {
+fn default_certificate_retain_height() -> u64 {
     u64::MAX
 }
 fn prune_at_interval_default() -> u64 {

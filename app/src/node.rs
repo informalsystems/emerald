@@ -101,7 +101,13 @@ impl App {
             tokio::spawn(metrics::serve(config.metrics.listen_addr));
         }
 
-        let store = Store::open(self.get_home_dir().join("store.db"), metrics.db.clone()).await?;
+        let emerald_config = self.load_emerald_config()?;
+        let store = Store::open(
+            self.get_home_dir().join("store.db"),
+            metrics.db.clone(),
+            emerald_config.num_temp_blocks_retained,
+        )
+        .await?;
         let start_height = self.start_height.unwrap_or_default();
 
         // Load cumulative metrics from database for crash recovery
@@ -117,8 +123,6 @@ impl App {
             elapsed_seconds,
             metrics,
         };
-
-        let emerald_config = self.load_emerald_config()?;
 
         let engine: Engine = {
             let engine_url = Url::parse(&emerald_config.engine_authrpc_address)?;

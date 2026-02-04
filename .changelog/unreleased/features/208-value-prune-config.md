@@ -1,0 +1,2 @@
+- `[store/config]` Number of intermediary block data that is pruned is now configurable. This has been done so that users can match it with the persistence threshold of their Reth nodes. The parameter is called `num_temp_blocks_retained` and is part of `EmeraldConfig` 
+  ([\#208](https://github.com/informalsystems/emerald/pull/208))

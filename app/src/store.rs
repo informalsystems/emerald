@@ -24,12 +24,6 @@ use crate::metrics::DbMetrics;
 use crate::store::keys::PendingValueKey;
 use crate::streaming::ProposalParts;
 
-/// Malachite keeps values (block data) during processing a height and stores it.
-/// For blocks decided on, that data is stored by the execution engine as well.
-/// We therefore want to prune these heights to decrease the storage usage.
-/// The retain height set via config refers to storing certificate data which is
-/// stored only in the consensus engine.
-const VALUE_RETAIN_HEIGHT: Height = Height::new(10);
 #[derive(Clone, Debug)]
 pub struct DecidedValue {
     pub value: Value,
@@ -102,13 +96,25 @@ const PENDING_PROPOSAL_PARTS_TABLE: redb::TableDefinition<'_, PendingValueKey, V
 struct Db {
     db: redb::Database,
     metrics: DbMetrics,
+
+    /// Malachite keeps values (block data) during processing a height and stores it.
+    /// For blocks decided on, that data is stored by the execution engine as well.
+    /// We therefore want to prune these heights to decrease the storage usage.
+    /// The retain height set via config refers to storing certificate data which is
+    /// stored only in the consensus engine.
+    value_retain_height: u64,
 }
 
 impl Db {
-    fn new(path: impl AsRef<Path>, metrics: DbMetrics) -> Result<Self, StoreError> {
+    fn new(
+        path: impl AsRef<Path>,
+        metrics: DbMetrics,
+        value_retain_height: u64,
+    ) -> Result<Self, StoreError> {
         Ok(Self {
             db: redb::Database::create(path).map_err(StoreError::Database)?,
             metrics,
+            value_retain_height,
         })
     }
 
@@ -411,11 +417,11 @@ impl Db {
         let tx = self.db.begin_write().unwrap();
 
         {
-            if curr_height > VALUE_RETAIN_HEIGHT {
+            if curr_height > Height::new(self.value_retain_height) {
                 let block_data_retain_height = Height::new(
                     curr_height
                         .as_u64()
-                        .saturating_sub(VALUE_RETAIN_HEIGHT.as_u64()),
+                        .saturating_sub(self.value_retain_height),
                 );
 
                 // Remove all undecided proposals with height < retain_height
@@ -697,11 +703,15 @@ pub struct Store {
 impl Store {
     /// Opens a new store at the given path with the provided metrics.
     /// Called by the application when initializing the store.
-    pub async fn open(path: impl AsRef<Path>, metrics: DbMetrics) -> Result<Self, StoreError> {
+    pub async fn open(
+        path: impl AsRef<Path>,
+        metrics: DbMetrics,
+        value_retain_height: u64,
+    ) -> Result<Self, StoreError> {
         let path = path.as_ref().to_owned();
 
         tokio::task::spawn_blocking(move || {
-            let db = Db::new(path, metrics)?;
+            let db = Db::new(path, metrics, value_retain_height)?;
             db.create_tables()?;
             Ok(Self { db: Arc::new(db) })
         })

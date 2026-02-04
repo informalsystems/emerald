@@ -65,15 +65,17 @@ async fn replay_heights_to_engine(
     for height in start_height.as_u64()..=end_height.as_u64() {
         let height = Height::new(height);
 
-        // Get the certificate and header from store
-        let (_certificate, header_bytes) = state
-            .store
-            .get_certificate_and_header(height)
+        // Sending the whole block to the execution engine.
+        let value_bytes = get_decided_value_for_sync(&state.store, engine, height, height)
             .await?
-            .ok_or_eyre(format!("Missing certificate or header for height {height}"))?;
+            .ok_or_eyre("Missing block for height {height}")
+            .unwrap()
+            .value_bytes;
 
+        let value = decode_value(value_bytes);
+        let block_bytes = value.extensions.clone();
         // Deserialize the execution payload
-        let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&header_bytes).map_err(|e| {
+        let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_bytes).map_err(|e| {
             eyre!(
                 "Failed to deserialize execution payload at height {}: {:?}",
                 height,

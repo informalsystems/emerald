@@ -220,7 +220,13 @@ module emerald {
 
     if (s.phase == Working)
       ctx.extensions.all_proposals.filterMap(p => {
-        if (p.height >= s.consensus_height and not(p.in(s.proposals)))
+        if (and {
+          // Note that a node does not receive a proposal of its own. Recovering
+          // its proposals after a crash is done via the sync protocol instead.
+          p.proposer != s.process_id,
+          p.height >= s.consensus_height,
+          not(p.in(s.proposals))
+        })
           Some(p)
         else
           None
@@ -257,7 +263,7 @@ module emerald {
   pure def listen_decided(ctx: LocalContext): Set[Proposal] = {
     val s = ctx.state
 
-    if (s.phase == Working)
+    if (s.phase == Working or s.phase == Syncing)
       match get_global_decision(ctx, s.consensus_height) {
         // There isn't a decision for the consensus height. Let's mimic
         // Malachite consensus and have some node decide on a proposal for the
@@ -321,7 +327,7 @@ module emerald {
   pure def listen_process_synced_value(ctx: LocalContext): Set[Proposal] = {
     val s = ctx.state
 
-    if (s.phase == Working)
+    if (s.phase == Working or s.phase == Syncing)
       val decided_proposal_for_height =
         ctx.extensions.decided_proposals
           .find(p => and {
@@ -343,6 +349,7 @@ module emerald {
     {
       post_state: {
         ...s,
+        phase: Syncing,
         proposals: s.proposals.setAdd(proposal)
       },
       effects: Set(
@@ -586,35 +593,31 @@ module emerald {
           }
         }
       | RecordAction(action_taken) =>
-          val ext = {
+          val ext0 = {
             ...ctx.extensions,
             action_taken: action_taken
           }
-
-          val ext0 = match action_taken {
+          match action_taken {
             | Failure(args) =>
                 val { node, height, mode } = args
                 val s = ctx.system.get(node)
                 {
-                  ...ext,
-                  failures: ext.failures.setAdd(args),
-                  // Note that during a node crash, the node loses track of its
-                  // last decided height and restarts from genesis.
-                  last_decided_height:
-                    if (mode == NodeCrash)
-                      ext.last_decided_height.put(node, 0)
-                    else
-                      ext.last_decided_height
+                  ...ctx,
+                  extensions: {
+                    ...ext0,
+                    failures: ext0.failures.setAdd(args),
+                    // Note that during a node crash, the node loses track of its
+                    // last decided height and restarts from genesis.
+                    last_decided_height:
+                      if (mode == NodeCrash) ext0.last_decided_height.put(node, 0)
+                      else ext0.last_decided_height
+                  },
+                  // Note that after a crash/restart the node loses its timeouts.
+                  events:
+                    if (mode != ConsensusTimeout) ctx.events.put(node, Set())
+                    else ctx.events
                 }
-            | _ => ext
-          }
-
-          {
-            ...ctx,
-            extensions: {
-              ...ext0,
-              action_taken: action_taken
-            }
+            | _ => { ...ctx, extensions: ext0 }
           }
     }
   }

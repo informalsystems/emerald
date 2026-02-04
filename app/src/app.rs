@@ -68,7 +68,7 @@ async fn replay_heights_to_engine(
         // Sending the whole block to the execution engine.
         let value_bytes = get_raw_value_from_store(&state.store, height)
             .await?
-            .ok_or_eyre("Missing block for height {height}")
+            .ok_or_eyre(format!("Missing block for height {height}"))
             .unwrap()
             .value_bytes;
 

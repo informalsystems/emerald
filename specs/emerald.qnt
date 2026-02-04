@@ -593,35 +593,31 @@ module emerald {
           }
         }
       | RecordAction(action_taken) =>
-          val ext = {
+          val ext0 = {
             ...ctx.extensions,
             action_taken: action_taken
           }
-
-          val ext0 = match action_taken {
+          match action_taken {
             | Failure(args) =>
                 val { node, height, mode } = args
                 val s = ctx.system.get(node)
                 {
-                  ...ext,
-                  failures: ext.failures.setAdd(args),
-                  // Note that during a node crash, the node loses track of its
-                  // last decided height and restarts from genesis.
-                  last_decided_height:
-                    if (mode == NodeCrash)
-                      ext.last_decided_height.put(node, 0)
-                    else
-                      ext.last_decided_height
+                  ...ctx,
+                  extensions: {
+                    ...ext0,
+                    failures: ext0.failures.setAdd(args),
+                    // Note that during a node crash, the node loses track of its
+                    // last decided height and restarts from genesis.
+                    last_decided_height:
+                      if (mode == NodeCrash) ext0.last_decided_height.put(node, 0)
+                      else ext0.last_decided_height
+                  },
+                  // Note that after a crash/restart the node loses its timeouts.
+                  events:
+                    if (mode != ConsensusTimeout) ctx.events.put(node, Set())
+                    else ctx.events
                 }
-            | _ => ext
-          }
-
-          {
-            ...ctx,
-            extensions: {
-              ...ext0,
-              action_taken: action_taken
-            }
+            | _ => { ...ctx, extensions: ext0 }
           }
     }
   }

@@ -20,6 +20,7 @@ reth-node-api            = { git = "https://github.com/paradigmxyz/reth", tag = 
 reth-node-builder        = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 reth-payload-primitives  = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 alloy-rpc-types-engine   = { version = "1.4.3" }
+alloy-rpc-types-eth      = { version = "=1.4.3" }
 
 
 vergen      = "=9.0.4"

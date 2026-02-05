@@ -277,8 +277,9 @@ module emerald {
         // the decision as long as the Emerald node is at the same height.
         | Some(p) =>
             if (and {
-              p.in(s.proposals),
-              p.height == s.consensus_height
+              p.height == s.consensus_height,
+              p.round == s.consensus_round,
+              p.in(s.proposals)
             })
               Set(p)
             else
@@ -332,6 +333,7 @@ module emerald {
         ctx.extensions.decided_proposals
           .find(p => and {
             p.height == s.consensus_height,
+            p.round == s.consensus_round,
             not(p.in(s.proposals))
           })
 

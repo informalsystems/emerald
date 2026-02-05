@@ -1,5 +1,3 @@
-use alloy_primitives::{address, Address};
-use alloy_provider::ProviderBuilder;
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre, OptionExt};
@@ -11,63 +9,16 @@ use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
 use malachitebft_eth_cli::config::EmeraldConfig;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
-use malachitebft_eth_types::secp256k1::PublicKey;
-use malachitebft_eth_types::{BlockHash, EmeraldContext, Validator, ValidatorSet};
+use malachitebft_eth_types::EmeraldContext;
 use ssz::{Decode, Encode};
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
-
-const GENESIS_VALIDATOR_MANAGER_ACCOUNT: Address =
-    address!("0x0000000000000000000000000000000000002000");
-
-alloy_sol_types::sol!(
-    #[derive(Debug)]
-    #[sol(rpc)]
-    ValidatorManager,
-    "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
-);
 
 use crate::bootstrap::{initialize_state_from_existing_block, initialize_state_from_genesis};
 use crate::payload::validate_execution_payload;
 use crate::state::{decode_value, State};
 use crate::sync_handler::get_decided_value_for_sync;
-
-pub async fn read_validators_from_contract(
-    eth_url: &str,
-    block_hash: &BlockHash,
-) -> eyre::Result<ValidatorSet> {
-    let provider = ProviderBuilder::new().connect(eth_url).await?;
-
-    let validator_manager_contract =
-        ValidatorManager::new(GENESIS_VALIDATOR_MANAGER_ACCOUNT, provider);
-
-    let genesis_validator_set_sol = validator_manager_contract
-        .getValidators()
-        .block((*block_hash).into())
-        .call()
-        .await?;
-
-    let validators = genesis_validator_set_sol
-        .into_iter()
-        .map(
-            |ValidatorManager::ValidatorInfo {
-                 validatorKey,
-                 power,
-             }| {
-                let mut uncompressed = [0u8; 65];
-                uncompressed[0] = 0x04;
-                uncompressed[1..33].copy_from_slice(&validatorKey.x.to_be_bytes::<32>());
-                uncompressed[33..].copy_from_slice(&validatorKey.y.to_be_bytes::<32>());
-
-                let pub_key = PublicKey::from_sec1_bytes(&uncompressed)?;
-
-                Ok(Validator::new(pub_key, power))
-            },
-        )
-        .collect::<eyre::Result<Vec<_>>>()?;
-
-    Ok(ValidatorSet::new(validators))
-}
+use crate::validators::read_validators_from_contract;
 
 /// Handle ConsensusReady messages from the consensus engine
 ///

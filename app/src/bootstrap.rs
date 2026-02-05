@@ -11,9 +11,9 @@ use malachitebft_eth_types::{Block, BlockHash, Height};
 use ssz::Decode;
 use tracing::{debug, info, warn};
 
-use crate::app::read_validators_from_contract;
 use crate::state::{decode_value, State};
 use crate::store::Store;
+use crate::validators::read_validators_from_contract;
 
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
     // Get the genesis block from the execution engine

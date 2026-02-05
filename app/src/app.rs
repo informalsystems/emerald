@@ -29,6 +29,7 @@ alloy_sol_types::sol!(
 
 use crate::payload::validate_execution_payload;
 use crate::state::{decode_value, State};
+use crate::store::Store;
 use crate::sync_handler::{get_decided_value_for_sync, get_raw_value_from_store};
 
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
@@ -52,7 +53,7 @@ pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -
 /// Replay blocks from Emerald's store to the execution client (Reth).
 /// This is needed when Reth is behind Emerald's stored height after a crash.
 async fn replay_heights_to_engine(
-    state: &State,
+    store: &Store,
     engine: &Engine,
     start_height: Height,
     end_height: Height,
@@ -67,9 +68,7 @@ async fn replay_heights_to_engine(
         let height = Height::new(height);
 
         // Sending the whole block to the execution engine.
-        let value_bytes = get_raw_value_from_store(&state.store, height)
-            .await?
-            .value_bytes;
+        let value_bytes = get_raw_value_from_store(store, height).await?.value_bytes;
 
         let value = decode_value(value_bytes);
         let block_bytes = value.extensions.clone();
@@ -179,7 +178,8 @@ pub async fn initialize_state_from_existing_block(
 
             // Replay from Reth's next height to Emerald's stored height
             let replay_start = Height::new(reth_height + 1);
-            replay_heights_to_engine(state, engine, replay_start, height, emerald_config).await?;
+            replay_heights_to_engine(&state.store, engine, replay_start, height, emerald_config)
+                .await?;
 
             info!("✅ Height replay completed successfully");
         }
@@ -193,7 +193,8 @@ pub async fn initialize_state_from_existing_block(
             // No blocks in Reth yet (genesis case) - this shouldn't happen here
             // but handle it gracefully
             warn!("⚠️  Execution client has no blocks, replaying from genesis");
-            replay_heights_to_engine(state, engine, Height::new(1), height, emerald_config).await?;
+            replay_heights_to_engine(&state.store, engine, Height::new(1), height, emerald_config)
+                .await?;
         }
     }
 

@@ -129,7 +129,7 @@ impl App {
             )
         };
 
-        let min_block_time = emerald_config.min_block_time;
+        // Check the validity of the configuration parameters
         let num_certificates_to_retain = emerald_config.num_certificates_to_retain;
         let num_temp_blocks_retained = emerald_config.num_temp_blocks_retained;
 
@@ -159,11 +159,8 @@ impl App {
             start_height,
             store,
             state_metrics,
-            num_certificates_to_retain,
-            prune_at_block_interval,
-            num_temp_blocks_retained,
-            min_block_time,
             evm_chain_config,
+            emerald_config.clone(),
         );
 
         Ok(AppRuntime {

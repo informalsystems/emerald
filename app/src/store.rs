@@ -435,10 +435,10 @@ impl Db {
                 decided_block_data.retain(|k, _| k >= block_data_retain_height)?;
             }
             if prune_certificates {
-                // This will compute the retain heigth for the certificates which is based on the
+                // This will compute the retain height for the certificates which is based on the
                 // retain height set in the config.
                 // The intermediary block data stored for Consensus is pruned at every height after
-                // VALUE_RETAIN_HEIGHT (defined in store.rs)
+                // num_temp_blocks_retained
                 let certificate_retain_height = Height::new(
                     curr_height
                         .as_u64()

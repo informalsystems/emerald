@@ -24,13 +24,14 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sha3::Digest;
 use ssz::{Decode, Encode};
-use tokio::time::{Duration, Instant};
+use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
 
 use crate::metrics::Metrics;
 use crate::payload::{extract_block_header, validate_execution_payload, ValidatedPayloadCache};
 use crate::store::Store;
 use crate::streaming::{PartStreamsMap, ProposalParts};
+use malachitebft_eth_cli::config::EmeraldConfig;
 
 pub struct StateMetrics {
     pub txs_count: u64,
@@ -59,6 +60,20 @@ pub struct State {
     #[allow(dead_code)]
     rng: StdRng,
 
+    // ------------ Config import
+    /// EmeraldConfig is used to extract the following config parameters:
+    /// num_certificates_to_retain
+    /// prune_at_block_interval
+    /// num_temp_blocks_retained
+    /// min_block_time
+    pub emerald_config: EmeraldConfig,
+
+    /// Needed to extract chain configuration contained in the ethereum genesis file.
+    /// Currently used to read information on the fork supported by the chain.
+    pub eth_chain_config: ChainConfig,
+    // ------------
+
+    // ------------- Internal temporary state
     /// The height where consensus is working (the tip of the blockchain).
     /// After deciding on height H, this is set to H+1.
     /// This represents the next height where consensus will propose, vote, and commit.
@@ -74,34 +89,6 @@ pub struct State {
     // Cache for tracking recently validated payloads to avoid duplicate validation
     validated_payload_cache: ValidatedPayloadCache,
 
-    // For stats
-    pub txs_count: u64,
-    pub chain_bytes: u64,
-    pub start_time: Instant,
-    pub metrics: Metrics,
-
-    /// Maximum number of certificates to keep in store.
-    /// Note that when a certificate is pruend we will not be
-    /// able to validated blocks on this node.
-    pub num_certificates_to_retain: u64,
-
-    /// The certificates are pruned every prune_at_block_interval heights.
-    /// This is done to avoid DB access overhead.
-    pub prune_at_block_interval: u64,
-
-    /// Number of blocks to retain temporary.
-    /// The block data is stored in the execution engine and therefore we do
-    /// not need it in Emerald.
-    /// WARN: If the exection engine is not persisting every block
-    /// this parameter has to be >= than the number of blocks
-    /// not persisted, otherwise crash replay will not work.
-    pub num_temp_blocks_retained: u64,
-
-    /// Minimum time of a block. If set to something > 0
-    /// and a block is produces in `t` where `t` < `min_block_time`
-    /// we will sleep for `min_block_time - t`.
-    pub min_block_time: Duration,
-
     /// Time it took to execute last block.
     /// Used to decide on whether we should sleep in case min_block_time
     /// is set.
@@ -110,9 +97,14 @@ pub struct State {
     /// Tracks when the previous block was committed (for per-block TPS calculation)
     pub previous_block_commit_time: Instant,
 
-    /// Needed to extract chain configuration contained in the ethereum genesis file.
-    /// Currently used to read information on the fork supported by the chain.
-    pub eth_chain_config: ChainConfig,
+    // --------------
+
+    // -------------- Stat collection - persisted to DB
+    pub txs_count: u64,
+    pub chain_bytes: u64,
+    pub start_time: Instant,
+    pub metrics: Metrics,
+    // --------------
 }
 
 /// Represents errors that can occur during the verification of a proposal's signature.
@@ -192,11 +184,8 @@ impl State {
         height: Height,
         store: Store,
         state_metrics: StateMetrics,
-        num_certificates_to_retain: u64,
-        prune_at_interval: u64,
-        num_temp_blocks_retained: u64,
-        min_block_time: Duration,
         eth_chain_config: ChainConfig,
+        emerald_config: EmeraldConfig,
     ) -> Self {
         // Calculate start_time by subtracting elapsed_seconds from now.
         // It represents the start time of measuring metrics, not the actual node start time.
@@ -224,13 +213,10 @@ impl State {
             chain_bytes: state_metrics.chain_bytes,
             start_time,
             metrics: state_metrics.metrics,
-            num_certificates_to_retain,
-            prune_at_block_interval: prune_at_interval,
-            num_temp_blocks_retained,
-            min_block_time,
             last_block_time: Instant::now(),
             previous_block_commit_time: Instant::now(),
             eth_chain_config,
+            emerald_config: emerald_config,
         }
     }
 
@@ -568,21 +554,21 @@ impl State {
                 .await?;
         }
 
-        let prune_certificates = self.num_certificates_to_retain != u64::MAX
-            && certificate.height.as_u64() % self.prune_at_block_interval == 0;
+        let prune_certificates = self.emerald_config.num_certificates_to_retain != u64::MAX
+            && certificate.height.as_u64() % self.emerald_config.prune_at_block_interval == 0;
 
         // If storege becomes a bottleneck, consider optimizing this by pruning every INTERVAL heights
         self.store
             .prune(
-                self.num_certificates_to_retain,
-                self.num_temp_blocks_retained,
+                self.emerald_config.num_certificates_to_retain,
+                self.emerald_config.num_temp_blocks_retained,
                 certificate.height,
                 prune_certificates,
             )
             .await?;
 
         // Sleep to reduce the block speed, if set via config.
-        debug!(timeout_commit = ?self.min_block_time);
+        debug!(timeout_commit = ?self.emerald_config.min_block_time);
         let elapsed_height_time = self.last_block_time.elapsed();
 
         info!(
@@ -590,8 +576,8 @@ impl State {
             certificate.height, elapsed_height_time
         );
 
-        if elapsed_height_time < self.min_block_time {
-            tokio::time::sleep(self.min_block_time - elapsed_height_time).await;
+        if elapsed_height_time < self.emerald_config.min_block_time {
+            tokio::time::sleep(self.emerald_config.min_block_time - elapsed_height_time).await;
         }
 
         Ok(())

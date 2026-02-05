@@ -464,6 +464,10 @@ impl Db {
             let mut certificate_data = tx.open_table(CERTIFICATES_TABLE)?;
             certificate_data.retain(|k, _| k >= certificate_retain_height)?;
 
+            // Prune block headers along with certificates since they are retrieved together
+            let mut block_headers = tx.open_table(DECIDED_BLOCK_HEADERS_TABLE)?;
+            block_headers.retain(|k, _| k >= certificate_retain_height)?;
+
             result.earliest_certificate_height = Some(certificate_retain_height);
         }
 
@@ -1068,25 +1072,33 @@ mod tests {
             "earliest_value_height should be 4 - 1 = 3"
         );
 
-        // === Certificates (certificate_retain_height = 2, all survive) ===
+        // === Certificates and block headers (certificate_retain_height = 2) ===
+        // Block headers are pruned at the same height as certificates.
+        // get_certificate_and_header returns Some only if BOTH exist.
+        assert!(
+            db.get_certificate_and_header(Height::new(4))
+                .unwrap()
+                .is_some(),
+            "certificate and header at height 4 should survive"
+        );
         assert!(
             db.get_certificate_and_header(Height::new(3))
                 .unwrap()
                 .is_some(),
-            "certificate at height 3 should survive"
+            "certificate and header at height 3 should survive"
         );
         assert!(
             db.get_certificate_and_header(Height::new(2))
                 .unwrap()
                 .is_some(),
-            "certificate at height 2 should survive"
+            "certificate and header at height 2 should survive (>= retain height)"
         );
-        // Certificate retain height is 1, so height 1 does not survive
+        // Height 1 < retain height 2, so both certificate and header are pruned
         assert!(
             db.get_certificate_and_header(Height::new(1))
                 .unwrap()
                 .is_none(),
-            "certificate at height 1 does not survive (retain height = curr_height - num_certs_to_retain = 2)"
+            "certificate and header at height 1 should be pruned (< retain height 2)"
         );
 
         // === Decided block data (retain height = 3, heights > 2 survive) ===
@@ -1190,13 +1202,15 @@ mod tests {
             "earliest_value_height should be 4 - 1 = 3"
         );
 
-        // Certificates should all still exist
+        // Certificates and block headers should all still exist.
+        // Block headers are only pruned when prune_certificates = true.
+        // get_certificate_and_header returns Some only if BOTH exist.
         for h in 1..=4u64 {
             assert!(
                 db.get_certificate_and_header(Height::new(h))
                     .unwrap()
                     .is_some(),
-                "certificate at height {h} should still exist"
+                "certificate and header at height {h} should still exist when prune_certificates = false"
             );
         }
     }
@@ -1223,12 +1237,12 @@ mod tests {
             "earliest_value_height should be None when curr_height <= num_temp_blocks_retained"
         );
 
-        // Data should still exist
+        // Certificate and header should still exist (no pruning occurred)
         assert!(
             db.get_certificate_and_header(Height::new(1))
                 .unwrap()
                 .is_some(),
-            "certificate at height 1 should still exist"
+            "certificate and header at height 1 should still exist"
         );
     }
 
@@ -1256,12 +1270,12 @@ mod tests {
             "earliest_value_height should be 2 - 1 = 1"
         );
 
-        // Certificate at height 1 should survive (retain_height = 0, so height >= 0 survives)
+        // Certificate and header at height 1 should survive (retain_height = 0, so height >= 0 survives)
         assert!(
             db.get_certificate_and_header(Height::new(1))
                 .unwrap()
                 .is_some(),
-            "certificate at height 1 should survive with retain_height = 0"
+            "certificate and header at height 1 should survive with retain_height = 0"
         );
     }
 }

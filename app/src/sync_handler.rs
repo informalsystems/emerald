@@ -17,16 +17,16 @@ use crate::store::Store;
 pub async fn get_raw_value_from_store(
     store: &Store,
     height: Height,
-) -> eyre::Result<Option<RawDecidedValue<EmeraldContext>>> {
+) -> eyre::Result<RawDecidedValue<EmeraldContext>> {
     let decided_value = store
         .get_decided_value(height)
         .await?
         .ok_or_else(|| eyre!("Decided value not found at height {height}, data integrity error"))?;
 
-    Ok(Some(RawDecidedValue {
+    Ok(RawDecidedValue {
         certificate: decided_value.certificate,
         value_bytes: ProtobufCodec.encode(&decided_value.value)?,
-    }))
+    })
 }
 
 /// Retrieves a decided value for sync at the given height.
@@ -40,7 +40,7 @@ pub async fn get_decided_value_for_sync(
     if height >= earliest_unpruned_height {
         // Height is in our decided values table - get it directly
         info!(%height, earliest_unpruned_height = %earliest_unpruned_height, "Getting decided value from local storage");
-        get_raw_value_from_store(store, height).await
+        get_raw_value_from_store(store, height).await.map(Some)
     } else {
         // Height has been pruned from decided values - try to reconstruct from header + EL
         info!(%height, earliest_unpruned_height = %earliest_unpruned_height, "Height pruned from storage, reconstructing from block header + EL");

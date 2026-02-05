@@ -30,7 +30,7 @@ alloy_sol_types::sol!(
 use crate::payload::validate_execution_payload;
 use crate::state::{decode_value, State};
 use crate::store::Store;
-use crate::sync_handler::{get_decided_value_for_sync, get_raw_value_from_store};
+use crate::sync_handler::get_decided_value_for_sync;
 
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
     // Get the genesis block from the execution engine
@@ -68,7 +68,7 @@ async fn replay_heights_to_engine(
         let height = Height::new(height);
 
         // Sending the whole block to the execution engine.
-        let value_bytes = get_raw_value_from_store(store, height).await?.value_bytes;
+        let value_bytes = store.get_raw_decided_value(height).await?.value_bytes;
 
         let value = decode_value(value_bytes);
         let block_bytes = value.extensions.clone();

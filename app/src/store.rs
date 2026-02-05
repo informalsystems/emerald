@@ -1,13 +1,11 @@
 #![allow(clippy::result_large_err)]
 
-use core::mem::size_of;
-use std::path::Path;
-use std::sync::Arc;
-use std::time::Instant;
-
 use bytes::Bytes;
+use core::mem::size_of;
+use color_eyre::eyre::{self, eyre};
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Round};
+use malachitebft_app_channel::app::types::sync::RawDecidedValue;
 use malachitebft_app_channel::app::types::ProposedValue;
 use malachitebft_eth_types::codec::proto as codec;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
@@ -15,6 +13,9 @@ use malachitebft_eth_types::{proto, EmeraldContext, Height, Value, ValueId};
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 use prost::Message;
 use redb::ReadableTable;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Instant;
 use thiserror::Error;
 
 mod keys;
@@ -915,6 +916,23 @@ impl Store {
     pub async fn load_cumulative_metrics(&self) -> Result<Option<(u64, u64, u64)>, StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.get_cumulative_metrics()).await?
+    }
+
+    /// Retrieves a decided value encoded as a RawDecidedValue for the given height.
+    /// Returns an error if no decided value exists at the given height.
+    pub async fn get_raw_decided_value(
+        &self,
+        height: Height,
+    ) -> eyre::Result<RawDecidedValue<EmeraldContext>> {
+        let decided_value = self
+            .get_decided_value(height)
+            .await?
+            .ok_or_else(|| eyre!("Decided value not found at height {height}, data integrity error"))?;
+
+        Ok(RawDecidedValue {
+            certificate: decided_value.certificate,
+            value_bytes: ProtobufCodec.encode(&decided_value.value)?,
+        })
     }
 }
 

@@ -21,6 +21,7 @@ use malachitebft_eth_types::{
     Address, BlockTimestamp, EmeraldContext, Genesis, Height, ProposalData, ProposalFin,
     ProposalInit, ProposalPart, RetryConfig, ValidatorSet, Value, ValueId,
 };
+use malachitebft_proto::Error as ProtoError;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sha3::Digest;
@@ -872,6 +873,6 @@ pub fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<Emerald
 }
 
 /// Decodes a Value from its byte representation using ProtobufCodec
-pub fn decode_value(bytes: Bytes) -> Value {
-    ProtobufCodec.decode(bytes).unwrap()
+pub fn decode_value(bytes: Bytes) -> Result<Value, ProtoError> {
+    ProtobufCodec.decode(bytes)
 }

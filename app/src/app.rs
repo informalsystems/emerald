@@ -76,7 +76,8 @@ async fn replay_heights_to_engine(
             })?
             .value_bytes;
 
-        let value = decode_value(value_bytes);
+        let value = decode_value(value_bytes)
+            .map_err(|e| eyre!("Failed to decode value at height {}: {:?}", height, e))?;
         let block_bytes = value.extensions.clone();
         // Deserialize the execution payload
         let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_bytes).map_err(|e| {
@@ -767,7 +768,16 @@ pub async fn on_process_synced_value(
 
     info!(%height, %round, "🟢🟢 Processing synced value");
 
-    let value = decode_value(value_bytes);
+    let value = match decode_value(value_bytes) {
+        Ok(value) => value,
+        Err(e) => {
+            error!(%height, %round, error = %e, "Failed to decode synced value");
+            if reply.send(None).is_err() {
+                error!(%height, %round, "Failed to send ProcessSyncedValue None reply");
+            }
+            return Ok(());
+        }
+    };
     let block_bytes = value.extensions.clone();
 
     // Validate the synced block

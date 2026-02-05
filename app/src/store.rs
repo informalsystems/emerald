@@ -2,7 +2,7 @@
 
 use bytes::Bytes;
 use core::mem::size_of;
-use color_eyre::eyre::{self, eyre};
+use color_eyre::eyre;
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Round};
 use malachitebft_app_channel::app::types::sync::RawDecidedValue;
@@ -919,20 +919,20 @@ impl Store {
     }
 
     /// Retrieves a decided value encoded as a RawDecidedValue for the given height.
-    /// Returns an error if no decided value exists at the given height.
+    /// Returns None if no decided value exists at the given height.
     pub async fn get_raw_decided_value(
         &self,
         height: Height,
-    ) -> eyre::Result<RawDecidedValue<EmeraldContext>> {
-        let decided_value = self
-            .get_decided_value(height)
-            .await?
-            .ok_or_else(|| eyre!("Decided value not found at height {height}, data integrity error"))?;
+    ) -> eyre::Result<Option<RawDecidedValue<EmeraldContext>>> {
+        let decided_value = match self.get_decided_value(height).await? {
+            Some(v) => v,
+            None => return Ok(None),
+        };
 
-        Ok(RawDecidedValue {
+        Ok(Some(RawDecidedValue {
             certificate: decided_value.certificate,
             value_bytes: ProtobufCodec.encode(&decided_value.value)?,
-        })
+        }))
     }
 }
 

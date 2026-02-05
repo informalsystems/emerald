@@ -925,15 +925,15 @@ impl Store {
         &self,
         height: Height,
     ) -> eyre::Result<Option<RawDecidedValue<EmeraldContext>>> {
-        let decided_value = match self.get_decided_value(height).await? {
-            Some(v) => v,
-            None => return Ok(None),
-        };
-
-        Ok(Some(RawDecidedValue {
-            certificate: decided_value.certificate,
-            value_bytes: ProtobufCodec.encode(&decided_value.value)?,
-        }))
+        self.get_decided_value(height)
+            .await?
+            .map(|decided_value| {
+                Ok(RawDecidedValue {
+                    certificate: decided_value.certificate,
+                    value_bytes: ProtobufCodec.encode(&decided_value.value)?,
+                })
+            })
+            .transpose()
     }
 }
 

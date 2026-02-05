@@ -1021,7 +1021,7 @@ mod tests {
         //   certificate_retain_height   = 4 - 2 = 2  →  keep heights >= 2
         db.prune(2, 1, Height::new(4), true).unwrap();
 
-        // === Certificates (retain height = 1, all survive) ===
+        // === Certificates (certificate_retain_height = 2, all survive) ===
         assert!(
             db.get_certificate_and_header(Height::new(3))
                 .unwrap()
@@ -1034,15 +1034,15 @@ mod tests {
                 .is_some(),
             "certificate at height 2 should survive"
         );
-        // Certificate retain height is 1, so height 1 also survives
+        // Certificate retain height is 1, so height 1 does not survive
         assert!(
             db.get_certificate_and_header(Height::new(1))
                 .unwrap()
                 .is_none(),
-            "certificate at height 1 survives (retain height = curr_height - num_certs_to_retain = 1)"
+            "certificate at height 1 does not survive (retain height = curr_height - num_certs_to_retain = 2)"
         );
 
-        // === Decided block data (retain height = 2, heights >= 2 survive) ===
+        // === Decided block data (retain height = 3, heights > 2 survive) ===
         // Use a dummy round/value_id — decided block data is keyed by height only
         let r = Round::new(0);
         let vid = ValueId::new(0);
@@ -1052,14 +1052,14 @@ mod tests {
         );
         assert!(
             db.get_block_data(Height::new(2), r, vid).unwrap().is_none(),
-            "decided block data at height 2 should survive (retain height = 2)"
+            "decided block data at height 2 should not survive (retain height = 3)"
         );
         assert!(
             db.get_block_data(Height::new(1), r, vid).unwrap().is_none(),
             "decided block data at height 1 should be pruned"
         );
 
-        // === Decided values (retain height = 2, heights >= 2 survive) ===
+        // === Decided values (retain height = 3, heights > 2 survive) ===
         assert!(
             db.get_decided_value(Height::new(3)).unwrap().is_some(),
             "decided value at height 3 should survive"
@@ -1075,7 +1075,7 @@ mod tests {
             "decided value at height 1 should be pruned"
         );
 
-        // === Undecided block data (retain height = 2, heights >= 2 survive) ===
+        // === Undecided block data (retain height = 3, heights > 2 survive) ===
         assert!(
             db.get_block_data(Height::new(3), Round::new(0), ValueId::new(3))
                 .unwrap()
@@ -1095,7 +1095,7 @@ mod tests {
             "undecided block data at height 1 should be pruned"
         );
 
-        // === Undecided proposals (retain height = 2, heights >= 2 survive) ===
+        // === Undecided proposals (retain height = 3, heights > 2 survive) ===
         assert!(
             !db.get_undecided_proposals(Height::new(3), Round::new(0))
                 .unwrap()

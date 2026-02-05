@@ -117,7 +117,7 @@ pub async fn list_validators(rpc_url: &Url, contract_address: &Address) -> Resul
 
     // sort validators by power descending
     let mut validators = validators;
-    validators.sort_by(|a, b| b.power.cmp(&a.power));
+    validators.sort_by_key(|b| core::cmp::Reverse(b.power));
 
     for (i, validator) in validators.iter().enumerate() {
         println!("Validator #{}:", i + 1);

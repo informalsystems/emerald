@@ -1,4 +1,4 @@
-.PHONY: all build release test docs docs-serve testnet-config testnet-reth-recreate testnet-reth-restart testnet-start sync testnet-node-stop testnet-node-restart testnet-stop testnet-clean clean-volumes clean-prometheus spam spam-contract
+.PHONY: all build release test docs docs-serve testnet-config testnet-reth-recreate testnet-reth-restart testnet-start sync testnet-node-stop testnet-node-restart testnet-stop testnet-clean clean-volumes clean-prometheus spam spam-contract mbt-test mbt-clean
 
 all: build
 
@@ -107,3 +107,15 @@ spam-contract:
 		--time=60 \
 		--rate=1000 \
 		--rpc-url=127.0.0.1:8645
+
+# Model-Based Testing (MBT)
+
+TEST ?=
+
+mbt-test: RETH_NODES=reth0 reth1 reth2
+mbt-test: testnet-config
+	@echo "Running MBT tests..."
+	@echo "Note: RETH will be automatically started and stopped for each test"
+	cargo test --package emerald-mbt -- --nocapture --test-threads=1 $(TEST)
+
+mbt-clean: testnet-clean

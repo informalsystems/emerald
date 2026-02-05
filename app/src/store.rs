@@ -32,6 +32,15 @@ pub struct DecidedValue {
     pub certificate: CommitCertificate<EmeraldContext>,
 }
 
+/// Result of a prune operation containing the new earliest heights.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PruneResult {
+    /// New earliest height with a certificate, if certificates were pruned.
+    pub earliest_certificate_height: Option<Height>,
+    /// New earliest height with decided value data, if values were pruned.
+    pub earliest_value_height: Option<Height>,
+}
+
 fn decode_certificate(bytes: &[u8]) -> Result<CommitCertificate<EmeraldContext>, ProtoError> {
     let proto = proto::CommitCertificate::decode(bytes)?;
     codec::decode_certificate(proto)
@@ -396,67 +405,73 @@ impl Db {
 
     // All values except certificates can be retrieved from Reth (if the node has not been pruned)
     // But if we prune certificates, other nodes will not be able to catchup.
+    // Returns the new earliest heights after pruning.
     fn prune(
         &self,
         num_certificates_to_retain: u64,
         num_temp_blocks_retained: u64,
         curr_height: Height,
         prune_certificates: bool,
-    ) -> Result<(), StoreError> {
+    ) -> Result<PruneResult, StoreError> {
         let start = Instant::now();
 
         let tx = self.db.begin_write().unwrap();
 
-        {
-            if curr_height > Height::new(num_temp_blocks_retained) {
-                // Compute actual height until which we will retain temporary data
-                let block_data_retain_height = Height::new(
-                    curr_height
-                        .as_u64()
-                        .saturating_sub(num_temp_blocks_retained),
-                );
+        let mut result = PruneResult::default();
 
-                // Remove all undecided proposals with height < retain_height
-                let mut undecided = tx.open_table(UNDECIDED_PROPOSALS_TABLE)?;
-                undecided.retain(|k, _| k.0 >= block_data_retain_height)?;
+        if curr_height > Height::new(num_temp_blocks_retained) {
+            // Compute actual height until which we will retain temporary data
+            let block_data_retain_height = Height::new(
+                curr_height
+                    .as_u64()
+                    .saturating_sub(num_temp_blocks_retained),
+            );
 
-                // Remove all undecided block data with height < retain_height
-                let mut undecided_block_data = tx.open_table(UNDECIDED_BLOCK_DATA_TABLE)?;
-                undecided_block_data.retain(|k, _| k.0 >= block_data_retain_height)?;
+            // Remove all undecided proposals with height < retain_height
+            let mut undecided = tx.open_table(UNDECIDED_PROPOSALS_TABLE)?;
+            undecided.retain(|k, _| k.0 >= block_data_retain_height)?;
 
-                // Remove all pending proposal parts with height < retain_height
-                let mut pending = tx.open_table(PENDING_PROPOSAL_PARTS_TABLE)?;
-                pending.retain(|k, _| k.0 >= block_data_retain_height)?;
+            // Remove all undecided block data with height < retain_height
+            let mut undecided_block_data = tx.open_table(UNDECIDED_BLOCK_DATA_TABLE)?;
+            undecided_block_data.retain(|k, _| k.0 >= block_data_retain_height)?;
 
-                // Remove all decided values with height < retain_height
-                let mut decided = tx.open_table(DECIDED_VALUES_TABLE)?;
-                decided.retain(|k, _| k >= block_data_retain_height)?;
+            // Remove all pending proposal parts with height < retain_height
+            let mut pending = tx.open_table(PENDING_PROPOSAL_PARTS_TABLE)?;
+            pending.retain(|k, _| k.0 >= block_data_retain_height)?;
 
-                // Remove all decided block data with height < retain_height
-                let mut decided_block_data = tx.open_table(DECIDED_BLOCK_DATA_TABLE)?;
-                decided_block_data.retain(|k, _| k >= block_data_retain_height)?;
-            }
-            if prune_certificates {
-                // This will compute the retain height for the certificates which is based on the
-                // retain height set in the config.
-                // The intermediary block data stored for Consensus is pruned at every height after
-                // num_temp_blocks_retained
-                let certificate_retain_height = Height::new(
-                    curr_height
-                        .as_u64()
-                        .saturating_sub(num_certificates_to_retain),
-                );
-                // We prune certificates only if pruning is set.
-                let mut certificate_data = tx.open_table(CERTIFICATES_TABLE)?;
-                certificate_data.retain(|k, _| k >= certificate_retain_height)?;
-            }
+            // Remove all decided values with height < retain_height
+            let mut decided = tx.open_table(DECIDED_VALUES_TABLE)?;
+            decided.retain(|k, _| k >= block_data_retain_height)?;
+
+            // Remove all decided block data with height < retain_height
+            let mut decided_block_data = tx.open_table(DECIDED_BLOCK_DATA_TABLE)?;
+            decided_block_data.retain(|k, _| k >= block_data_retain_height)?;
+
+            result.earliest_value_height = Some(block_data_retain_height);
+        }
+
+        if prune_certificates {
+            // This will compute the retain height for the certificates which is based on the
+            // retain height set in the config.
+            // The intermediary block data stored for Consensus is pruned at every height after
+            // num_temp_blocks_retained
+            let certificate_retain_height = Height::new(
+                curr_height
+                    .as_u64()
+                    .saturating_sub(num_certificates_to_retain),
+            );
+            // We prune certificates only if pruning is set.
+            let mut certificate_data = tx.open_table(CERTIFICATES_TABLE)?;
+            certificate_data.retain(|k, _| k >= certificate_retain_height)?;
+
+            result.earliest_certificate_height = Some(certificate_retain_height);
         }
 
         tx.commit()?;
 
         self.metrics.observe_delete_time(start.elapsed());
 
-        Ok(())
+        Ok(result)
     }
 
     fn min_decided_value_height(&self) -> Option<Height> {
@@ -841,13 +856,14 @@ impl Store {
     /// Called by the application to clean up old data and free up space. This is done when a new value is committed.
     /// If state.max_retain_height is set to something else than u64::MAX, this function also prunes certificates.
     /// Pruned certificates cannot be retrieved later on.
+    /// Returns the new earliest heights after pruning.
     pub async fn prune(
         &self,
         num_certificates_to_retain: u64,
         num_temp_blocks_retained: u64,
         curr_height: Height,
         prune_certificates: bool,
-    ) -> Result<(), StoreError> {
+    ) -> Result<PruneResult, StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || {
             db.prune(
@@ -1038,7 +1054,19 @@ mod tests {
         // Computed retain heights:
         //   block_data_retain_height    = 4 - 1 = 3  →  keep heights >= 3
         //   certificate_retain_height   = 4 - 2 = 2  →  keep heights >= 2
-        db.prune(2, 1, Height::new(4), true).unwrap();
+        let result = db.prune(2, 1, Height::new(4), true).unwrap();
+
+        // Verify returned PruneResult
+        assert_eq!(
+            result.earliest_certificate_height,
+            Some(Height::new(2)),
+            "earliest_certificate_height should be 4 - 2 = 2"
+        );
+        assert_eq!(
+            result.earliest_value_height,
+            Some(Height::new(3)),
+            "earliest_value_height should be 4 - 1 = 3"
+        );
 
         // === Certificates (certificate_retain_height = 2, all survive) ===
         assert!(
@@ -1132,6 +1160,108 @@ mod tests {
                 .unwrap()
                 .is_empty(),
             "undecided proposals at height 1 should be pruned"
+        );
+    }
+
+    #[test]
+    fn test_prune_without_certificates() {
+        let (db, _dir) = create_test_db("prune_no_certs_test");
+
+        // Populate data at heights 1-4
+        for h in 1..=4u64 {
+            let (decided, header) = make_decided_value(h);
+            db.insert_decided_value(decided, header).unwrap();
+            db.insert_decided_block_data(Height::new(h), Bytes::from(vec![h as u8; 30]))
+                .unwrap();
+        }
+
+        // Prune with prune_certificates = false
+        let result = db.prune(2, 1, Height::new(4), false).unwrap();
+
+        // Should not return certificate height when not pruning certificates
+        assert_eq!(
+            result.earliest_certificate_height, None,
+            "earliest_certificate_height should be None when prune_certificates is false"
+        );
+        // Should still return value height
+        assert_eq!(
+            result.earliest_value_height,
+            Some(Height::new(3)),
+            "earliest_value_height should be 4 - 1 = 3"
+        );
+
+        // Certificates should all still exist
+        for h in 1..=4u64 {
+            assert!(
+                db.get_certificate_and_header(Height::new(h))
+                    .unwrap()
+                    .is_some(),
+                "certificate at height {h} should still exist"
+            );
+        }
+    }
+
+    #[test]
+    fn test_prune_no_op_low_height() {
+        let (db, _dir) = create_test_db("prune_no_op_test");
+
+        // Populate data at height 1
+        let (decided, header) = make_decided_value(1);
+        db.insert_decided_value(decided, header).unwrap();
+
+        // Prune with curr_height <= num_temp_blocks_retained (no value pruning)
+        // and prune_certificates = false (no cert pruning)
+        let result = db.prune(10, 10, Height::new(1), false).unwrap();
+
+        // Neither height should be returned
+        assert_eq!(
+            result.earliest_certificate_height, None,
+            "earliest_certificate_height should be None"
+        );
+        assert_eq!(
+            result.earliest_value_height, None,
+            "earliest_value_height should be None when curr_height <= num_temp_blocks_retained"
+        );
+
+        // Data should still exist
+        assert!(
+            db.get_certificate_and_header(Height::new(1))
+                .unwrap()
+                .is_some(),
+            "certificate at height 1 should still exist"
+        );
+    }
+
+    #[test]
+    fn test_prune_result_saturating_sub() {
+        let (db, _dir) = create_test_db("prune_saturating_test");
+
+        // Populate data at height 1
+        let (decided, header) = make_decided_value(1);
+        db.insert_decided_value(decided, header).unwrap();
+
+        // Prune with values that would underflow without saturating_sub
+        // curr_height = 2, num_certificates_to_retain = 100
+        // certificate_retain_height = 2 - 100 = 0 (saturated)
+        let result = db.prune(100, 1, Height::new(2), true).unwrap();
+
+        assert_eq!(
+            result.earliest_certificate_height,
+            Some(Height::new(0)),
+            "earliest_certificate_height should saturate to 0"
+        );
+        assert_eq!(
+            result.earliest_value_height,
+            Some(Height::new(1)),
+            "earliest_value_height should be 2 - 1 = 1"
+        );
+
+        // Certificate at height 1 should survive (retain_height = 0, so height >= 0 survives)
+        assert!(
+            db.get_certificate_and_header(Height::new(1))
+                .unwrap()
+                .is_some(),
+            "certificate at height 1 should survive with retain_height = 0"
         );
     }
 }

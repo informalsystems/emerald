@@ -844,7 +844,7 @@ pub async fn on_process_synced_value(
 /// The application MUST respond with that value if available, or `None` otherwise.
 pub async fn on_get_decided_value(
     get_decided_value: AppMsg<EmeraldContext>,
-    state: &State,
+    state: &mut State,
     engine: &Engine,
 ) -> eyre::Result<()> {
     let AppMsg::GetDecidedValue { height, reply } = get_decided_value else {
@@ -853,12 +853,12 @@ pub async fn on_get_decided_value(
 
     info!(%height, "🟢🟢 GetDecidedValue");
 
-    let earliest_height_available = state.get_earliest_height().await;
+    let earliest_height_available = state.get_earliest_certificate_height().await;
     // Check if requested height is beyond our consensus height
     let raw_decided_value = if (earliest_height_available..state.consensus_height).contains(&height)
     {
-        let earliest_unpruned = state.get_earliest_unpruned_height().await;
-        get_decided_value_for_sync(&state.store, engine, height, earliest_unpruned).await?
+        let earliest_value_height = state.get_earliest_value_height().await;
+        get_decided_value_for_sync(&state.store, engine, height, earliest_value_height).await?
     } else {
         info!(%height, consensus_height = %state.consensus_height, "Requested height is >= consensus height or < earliest_height_available.");
         None
@@ -878,13 +878,13 @@ pub async fn on_get_decided_value(
 /// The application MUST respond with its earliest available height.
 pub async fn on_get_history_min_height(
     get_history_min_height: AppMsg<EmeraldContext>,
-    state: &State,
+    state: &mut State,
 ) -> eyre::Result<()> {
     let AppMsg::GetHistoryMinHeight { reply } = get_history_min_height else {
         unreachable!("on_get_history_min_height called with non-GetHistoryMinHeight message");
     };
 
-    let min_height = state.get_earliest_height().await;
+    let min_height = state.get_earliest_certificate_height().await;
 
     if reply.send(min_height).is_err() {
         error!("Failed to send GetHistoryMinHeight reply");

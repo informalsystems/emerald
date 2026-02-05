@@ -90,6 +90,14 @@ pub struct State {
     // Cache for tracking recently validated payloads to avoid duplicate validation
     validated_payload_cache: ValidatedPayloadCache,
 
+    /// Cached earliest height with a certificate in the store.
+    /// Lazily loaded on first access and updated after pruning.
+    earliest_certificate_height: Option<Height>,
+
+    /// Cached earliest height with decided value data in the store.
+    /// Lazily loaded on first access and updated after pruning.
+    earliest_value_height: Option<Height>,
+
     /// Time it took to execute last block.
     /// Used to decide on whether we should sleep in case min_block_time
     /// is set.
@@ -209,6 +217,8 @@ impl State {
             validator_set: None,
 
             validated_payload_cache: ValidatedPayloadCache::new(10),
+            earliest_certificate_height: None,
+            earliest_value_height: None,
 
             txs_count: state_metrics.txs_count,
             chain_bytes: state_metrics.chain_bytes,
@@ -260,20 +270,36 @@ impl State {
         Some(build_execution_block_from_bytes(raw_block_data))
     }
 
-    /// Returns the earliest height available via EL
-    pub async fn get_earliest_height(&self) -> Height {
-        self.store
+    /// Returns the earliest height with a certificate in the store.
+    /// The value is cached and updated after pruning.
+    pub async fn get_earliest_certificate_height(&mut self) -> Height {
+        if let Some(height) = self.earliest_certificate_height {
+            return height;
+        }
+
+        let height = self
+            .store
             .min_decided_value_height()
             .await
-            .unwrap_or_default()
+            .unwrap_or_default();
+        self.earliest_certificate_height = Some(height);
+        height
     }
 
-    /// Returns the earliest height available in the state
-    pub async fn get_earliest_unpruned_height(&self) -> Height {
-        self.store
+    /// Returns the earliest height with decided value data in the store.
+    /// The value is cached and updated after pruning.
+    pub async fn get_earliest_value_height(&mut self) -> Height {
+        if let Some(height) = self.earliest_value_height {
+            return height;
+        }
+
+        let height = self
+            .store
             .min_unpruned_decided_value_height()
             .await
-            .unwrap_or_default()
+            .unwrap_or_default();
+        self.earliest_value_height = Some(height);
+        height
     }
 
     /// Validates a proposal by checking both proposer and signature
@@ -559,7 +585,8 @@ impl State {
             && certificate.height.as_u64() % self.emerald_config.prune_at_block_interval == 0;
 
         // If storege becomes a bottleneck, consider optimizing this by pruning every INTERVAL heights
-        self.store
+        let prune_result = self
+            .store
             .prune(
                 self.emerald_config.num_certificates_to_retain,
                 self.emerald_config.num_temp_blocks_retained,
@@ -567,6 +594,13 @@ impl State {
                 prune_certificates,
             )
             .await?;
+
+        if let Some(height) = prune_result.earliest_certificate_height {
+            self.earliest_certificate_height = Some(height);
+        }
+        if let Some(height) = prune_result.earliest_value_height {
+            self.earliest_value_height = Some(height);
+        }
 
         // Sleep to reduce the block speed, if set via config.
         debug!(timeout_commit = ?self.emerald_config.min_block_time);

@@ -9,7 +9,7 @@ retry_config.max_elapsed_time = "20s"
 fee_recipient = "0x4242424242424242424242424242424242424242"
 eth_genesis_path="./assets/genesis.json"
 
-certificate_retain_height = 0
+num_temp_blocks_retained = 0
 prune_at_block_interval = 5
 
 [retry_config]

@@ -110,11 +110,19 @@ pub struct State {
     /// Maximum number of certificates to keep in store.
     /// Note that when a certificate is pruend we will not be
     /// able to validated blocks on this node.
-    pub certificate_retain_height: u64,
+    pub num_certificates_to_retain: u64,
 
     /// The certificates are pruned every prune_at_block_interval heights.
     /// This is done to avoid DB access overhead.
     pub prune_at_block_interval: u64,
+
+    /// Number of blocks to retain temporary.
+    /// The block data is stored in the execution engine and therefore we do
+    /// not need it in Emerald.
+    /// WARN: If the exection engine is not persisting every block
+    /// this parameter has to be >= than the number of blocks
+    /// not persisted, otherwise crash replay will not work.
+    pub num_temp_blocks_retained: u64,
 
     /// Minimum time of a block. If set to something > 0
     /// and a block is produces in `t` where `t` < `min_block_time`
@@ -211,8 +219,9 @@ impl State {
         height: Height,
         store: Store,
         state_metrics: StateMetrics,
-        certificate_retain_height: u64,
+        num_certificates_to_retain: u64,
         prune_at_interval: u64,
+        num_temp_blocks_retained: u64,
         min_block_time: Duration,
         eth_chain_config: ChainConfig,
     ) -> Self {
@@ -242,8 +251,9 @@ impl State {
             chain_bytes: state_metrics.chain_bytes,
             start_time,
             metrics: state_metrics.metrics,
-            certificate_retain_height,
+            num_certificates_to_retain,
             prune_at_block_interval: prune_at_interval,
+            num_temp_blocks_retained,
             min_block_time,
             last_block_time: Instant::now(),
             previous_block_commit_time: Instant::now(),
@@ -619,25 +629,21 @@ impl State {
                 .await?;
         }
 
-        let prune_certificates = self.certificate_retain_height != u64::MAX
+        let prune_certificates = self.num_certificates_to_retain != u64::MAX
             && certificate.height.as_u64() % self.prune_at_block_interval == 0;
 
-        // This will compute the retain heigth for the certificates which is based on the
-        // retain height set in the config.
-        // The intermediary block data stored for Consensus is pruned at every height after
-        // VALUE_RETAIN_HEIGHT (defined in store.rs)
-        let retain_height = Height::new(
-            certificate
-                .height
-                .as_u64()
-                .saturating_sub(self.certificate_retain_height),
-        );
-
-        // If storege becomes a bottleneck, consider optimizing this by pruning every INTERVAL heights
-        self.store
-            .prune(retain_height, certificate.height, prune_certificates)
-            .await?;
-
+        //        Prune only if the current height is above the minimum block retain height
+        if certificate.height >= Height::new(self.num_temp_blocks_retained) {
+            // If storege becomes a bottleneck, consider optimizing this by pruning every INTERVAL heights
+            self.store
+                .prune(
+                    self.num_certificates_to_retain,
+                    self.num_temp_blocks_retained,
+                    certificate.height,
+                    prune_certificates,
+                )
+                .await?;
+        }
         // Sleep to reduce the block speed, if set via config.
         debug!(timeout_commit = ?self.min_block_time);
         let elapsed_height_time = self.last_block_time.elapsed();

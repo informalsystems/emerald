@@ -101,13 +101,7 @@ impl App {
             tokio::spawn(metrics::serve(config.metrics.listen_addr));
         }
 
-        let emerald_config = self.load_emerald_config()?;
-        let store = Store::open(
-            self.get_home_dir().join("store.db"),
-            metrics.db.clone(),
-            emerald_config.num_temp_blocks_retained,
-        )
-        .await?;
+        let store = Store::open(self.get_home_dir().join("store.db"), metrics.db.clone()).await?;
         let start_height = self.start_height.unwrap_or_default();
 
         // Load cumulative metrics from database for crash recovery
@@ -124,6 +118,7 @@ impl App {
             metrics,
         };
 
+        let emerald_config = self.load_emerald_config()?;
         let engine: Engine = {
             let engine_url = Url::parse(&emerald_config.engine_authrpc_address)?;
             let jwt_path = PathBuf::from_str(&emerald_config.jwt_token_path)?;
@@ -135,7 +130,15 @@ impl App {
         };
 
         let min_block_time = emerald_config.min_block_time;
-        let certificate_retain_height = emerald_config.certificate_retain_height;
+        let num_certificates_to_retain = emerald_config.num_certificates_to_retain;
+        let num_temp_blocks_retain_height = emerald_config.num_temp_blocks_retained;
+
+        if num_certificates_to_retain < num_temp_blocks_retain_height {
+            return Err(eyre::eyre!(
+                "num_certificates_to_retain has to be >= than num_temp_blocks_retain_height."
+            ));
+        }
+
         let prune_at_block_interval = emerald_config.prune_at_block_interval;
 
         assert!(
@@ -156,8 +159,9 @@ impl App {
             start_height,
             store,
             state_metrics,
-            certificate_retain_height,
+            num_certificates_to_retain,
             prune_at_block_interval,
+            num_temp_blocks_retain_height,
             min_block_time,
             evm_chain_config,
         );

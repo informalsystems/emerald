@@ -96,25 +96,13 @@ const PENDING_PROPOSAL_PARTS_TABLE: redb::TableDefinition<'_, PendingValueKey, V
 struct Db {
     db: redb::Database,
     metrics: DbMetrics,
-
-    /// Malachite keeps values (block data) during processing a height and stores it.
-    /// For blocks decided on, that data is stored by the execution engine as well.
-    /// We therefore want to prune these heights to decrease the storage usage.
-    /// The retain height set via config refers to storing certificate data which is
-    /// stored only in the consensus engine.
-    value_retain_height: u64,
 }
 
 impl Db {
-    fn new(
-        path: impl AsRef<Path>,
-        metrics: DbMetrics,
-        value_retain_height: u64,
-    ) -> Result<Self, StoreError> {
+    fn new(path: impl AsRef<Path>, metrics: DbMetrics) -> Result<Self, StoreError> {
         Ok(Self {
             db: redb::Database::create(path).map_err(StoreError::Database)?,
             metrics,
-            value_retain_height,
         })
     }
 
@@ -408,7 +396,8 @@ impl Db {
     // But if we prune certificates, other nodes will not be able to catchup.
     fn prune(
         &self,
-        retain_height: Height,
+        num_certificates_to_retain: u64,
+        num_temp_blocks_to_retain: u64,
         curr_height: Height,
         prune_certificates: bool,
     ) -> Result<(), StoreError> {
@@ -417,11 +406,12 @@ impl Db {
         let tx = self.db.begin_write().unwrap();
 
         {
-            if curr_height > Height::new(self.value_retain_height) {
+            if curr_height > Height::new(num_temp_blocks_to_retain) {
+                // Compute actual height until which we will retain temporary data
                 let block_data_retain_height = Height::new(
                     curr_height
                         .as_u64()
-                        .saturating_sub(self.value_retain_height),
+                        .saturating_sub(num_temp_blocks_to_retain),
                 );
 
                 // Remove all undecided proposals with height < retain_height
@@ -445,9 +435,18 @@ impl Db {
                 decided_block_data.retain(|k, _| k >= block_data_retain_height)?;
             }
             if prune_certificates {
+                // This will compute the retain heigth for the certificates which is based on the
+                // retain height set in the config.
+                // The intermediary block data stored for Consensus is pruned at every height after
+                // VALUE_RETAIN_HEIGHT (defined in store.rs)
+                let certificate_retain_height = Height::new(
+                    curr_height
+                        .as_u64()
+                        .saturating_sub(num_certificates_to_retain),
+                );
                 // We prune certificates only if pruning is set.
                 let mut certificate_data = tx.open_table(CERTIFICATES_TABLE)?;
-                certificate_data.retain(|k, _| k >= retain_height)?;
+                certificate_data.retain(|k, _| k >= certificate_retain_height)?;
             }
         }
 
@@ -703,15 +702,11 @@ pub struct Store {
 impl Store {
     /// Opens a new store at the given path with the provided metrics.
     /// Called by the application when initializing the store.
-    pub async fn open(
-        path: impl AsRef<Path>,
-        metrics: DbMetrics,
-        value_retain_height: u64,
-    ) -> Result<Self, StoreError> {
+    pub async fn open(path: impl AsRef<Path>, metrics: DbMetrics) -> Result<Self, StoreError> {
         let path = path.as_ref().to_owned();
 
         tokio::task::spawn_blocking(move || {
-            let db = Db::new(path, metrics, value_retain_height)?;
+            let db = Db::new(path, metrics)?;
             db.create_tables()?;
             Ok(Self { db: Arc::new(db) })
         })
@@ -846,13 +841,19 @@ impl Store {
     /// Pruned certificates cannot be retrieved later on.
     pub async fn prune(
         &self,
-        retain_height: Height,
+        num_certificates_to_retain: u64,
+        num_temp_blocks_retained: u64,
         curr_height: Height,
         prune_certificates: bool,
     ) -> Result<(), StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || {
-            db.prune(retain_height, curr_height, prune_certificates)
+            db.prune(
+                num_certificates_to_retain,
+                num_temp_blocks_retained,
+                curr_height,
+                prune_certificates,
+            )
         })
         .await?
     }

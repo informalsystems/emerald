@@ -6,8 +6,6 @@ use std::fmt;
 use alloy_genesis::ChainConfig;
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
-use caches::lru::AdaptiveCache;
-use caches::Cache;
 use color_eyre::eyre;
 use malachitebft_app_channel::app::streaming::{StreamContent, StreamId, StreamMessage};
 use malachitebft_app_channel::app::types::codec::Codec;
@@ -19,45 +17,20 @@ use malachitebft_eth_engine::json_structures::ExecutionBlock;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
 use malachitebft_eth_types::secp256k1::K256Provider;
 use malachitebft_eth_types::{
-    Address, Block, BlockHash, BlockTimestamp, EmeraldContext, Genesis, Height, ProposalData,
-    ProposalFin, ProposalInit, ProposalPart, RetryConfig, ValidatorSet, Value, ValueId,
+    Address, BlockTimestamp, EmeraldContext, Genesis, Height, ProposalData, ProposalFin,
+    ProposalInit, ProposalPart, RetryConfig, ValidatorSet, Value, ValueId,
 };
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sha3::Digest;
-use ssz::Decode;
+use ssz::{Decode, Encode};
 use tokio::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
 use crate::metrics::Metrics;
+use crate::payload::{extract_block_header, validate_execution_payload, ValidatedPayloadCache};
 use crate::store::Store;
 use crate::streaming::{PartStreamsMap, ProposalParts};
-
-/// Cache for tracking recently validated execution payloads to avoid redundant validation.
-/// Stores both the block hash and its validity result (Valid or Invalid).
-pub struct ValidatedPayloadCache {
-    cache: AdaptiveCache<BlockHash, Validity>,
-}
-
-impl ValidatedPayloadCache {
-    pub fn new(max_size: usize) -> Self {
-        Self {
-            cache: AdaptiveCache::new(max_size)
-                .expect("Failed to create AdaptiveCache: invalid cache size"),
-        }
-    }
-
-    /// Check if a block hash has been validated and return its cached validity
-    pub fn get(&mut self, block_hash: &BlockHash) -> Option<Validity> {
-        self.cache.get(block_hash).copied()
-    }
-
-    /// Insert a block hash and its validity result into the cache
-    pub fn insert(&mut self, block_hash: BlockHash, validity: Validity) {
-        self.cache.put(block_hash, validity);
-    }
-}
-use crate::sync_handler::validate_payload;
 
 pub struct StateMetrics {
     pub txs_count: u64,
@@ -86,9 +59,13 @@ pub struct State {
     #[allow(dead_code)]
     rng: StdRng,
 
-    pub current_height: Height,
-    pub current_round: Round,
-    pub current_proposer: Option<Address>,
+    /// The height where consensus is working (the tip of the blockchain).
+    /// After deciding on height H, this is set to H+1.
+    /// This represents the next height where consensus will propose, vote, and commit.
+    pub consensus_height: Height,
+    /// The round of consensus at consensus_height.
+    /// Reset to 0 when advancing to a new height.
+    pub consensus_round: Round,
 
     pub latest_block: Option<ExecutionBlock>,
 
@@ -108,6 +85,9 @@ pub struct State {
     pub min_block_time: Duration,
 
     pub last_block_time: Instant,
+
+    /// Tracks when the previous block was committed (for per-block TPS calculation)
+    pub previous_block_commit_time: Instant,
 
     pub eth_chain_config: ChainConfig,
 }
@@ -203,9 +183,8 @@ impl State {
         Self {
             ctx,
             signing_provider,
-            current_height: height,
-            current_round: Round::new(0),
-            current_proposer: None,
+            consensus_height: height,
+            consensus_round: Round::new(0),
             address,
             store,
             stream_nonce: 0,
@@ -225,6 +204,7 @@ impl State {
             prune_at_block_interval: prune_at_interval,
             min_block_time,
             last_block_time: Instant::now(),
+            previous_block_commit_time: Instant::now(),
             eth_chain_config,
         }
     }
@@ -365,68 +345,80 @@ impl State {
         Ok(())
     }
 
-    /// Validates execution payload with the execution engine
-    /// Returns Ok(Validity) - Invalid if decoding fails or payload is invalid
-    pub async fn validate_execution_payload(
+    /// Processes complete proposal parts: validates, stores, and returns the proposed value.
+    ///
+    /// Returns `Ok(Some(ProposedValue))` if the proposal is valid and stored,
+    /// `Ok(None)` if validation fails, or an error for storage/engine failures.
+    pub async fn process_complete_proposal_parts(
         &mut self,
-        data: &Bytes,
-        height: Height,
-        round: Round,
-        engine: &Engine,
-        retry_config: &RetryConfig,
-    ) -> eyre::Result<Validity> {
-        // Decode execution payload
-        let execution_payload = match ExecutionPayloadV3::from_ssz_bytes(data) {
-            Ok(payload) => payload,
-            Err(e) => {
-                warn!(
-                    height = %height,
-                    round = %round,
-                    error = ?e,
-                    "Proposal has invalid ExecutionPayloadV3 encoding"
-                );
-                return Ok(Validity::Invalid);
-            }
-        };
-
-        // Extract versioned hashes for blob transactions
-        let block: Block = match execution_payload.clone().try_into_block() {
-            Ok(block) => block,
-            Err(e) => {
-                warn!(
-                    height = %height,
-                    round = %round,
-                    error = ?e,
-                    "Failed to convert ExecutionPayloadV3 to Block"
-                );
-                return Ok(Validity::Invalid);
-            }
-        };
-        let versioned_hashes: Vec<BlockHash> =
-            block.body.blob_versioned_hashes_iter().copied().collect();
-
-        // Validate with execution engine
-        validate_payload(
-            &mut self.validated_payload_cache,
-            engine,
-            &execution_payload,
-            &versioned_hashes,
-            retry_config,
-            height,
-            round,
-        )
-        .await
-    }
-
-    /// Processes and adds a new proposal to the state if it's valid
-    /// Returns Some(ProposedValue) if the proposal was accepted, None otherwise
-    pub async fn received_proposal_part(
-        &mut self,
-        from: PeerId,
-        part: StreamMessage<ProposalPart>,
+        parts: &ProposalParts,
         engine: &Engine,
         retry_config: &RetryConfig,
     ) -> eyre::Result<Option<ProposedValue<EmeraldContext>>> {
+        // Validate proposal (proposer + signature)
+        if let Err(error) = self.validate_proposal_parts(parts) {
+            error!(
+                height = %parts.height,
+                round = %parts.round,
+                proposer = %parts.proposer,
+                error = ?error,
+                "Rejecting invalid proposal"
+            );
+            return Ok(None);
+        }
+
+        // Assemble the proposal from its parts
+        let (value, data) = assemble_value_from_parts(parts.clone());
+
+        // Log first 32 bytes of proposal data and total size
+        info!(
+            data = %hex::encode(&data[..data.len().min(32)]),
+            total_size = %data.len(),
+            id = %value.value.id().as_u64(),
+            "Proposal data"
+        );
+
+        // Validate the execution payload with the execution engine
+        let validity = validate_execution_payload(
+            &mut self.validated_payload_cache,
+            &data,
+            value.height,
+            value.round,
+            engine,
+            retry_config,
+        )
+        .await?;
+
+        if validity == Validity::Invalid {
+            warn!(
+                height = %parts.height,
+                round = %parts.round,
+                "Proposal has invalid execution payload, rejecting"
+            );
+            return Ok(None);
+        }
+
+        // Store as undecided
+        info!(%value.height, %value.round, %value.proposer, "Storing validated proposal as undecided");
+        self.store_undecided_value(&value, data).await?;
+
+        Ok(Some(value))
+    }
+
+    /// Reassembles proposal parts from streamed messages.
+    ///
+    /// Handles height filtering:
+    /// - Outdated proposals (height < current) are dropped
+    /// - Future proposals (height > current) are stored as pending
+    /// - Current height proposals are returned for validation
+    ///
+    /// Returns `Some(ProposalParts)` when a complete proposal is ready for validation,
+    /// `None` if the proposal is incomplete, outdated, or stored for later.
+    pub async fn reassemble_proposal(
+        &mut self,
+        from: PeerId,
+        part: StreamMessage<ProposalPart>,
+    ) -> eyre::Result<Option<ProposalParts>> {
         let sequence = part.sequence;
 
         // Check if we have a full proposal
@@ -435,10 +427,10 @@ impl State {
         };
 
         // Check if the proposal is outdated
-        if parts.height < self.current_height {
+        if parts.height < self.consensus_height {
             debug!(
-                height = %self.current_height,
-                round = %self.current_round,
+                height = %self.consensus_height,
+                round = %self.consensus_round,
                 part.height = %parts.height,
                 part.round = %parts.round,
                 part.sequence = %sequence,
@@ -449,79 +441,14 @@ impl State {
         }
 
         // Store future proposals parts in pending without validation
-        if parts.height > self.current_height {
+        if parts.height > self.consensus_height {
             info!(%parts.height, %parts.round, "Storing proposal parts for a future height in pending");
             self.store.store_pending_proposal_parts(parts).await?;
             return Ok(None);
         }
 
-        // For current height, validate proposal (proposer + signature)
-        match self.validate_proposal_parts(&parts) {
-            Ok(()) => {
-                // Validation passed - assemble and store as undecided
-                // Re-assemble the proposal from its parts
-                let (value, data) = assemble_value_from_parts(parts);
-
-                // Log first 32 bytes of proposal data and total size
-                if data.len() >= 32 {
-                    info!(
-                        "Proposal data[0..32]: {}, total_size: {} bytes, id: {:x}",
-                        hex::encode(&data[..32]),
-                        data.len(),
-                        value.value.id().as_u64()
-                    );
-                }
-
-                // Validate the execution payload with the execution engine
-                let validity = self
-                    .validate_execution_payload(
-                        &data,
-                        value.height,
-                        value.round,
-                        engine,
-                        retry_config,
-                    )
-                    .await?;
-
-                if validity == Validity::Invalid {
-                    warn!(
-                        height = %self.current_height,
-                        round = %self.current_round,
-                        "Received proposal with invalid execution payload, ignoring"
-                    );
-                    return Ok(None);
-                }
-                info!(%value.height, %value.round, %value.proposer, "Storing validated proposal as undecided");
-                self.store_undecided_block_data(value.height, value.round, value.value.id(), data)
-                    .await?;
-                self.store.store_undecided_proposal(value.clone()).await?;
-
-                Ok(Some(value))
-            }
-            Err(error) => {
-                // Any validation error indicates invalid proposal - log and reject
-                error!(
-                    height = %parts.height,
-                    round = %parts.round,
-                    proposer = %parts.proposer,
-                    error = ?error,
-                    "Rejecting invalid proposal"
-                );
-                Ok(None)
-            }
-        }
-    }
-    pub async fn store_undecided_block_data(
-        &mut self,
-        height: Height,
-        round: Round,
-        value_id: ValueId,
-        data: Bytes,
-    ) -> eyre::Result<()> {
-        self.store
-            .store_undecided_block_data(height, round, value_id, data)
-            .await
-            .map_err(|e| eyre::Report::new(e))
+        // For current height, return parts for validation
+        Ok(Some(parts))
     }
 
     /// Retrieves a decided block data at the given height
@@ -538,12 +465,30 @@ impl State {
             .flatten()
     }
 
+    /// Stores an undecided proposal along with its block data.
+    ///
+    /// WARN: The order of the two storage operations is important.
+    /// Block data must be stored before the proposal metadata to prevent crashes from
+    /// leaving a proposal that references non-existent block data. If a crash occurs
+    /// between the operations, orphaned block data is safe, but a dangling proposal
+    /// reference would cause retrieval failures.
+    pub async fn store_undecided_value(
+        &self,
+        value: &ProposedValue<EmeraldContext>,
+        data: Bytes,
+    ) -> eyre::Result<()> {
+        self.store
+            .store_undecided_block_data(value.height, value.round, value.value.id(), data)
+            .await?;
+        self.store.store_undecided_proposal(value.clone()).await?;
+        Ok(())
+    }
+
     /// Commits a value with the given certificate, updating internal state
     /// and moving to the next height
     pub async fn commit(
         &mut self,
         certificate: CommitCertificate<EmeraldContext>,
-        block_header_bytes: Bytes,
     ) -> eyre::Result<()> {
         info!(
             height = %certificate.height,
@@ -570,11 +515,7 @@ impl State {
             Err(e) => return Err(e.into()),
         };
 
-        self.store
-            .store_decided_value(&certificate, proposal.value, block_header_bytes)
-            .await?;
-
-        // Store block data for decided value
+        // Get block data for decided value
         let block_data = self
             .store
             .get_block_data(certificate.height, certificate.round, certificate.value_id)
@@ -588,6 +529,15 @@ impl State {
         }
 
         if let Some(data) = block_data {
+            // Store decided value and the block header
+            let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&data).unwrap();
+            let block_header = extract_block_header(&execution_payload);
+            let block_header_bytes = Bytes::from(block_header.as_ssz_bytes());
+            self.store
+                .store_decided_value(&certificate, proposal.value, block_header_bytes)
+                .await?;
+
+            // Store decided block data
             self.store
                 .store_decided_block_data(certificate.height, data)
                 .await?;
@@ -611,10 +561,6 @@ impl State {
         self.store
             .prune(retain_height, certificate.height, prune_certificates)
             .await?;
-
-        // Move to next height
-        self.current_height = self.current_height.increment();
-        self.current_round = Round::new(0);
 
         // Sleep to reduce the block speed, if set via config.
         debug!(timeout_commit = ?self.min_block_time);
@@ -712,8 +658,8 @@ impl State {
         round: Round,
         data: Bytes,
     ) -> eyre::Result<LocallyProposedValue<EmeraldContext>> {
-        assert_eq!(height, self.current_height);
-        assert_eq!(round, self.current_round);
+        assert_eq!(height, self.consensus_height);
+        assert_eq!(round, self.consensus_round);
 
         // We create a new value.
         let value = Value::new(data.clone());
@@ -726,16 +672,9 @@ impl State {
             value,
             validity: Validity::Valid, // Our proposals are de facto valid
         };
-        // Store the block data at the proposal's height/round,
-        // which will be passed to the execution client (EL) on commit.
-        // WARN: THE ORDER OF THE FOLLOWING TWO OPERATIONS IS IMPORTANT.
-        self.store_undecided_block_data(height, round, proposal.value.id(), data.clone())
-            .await?;
 
-        // Insert the new proposal into the undecided proposals.
-        self.store
-            .store_undecided_proposal(proposal.clone())
-            .await?;
+        // Store the proposal and its block data
+        self.store_undecided_value(&proposal, data).await?;
 
         Ok(LocallyProposedValue::new(
             proposal.height,
@@ -746,8 +685,8 @@ impl State {
 
     fn stream_id(&mut self) -> StreamId {
         let mut bytes = Vec::with_capacity(size_of::<u64>() + size_of::<u32>());
-        bytes.extend_from_slice(&self.current_height.as_u64().to_be_bytes());
-        bytes.extend_from_slice(&self.current_round.as_u32().unwrap().to_be_bytes());
+        bytes.extend_from_slice(&self.consensus_height.as_u64().to_be_bytes());
+        bytes.extend_from_slice(&self.consensus_round.as_u32().unwrap().to_be_bytes());
         bytes.extend_from_slice(&self.stream_nonce.to_be_bytes());
         self.stream_nonce += 1;
         StreamId::new(bytes.into())
@@ -830,6 +769,61 @@ impl State {
     pub fn set_validator_set(&mut self, height: Height, validator_set: ValidatorSet) {
         self.validator_set = Some((height, validator_set));
     }
+
+    /// Update and log per-block statistics
+    pub async fn log_block_stats(
+        &mut self,
+        height: Height,
+        tx_count: usize,
+        block_bytes_len: usize,
+        block_time_secs: f64,
+    ) -> eyre::Result<()> {
+        // Calculate per-block metrics
+        let txs_per_second = if block_time_secs > 0.0 {
+            tx_count as f64 / block_time_secs
+        } else {
+            0.0
+        };
+        let bytes_per_second = if block_time_secs > 0.0 {
+            block_bytes_len as f64 / block_time_secs
+        } else {
+            0.0
+        };
+
+        // Update cumulative counters
+        self.txs_count += tx_count as u64;
+        self.chain_bytes += block_bytes_len as u64;
+        let elapsed_time = self.start_time.elapsed();
+
+        // Update metrics
+        self.metrics.tx_stats.add_txs(tx_count as u64);
+        self.metrics
+            .tx_stats
+            .add_chain_bytes(block_bytes_len as u64);
+        self.metrics.tx_stats.set_txs_per_second(txs_per_second);
+        self.metrics.tx_stats.set_bytes_per_second(bytes_per_second);
+        self.metrics.tx_stats.set_block_tx_count(tx_count as u64);
+        self.metrics.tx_stats.set_block_size(block_bytes_len as u64);
+
+        // Persist cumulative metrics to database for crash recovery
+        self.store
+            .store_cumulative_metrics(self.txs_count, self.chain_bytes, elapsed_time.as_secs())
+            .await?;
+
+        info!(
+            "👉 stats at height {}: block_time={:.3}s, #txs={}, txs/s={:.2}, block_bytes={}, bytes/s={:.2}, total_txs={}, total_bytes={}",
+            height,
+            block_time_secs,
+            tx_count,
+            txs_per_second,
+            block_bytes_len,
+            bytes_per_second,
+            self.txs_count,
+            self.chain_bytes,
+        );
+
+        Ok(())
+    }
 }
 
 /// Re-assemble a [`ProposedValue`] from its [`ProposalParts`].
@@ -875,47 +869,4 @@ pub fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<Emerald
 /// Decodes a Value from its byte representation using ProtobufCodec
 pub fn decode_value(bytes: Bytes) -> Value {
     ProtobufCodec.decode(bytes).unwrap()
-}
-
-/// Extracts a block header from an ExecutionPayloadV3 by removing transactions and withdrawals.
-///
-/// Returns an ExecutionPayloadV3 with empty transactions and withdrawals vectors,
-/// containing only the block header fields.
-pub fn extract_block_header(
-    payload: &alloy_rpc_types_engine::ExecutionPayloadV3,
-) -> alloy_rpc_types_engine::ExecutionPayloadV3 {
-    use alloy_rpc_types_engine::{ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3};
-
-    ExecutionPayloadV3 {
-        payload_inner: ExecutionPayloadV2 {
-            payload_inner: ExecutionPayloadV1 {
-                transactions: vec![],
-                ..payload.payload_inner.payload_inner.clone()
-            },
-            withdrawals: vec![],
-        },
-        ..payload.clone()
-    }
-}
-
-/// Reconstructs a complete ExecutionPayloadV3 from a block header and payload body.
-///
-/// Takes a header (ExecutionPayloadV3 with empty transactions/withdrawals) and combines it
-/// with the transactions and withdrawals from an ExecutionPayloadBodyV1 to create a full payload.
-pub fn reconstruct_execution_payload(
-    header: alloy_rpc_types_engine::ExecutionPayloadV3,
-    body: malachitebft_eth_engine::json_structures::ExecutionPayloadBodyV1,
-) -> alloy_rpc_types_engine::ExecutionPayloadV3 {
-    use alloy_rpc_types_engine::{ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3};
-
-    ExecutionPayloadV3 {
-        payload_inner: ExecutionPayloadV2 {
-            payload_inner: ExecutionPayloadV1 {
-                transactions: body.transactions,
-                ..header.payload_inner.payload_inner
-            },
-            withdrawals: body.withdrawals.unwrap_or_default(),
-        },
-        ..header
-    }
 }

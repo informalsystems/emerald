@@ -36,7 +36,7 @@ testnet-config:
 testnet-reth-recreate:
 	docker compose down -v $(RETH_NODES)
 	docker compose up -d $(RETH_NODES)
-	./scripts/add_peers.sh --nodes $(words $(RETH_NODES))
+	./scripts/add_peers.sh --nodes $$(docker compose ps --status running --format "{{.Name}}" | grep -c reth)
 
 testnet-ethrex-recreate:
 	docker compose -f compose_ethrex.yaml up -d ethrex0
@@ -45,6 +45,7 @@ testnet-ethrex-recreate:
 
 testnet-reth-restart:
 	docker compose restart $(RETH_NODES)
+	./scripts/add_peers.sh --nodes $$(docker compose ps --status running --format "{{.Name}}" | grep -c reth)
 
 testnet-start: testnet-config testnet-reth-recreate
 	docker compose up -d prometheus grafana otterscan

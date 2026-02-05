@@ -27,8 +27,9 @@ alloy_sol_types::sol!(
     "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
 );
 
-use crate::state::{assemble_value_from_parts, decode_value, extract_block_header, State};
-use crate::sync_handler::{get_decided_value_for_sync, validate_payload};
+use crate::payload::validate_execution_payload;
+use crate::state::{decode_value, State};
+use crate::sync_handler::get_decided_value_for_sync;
 
 pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
     // Get the genesis block from the execution engine
@@ -46,8 +47,9 @@ pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -
     )
     .await?;
     debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
-    state.current_height = Height::new(genesis_block.block_number);
-    state.set_validator_set(state.current_height.increment(), genesis_validator_set);
+    // Set consensus_height to the next height where consensus will work (the tip)
+    state.consensus_height = Height::new(genesis_block.block_number).increment();
+    state.set_validator_set(state.consensus_height, genesis_validator_set);
     Ok(())
 }
 
@@ -151,17 +153,20 @@ async fn replay_heights_to_engine(
     Ok(())
 }
 
+/// Initialize state from a previously decided block stored locally by catching the
+/// execution client up to that height, updating forkchoice, and loading the validator
+/// set for the next consensus height.
 pub async fn initialize_state_from_existing_block(
     state: &mut State,
     engine: &Engine,
-    start_height: Height,
+    height: Height,
     emerald_config: &EmeraldConfig,
 ) -> eyre::Result<()> {
     // If there was somethign stored in the store for height, we should be able to retrieve
     // block data as well.
 
     let latest_block_candidate_from_store = state
-        .get_latest_block_candidate(start_height)
+        .get_latest_block_candidate(height)
         .await
         .ok_or_eyre("we have not atomically stored the last block, database corrupted")?;
 
@@ -169,32 +174,30 @@ pub async fn initialize_state_from_existing_block(
     let reth_latest_height = engine.get_latest_block_number().await?;
 
     match reth_latest_height {
-        Some(reth_height) if reth_height < start_height.as_u64() => {
+        Some(reth_height) if reth_height < height.as_u64() => {
             // Reth is behind - we need to replay blocks
             warn!(
                 "⚠️  Execution client is at height {} but Emerald has blocks up to height {}. Starting height replay.",
-                reth_height, start_height
+                reth_height, height
             );
 
             // Replay from Reth's next height to Emerald's stored height
             let replay_start = Height::new(reth_height + 1);
-            replay_heights_to_engine(state, engine, replay_start, start_height, emerald_config)
-                .await?;
+            replay_heights_to_engine(state, engine, replay_start, height, emerald_config).await?;
 
             info!("✅ Height replay completed successfully");
         }
         Some(reth_height) => {
             debug!(
                 "Execution client at height {} is aligned with or ahead of Emerald's stored height {}",
-                reth_height, start_height
+                reth_height, height
             );
         }
         None => {
             // No blocks in Reth yet (genesis case) - this shouldn't happen here
             // but handle it gracefully
             warn!("⚠️  Execution client has no blocks, replaying from genesis");
-            replay_heights_to_engine(state, engine, Height::new(1), start_height, emerald_config)
-                .await?;
+            replay_heights_to_engine(state, engine, Height::new(1), height, emerald_config).await?;
         }
     }
 
@@ -206,7 +209,8 @@ pub async fn initialize_state_from_existing_block(
         .await?;
     match payload_status.status {
         PayloadStatusEnum::Valid => {
-            state.current_height = start_height;
+            // Set consensus_height to the next height where consensus will work (the tip)
+            state.consensus_height = height.increment();
             state.latest_block = Some(latest_block_candidate_from_store);
             // From the Engine API spec:
             // 8. Client software MUST respond to this method call in the
@@ -228,10 +232,9 @@ pub async fn initialize_state_from_existing_block(
             )
             .await?;
 
-            // Consensus will start at the next height, so we set the validator set for that height
-            let next_height = start_height.increment();
-            debug!("🌈 Got validator set: {:?} for height {}", block_validator_set, next_height);
-            state.set_validator_set(next_height, block_validator_set);
+            // Consensus will start at consensus_height, so we set the validator set for that height
+            debug!("🌈 Got validator set: {:?} for height {}", block_validator_set, state.consensus_height);
+            state.set_validator_set(state.consensus_height, block_validator_set);
 
             Ok(())
         }
@@ -307,35 +310,37 @@ pub async fn on_consensus_ready(
     engine.check_capabilities().await?;
 
     // Get latest decided height from local store
-    let start_height_from_store = state.store.max_decided_value_height().await;
-    match start_height_from_store {
-        Some(s) => {
-            initialize_state_from_existing_block(state, engine, s, emerald_config).await?;
+    let latest_height_from_store = state.store.max_decided_value_height().await;
+    match latest_height_from_store {
+        Some(h) => {
+            initialize_state_from_existing_block(state, engine, h, emerald_config).await?;
             info!(
-                "Starting from existing block at height {:?}. Next consensus height {:?} ",
-                state.current_height,
-                state.current_height.increment()
+                "Starting from existing block at height {:?}. Current tip (consensus height): {:?} ",
+                h,
+                state.consensus_height
             );
         }
         None => {
             // Get the genesis block from the execution engine
             initialize_state_from_genesis(state, engine).await?;
             info!(
-                "Starting from genesis. Next consensus height {:?}",
-                state.current_height.increment()
+                "Starting from genesis. Current tip (consensus height): {:?}",
+                state.consensus_height
             );
         }
     }
 
     // We can simply respond by telling the engine to start consensus
-    // at the next height (current height + 1)
-    let next_height = state.current_height.increment();
+    // at consensus_height (which tracks the tip where consensus will work)
     if reply
         .send((
-            next_height,
+            state.consensus_height,
             state
-                .get_validator_set(next_height)
-                .ok_or_eyre(format!("Validator set not found for height {next_height}"))?
+                .get_validator_set(state.consensus_height)
+                .ok_or_eyre(format!(
+                    "Validator set not found for height {}",
+                    state.consensus_height
+                ))?
                 .clone(),
         ))
         .is_err()
@@ -368,12 +373,21 @@ pub async fn on_started_round(
 
     info!(%height, %round, %proposer, ?role, "🟢🟢 Started round");
 
-    // We can use that opportunity to update our internal state
-    state.current_height = height;
-    state.current_round = round;
-    state.current_proposer = Some(proposer);
+    // The consensus_height stored in state should match
+    // the one in the StartedRound message
+    if state.consensus_height != height {
+        warn!(
+            consensus_height = %state.consensus_height,
+            new_height = %height,
+            "Started round mismatch between state and message"
+        );
+    }
 
-    if state.current_round == Round::ZERO {
+    // We can use that opportunity to update our internal state
+    state.consensus_height = height;
+    state.consensus_round = round;
+
+    if state.consensus_round == Round::ZERO {
         state.last_block_time = Instant::now();
     }
 
@@ -389,54 +403,21 @@ pub async fn on_started_round(
     );
 
     for parts in &pending_parts {
-        match state.validate_proposal_parts(parts) {
-            Ok(()) => {
-                // Validate execution payload with the execution engine before storing it as undecided proposal
-                let (value, data) = assemble_value_from_parts(parts.clone());
+        // Validate and store the pending proposal
+        let result = state
+            .process_complete_proposal_parts(parts, engine, &emerald_config.retry_config)
+            .await?;
 
-                let validity = state
-                    .validate_execution_payload(
-                        &data,
-                        parts.height,
-                        parts.round,
-                        engine,
-                        &emerald_config.retry_config,
-                    )
-                    .await?;
+        if result.is_some() {
+            info!(
+                height = %parts.height,
+                round = %parts.round,
+                proposer = %parts.proposer,
+                "Moved valid pending proposal to undecided after validation"
+            );
+        }
 
-                if validity == Validity::Invalid {
-                    warn!(
-                        height = %parts.height,
-                        round = %parts.round,
-                        "Pending proposal has invalid execution payload, rejecting"
-                    );
-                    continue;
-                }
-
-                state.store.store_undecided_proposal(value.clone()).await?;
-
-                state
-                    .store
-                    .store_undecided_block_data(value.height, value.round, value.value.id(), data)
-                    .await?;
-                info!(
-                    height = %parts.height,
-                    round = %parts.round,
-                    proposer = %parts.proposer,
-                    "Moved valid pending proposal to undecided after validation"
-                );
-            }
-            Err(error) => {
-                // Validation failed, log error
-                error!(
-                    height = %parts.height,
-                    round = %parts.round,
-                    proposer = %parts.proposer,
-                    error = ?error,
-                    "Removed invalid pending proposal"
-                );
-            }
-        } // Remove the parts from pending
+        // Remove the parts from pending regardless of validation outcome
         state
             .store
             .remove_pending_proposal_parts(parts.clone())
@@ -589,15 +570,20 @@ pub async fn on_received_proposal_part(
         "Received proposal part"
     );
 
-    // Try to reassemble the proposal from received parts. If present,
-    // validate it with the execution engine and mark invalid when
-    // parsing or validation fails. Keep the outer `Option` and send it
-    // back to the caller (consensus) regardless.
-    let proposed_value = state
-        .received_proposal_part(from, part, engine, &emerald_config.retry_config)
-        .await?;
+    // Try to reassemble the proposal from received parts
+    let parts = state.reassemble_proposal(from, part).await?;
 
-    if let Some(proposed_value) = proposed_value.clone() {
+    // If we have complete parts, validate and store the proposal
+    let proposed_value = match parts {
+        Some(parts) => {
+            state
+                .process_complete_proposal_parts(&parts, engine, &emerald_config.retry_config)
+                .await?
+        }
+        None => None,
+    };
+
+    if let Some(ref proposed_value) = proposed_value {
         debug!("✅ Received complete proposal: {:?}", proposed_value);
     }
 
@@ -644,166 +630,114 @@ pub async fn on_decided(
         "🟢🟢 Consensus has decided on value"
     );
 
+    // The consensus engine only sends Decided messages for values (proposals)
+    // that were completely received by the local node
     let block_bytes = state
         .get_block_data(height, round, value_id)
         .await
         .ok_or_eyre("app: certificate should have associated block data")?;
     debug!("🎁 block size: {:?}, height: {}", block_bytes.len(), height);
 
-    // Decode bytes into execution payload (a block)
+    // Decode bytes into execution payload (a block) and get relevant fields
     let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_bytes).unwrap();
-
+    let block_hash = execution_payload.payload_inner.payload_inner.block_hash;
+    let block_timestamp = execution_payload.timestamp();
+    let block_number = execution_payload.payload_inner.payload_inner.block_number;
+    let block_prev_randao = execution_payload.payload_inner.payload_inner.prev_randao;
     let parent_block_hash = execution_payload.payload_inner.payload_inner.parent_hash;
-
-    let new_block_hash = execution_payload.payload_inner.payload_inner.block_hash;
-
-    assert_eq!(state.latest_block.unwrap().block_hash, parent_block_hash);
-
-    let new_block_timestamp = execution_payload.timestamp();
-    let new_block_number = execution_payload.payload_inner.payload_inner.block_number;
-
-    let new_block_prev_randao = execution_payload.payload_inner.payload_inner.prev_randao;
-
-    // Log stats
     let tx_count = execution_payload
-        .payload_inner
-        .payload_inner
-        .transactions
-        .len();
-    state.txs_count += tx_count as u64;
-    state.chain_bytes += block_bytes.len() as u64;
-    let elapsed_time = state.start_time.elapsed();
-
-    state.metrics.tx_stats.add_txs(tx_count as u64);
-    state
-        .metrics
-        .tx_stats
-        .add_chain_bytes(block_bytes.len() as u64);
-    state
-        .metrics
-        .tx_stats
-        .set_txs_per_second(state.txs_count as f64 / elapsed_time.as_secs_f64());
-    state
-        .metrics
-        .tx_stats
-        .set_bytes_per_second(state.chain_bytes as f64 / elapsed_time.as_secs_f64());
-    state.metrics.tx_stats.set_block_tx_count(tx_count as u64);
-    state
-        .metrics
-        .tx_stats
-        .set_block_size(block_bytes.len() as u64);
-
-    // Persist cumulative metrics to database for crash recovery
-    state
-        .store
-        .store_cumulative_metrics(state.txs_count, state.chain_bytes, elapsed_time.as_secs())
-        .await?;
-
-    info!(
-        "👉 stats at height {}: #txs={}, txs/s={:.2}, chain_bytes={}, bytes/s={:.2}",
-        height,
-        state.txs_count,
-        state.txs_count as f64 / elapsed_time.as_secs_f64(),
-        state.chain_bytes,
-        state.chain_bytes as f64 / elapsed_time.as_secs_f64(),
-    );
-
-    let tx_count: usize = execution_payload
         .payload_inner
         .payload_inner
         .transactions
         .len();
     debug!("🦄 Block at height {height} contains {tx_count} transactions");
 
-    // Extract block header
-    let block_header = extract_block_header(&execution_payload);
-    let block_header_bytes = Bytes::from(block_header.as_ssz_bytes());
+    // Sanity check: verify payload.parent_hash == state.latest_block.block_hash
+    let latest_block_hash = state
+        .latest_block
+        .ok_or_eyre("missing latest block in state")?
+        .block_hash;
+    assert_eq!(latest_block_hash, parent_block_hash);
 
-    // Collect hashes from blob transactions
-    let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
-        eyre::eyre!(
-            "Failed to convert decided ExecutionPayloadV3 to Block at height {}: {}",
-            height,
-            e
-        )
-    })?;
-    let versioned_hashes: Vec<BlockHash> =
-        block.body.blob_versioned_hashes_iter().copied().collect();
-
-    // Get validation status from cache or call newPayload
-    let validity = if let Some(cached) = state.validated_cache_mut().get(&new_block_hash) {
-        cached
-    } else {
-        let payload_status = engine
-            .notify_new_block(execution_payload, versioned_hashes)
-            .await?;
-
-        let validity = if payload_status.status.is_valid() {
-            Validity::Valid
-        } else {
-            Validity::Invalid
-        };
-
-        state.validated_cache_mut().insert(new_block_hash, validity);
-        validity
-    };
+    // Validate the execution payload (uses cache internally)
+    let validity = validate_execution_payload(
+        state.validated_cache_mut(),
+        &block_bytes,
+        height,
+        round,
+        engine,
+        &emerald_config.retry_config,
+    )
+    .await?;
 
     if validity == Validity::Invalid {
-        return Err(eyre!(
-            "Block validation failed for hash: {}",
-            new_block_hash
-        ));
+        return Err(eyre!("Block validation failed for hash: {}", block_hash));
     }
 
     debug!(
         "💡 Block validated at height {} with hash: {}",
-        height, new_block_hash
+        height, block_hash
     );
 
-    // Notify the execution client (EL) of the new block.
+    // Notify the EL of the new block.
     // Update the execution head state to this block.
     let latest_valid_hash = engine
-        .set_latest_forkchoice_state(new_block_hash, &emerald_config.retry_config)
+        .set_latest_forkchoice_state(block_hash, &emerald_config.retry_config)
         .await?;
     debug!(
         "🚀 Forkchoice updated to height {} for block hash={} and latest_valid_hash={}",
-        height, new_block_hash, latest_valid_hash
+        height, block_hash, latest_valid_hash
     );
 
     // When that happens, we store the decided value in our store
     // TODO: we should return an error reply if commit fails
-    state.commit(certificate, block_header_bytes).await?;
-    let old_hash = state
-        .latest_block
-        .ok_or_eyre("missing latest block in state")?
-        .block_hash;
+    state.commit(certificate).await?;
+
+    // Calculate and log per-block statistics
+    let block_time_secs = state.previous_block_commit_time.elapsed().as_secs_f64();
+    state
+        .log_block_stats(height, tx_count, block_bytes.len(), block_time_secs)
+        .await?;
+
+    // Update previous_block_commit_time to track when this block was committed
+    // This is used to calculate per-block TPS for the next block
+    state.previous_block_commit_time = Instant::now();
+
     // Save the latest block
     debug!("Committed block to store");
     state.latest_block = Some(ExecutionBlock {
-        block_hash: new_block_hash,
-        block_number: new_block_number,
-        parent_hash: old_hash,
-        timestamp: new_block_timestamp, // Note: This was a fix related to the sync reactor
-        prev_randao: new_block_prev_randao,
+        block_hash,
+        block_number,
+        parent_hash: latest_block_hash,
+        timestamp: block_timestamp, // Note: This was a fix related to the sync reactor
+        prev_randao: block_prev_randao,
     });
+
+    // Update consensus_height and consensus_round to track the tip of the blockchain
+    // After committing height H, the tip advances to H+1 where consensus will work next
+    state.consensus_height = height.increment();
+    state.consensus_round = Round::ZERO;
 
     debug!("Getting validator set");
     let new_validator_set = read_validators_from_contract(
         engine.eth.url().as_ref(),
         &latest_valid_hash,
-        state.current_height.as_u64() - 1, // TODO this has to be fixed to fetch the valset of the current block
+        state.consensus_height.as_u64() - 1, // TODO this has to be fixed to fetch the valset of the current block
     )
     .await?;
+    // Get the new validator set for the next height and update the local state
+    // let new_validator_set =
+    //     read_validators_from_contract(engine.eth.url().as_ref(), &latest_valid_hash).await?;
     debug!("🌈 Got validator set: {:?}", new_validator_set);
-    state.set_validator_set(state.current_height, new_validator_set);
+    state.set_validator_set(state.consensus_height, new_validator_set);
 
     // And then we instruct consensus to start the next height
     if reply
         .send(Next::Start(
-            state.current_height,
+            state.consensus_height,
             state
-                .get_validator_set(state.current_height)
-                .ok_or_eyre("Validator set not found for current height {state.current_height}")?
+                .get_validator_set(state.consensus_height)
+                .ok_or_eyre("Validator set not found for height {state.consensus_height}")?
                 .clone(),
         ))
         .is_err()
@@ -841,38 +775,16 @@ pub async fn on_process_synced_value(
     info!(%height, %round, "🟢🟢 Processing synced value");
 
     let value = decode_value(value_bytes);
-
-    // Extract execution payload from the synced value for validation
     let block_bytes = value.extensions.clone();
-    let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_bytes).map_err(|e| {
-        eyre::eyre!(
-            "Failed to decode synced ExecutionPayloadV3 at height {}: {:?}",
-            height,
-            e
-        )
-    })?;
-    let new_block_hash = execution_payload.payload_inner.payload_inner.block_hash;
-
-    // Collect hashes from blob transactions
-    let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
-        eyre::eyre!(
-            "Failed to convert synced ExecutionPayloadV3 to Block at height {}: {}",
-            height,
-            e
-        )
-    })?;
-    let versioned_hashes: Vec<BlockHash> =
-        block.body.blob_versioned_hashes_iter().copied().collect();
 
     // Validate the synced block
-    let validity = validate_payload(
+    let validity = validate_execution_payload(
         state.validated_cache_mut(),
-        engine,
-        &execution_payload,
-        &versioned_hashes,
-        &emerald_config.retry_config,
+        &block_bytes,
         height,
         round,
+        engine,
+        &emerald_config.retry_config,
     )
     .await?;
 
@@ -894,10 +806,7 @@ pub async fn on_process_synced_value(
         return Ok(());
     }
 
-    debug!(
-        "💡 Sync block validated at height {} with hash: {}",
-        height, new_block_hash
-    );
+    debug!(%height, "💡 Sync block validated");
     let proposed_value: ProposedValue<EmeraldContext> = ProposedValue {
         height,
         round,
@@ -908,16 +817,7 @@ pub async fn on_process_synced_value(
     };
 
     if let Err(e) = state
-        .store
-        .store_undecided_block_data(height, round, proposed_value.value.id(), block_bytes)
-        .await
-    {
-        error!(%height, %round, error = %e, "Failed to store synced block data");
-    }
-    // Store the synced value and block data
-    if let Err(e) = state
-        .store
-        .store_undecided_proposal(proposed_value.clone())
+        .store_undecided_value(&proposed_value, block_bytes)
         .await
     {
         error!(%height, %round, error = %e, "Failed to store synced value");
@@ -948,12 +848,13 @@ pub async fn on_get_decided_value(
     info!(%height, "🟢🟢 GetDecidedValue");
 
     let earliest_height_available = state.get_earliest_height().await;
-    // Check if requested height is beyond our current height
-    let raw_decided_value = if (earliest_height_available..state.current_height).contains(&height) {
+    // Check if requested height is beyond our consensus height
+    let raw_decided_value = if (earliest_height_available..state.consensus_height).contains(&height)
+    {
         let earliest_unpruned = state.get_earliest_unpruned_height().await;
         get_decided_value_for_sync(&state.store, engine, height, earliest_unpruned).await?
     } else {
-        info!(%height, current_height = %state.current_height, "Requested height is >= current height or < earliest_height_available.");
+        info!(%height, consensus_height = %state.consensus_height, "Requested height is >= consensus height or < earliest_height_available.");
         None
     };
 
@@ -1126,7 +1027,7 @@ pub async fn process_consensus_message(
         }
 
         // After some time, consensus will finally reach a decision on the value
-        // to commit for the current height, and will notify the application,
+        // to commit for the consensus_height, and will notify the application,
         // providing it with a commit certificate which contains the ID of the value
         // that was decided on as well as the set of commits for that value,
         // ie. the precommits together with their (aggregated) signatures.

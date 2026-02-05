@@ -52,16 +52,20 @@ pub struct EmeraldConfig {
 
     /// Number of certificates to retain.
     /// Default is retain all (u64::MAX).
-    #[serde(default = "max_retain_block_default")]
-    pub max_retain_blocks: u64,
+    /// Once the certificates are deleted those blocks
+    /// cannot be validated on this node.
+    /// Has to be >= num_temp_blocks_retained (whose default is 10)
+    #[serde(default = "default_num_certificates_to_retain")]
+    pub num_certificates_to_retain: u64,
 
     /// Number of blocks to wait before attempting pruning
     /// Note that this applies only to pruning certificates.
-    /// Certificates are pruned based on max_retain_blocks.
+    /// Certificates are pruned based on num_certificates_to_retain.
     /// This value cannot be 0.
-    /// Defatul: 10.
+    /// Default: 10.
     #[serde(default = "prune_at_interval_default")]
     pub prune_at_block_interval: u64,
+
     // Application set min_block_time forcing the app to sleep
     // before moving onto the next height.
     // Malachite does not have a notion of min_block_time, thus
@@ -72,16 +76,32 @@ pub struct EmeraldConfig {
 
     // Address used to receive fees
     pub fee_recipient: Address,
+
+    /// Emerald will store up to num_temp_blocks_retained
+    /// blocks locally and then delete them. This data
+    /// is stored and managed by the execution layer
+    /// thus no need to store it twice.
+    /// WARN: For Reth, this parameter has to be equal or greater than
+    /// the value of `engine.persistence-threshold` passed
+    /// to Reth on startup. If it is lower, on a crash,
+    /// the node will NOT be able to restart
+    /// Default: 10
+    #[serde(default = "default_num_temp_blocks_retained")]
+    pub num_temp_blocks_retained: u64,
 }
 
 fn default_min_block_time() -> Duration {
     Duration::from_millis(500)
 }
 
-fn max_retain_block_default() -> u64 {
+fn default_num_certificates_to_retain() -> u64 {
     u64::MAX
 }
 fn prune_at_interval_default() -> u64 {
+    10
+}
+
+fn default_num_temp_blocks_retained() -> u64 {
     10
 }
 

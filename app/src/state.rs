@@ -11,6 +11,7 @@ use malachitebft_app_channel::app::streaming::{StreamContent, StreamId, StreamMe
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Context, Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
+use malachitebft_eth_cli::config::EmeraldConfig;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::engine_rpc::Fork;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
@@ -24,7 +25,7 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sha3::Digest;
 use ssz::{Decode, Encode};
-use tokio::time::{Duration, Instant};
+use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
 
 use crate::metrics::Metrics;
@@ -59,6 +60,20 @@ pub struct State {
     #[allow(dead_code)]
     rng: StdRng,
 
+    // ------------ Config import
+    /// EmeraldConfig is used to extract the following config parameters:
+    /// num_certificates_to_retain
+    /// prune_at_block_interval
+    /// num_temp_blocks_retained
+    /// min_block_time
+    pub emerald_config: EmeraldConfig,
+
+    /// Needed to extract chain configuration contained in the ethereum genesis file.
+    /// Currently used to read information on the fork supported by the chain.
+    pub eth_chain_config: ChainConfig,
+    // ------------
+
+    // ------------- Internal temporary state
     /// The height where consensus is working (the tip of the blockchain).
     /// After deciding on height H, this is set to H+1.
     /// This represents the next height where consensus will propose, vote, and commit.
@@ -74,22 +89,22 @@ pub struct State {
     // Cache for tracking recently validated payloads to avoid duplicate validation
     validated_payload_cache: ValidatedPayloadCache,
 
-    // For stats
-    pub txs_count: u64,
-    pub chain_bytes: u64,
-    pub start_time: Instant,
-    pub metrics: Metrics,
-
-    pub max_retain_blocks: u64,
-    pub prune_at_block_interval: u64,
-    pub min_block_time: Duration,
-
+    /// Time it took to execute last block.
+    /// Used to decide on whether we should sleep in case min_block_time
+    /// is set.
     pub last_block_time: Instant,
 
     /// Tracks when the previous block was committed (for per-block TPS calculation)
     pub previous_block_commit_time: Instant,
 
-    pub eth_chain_config: ChainConfig,
+    // --------------
+
+    // -------------- Stat collection - persisted to DB
+    pub txs_count: u64,
+    pub chain_bytes: u64,
+    pub start_time: Instant,
+    pub metrics: Metrics,
+    // --------------
 }
 
 /// Represents errors that can occur during the verification of a proposal's signature.
@@ -169,10 +184,8 @@ impl State {
         height: Height,
         store: Store,
         state_metrics: StateMetrics,
-        max_retain_blocks: u64,
-        prune_at_interval: u64,
-        min_block_time: Duration,
         eth_chain_config: ChainConfig,
+        emerald_config: EmeraldConfig,
     ) -> Self {
         // Calculate start_time by subtracting elapsed_seconds from now.
         // It represents the start time of measuring metrics, not the actual node start time.
@@ -200,12 +213,10 @@ impl State {
             chain_bytes: state_metrics.chain_bytes,
             start_time,
             metrics: state_metrics.metrics,
-            max_retain_blocks,
-            prune_at_block_interval: prune_at_interval,
-            min_block_time,
             last_block_time: Instant::now(),
             previous_block_commit_time: Instant::now(),
             eth_chain_config,
+            emerald_config,
         }
     }
 
@@ -543,27 +554,21 @@ impl State {
                 .await?;
         }
 
-        let prune_certificates = self.max_retain_blocks != u64::MAX
-            && certificate.height.as_u64() % self.prune_at_block_interval == 0;
-
-        // This will compute the retain heigth for the certificates which is based on the
-        // retain height set in the config.
-        // The intermediary block data stored for Consensus is pruned at every height after
-        // VALUE_RETAIN_HEIGHT (defined in store.rs)
-        let retain_height = Height::new(
-            certificate
-                .height
-                .as_u64()
-                .saturating_sub(self.max_retain_blocks),
-        );
+        let prune_certificates = self.emerald_config.num_certificates_to_retain != u64::MAX
+            && certificate.height.as_u64() % self.emerald_config.prune_at_block_interval == 0;
 
         // If storege becomes a bottleneck, consider optimizing this by pruning every INTERVAL heights
         self.store
-            .prune(retain_height, certificate.height, prune_certificates)
+            .prune(
+                self.emerald_config.num_certificates_to_retain,
+                self.emerald_config.num_temp_blocks_retained,
+                certificate.height,
+                prune_certificates,
+            )
             .await?;
 
         // Sleep to reduce the block speed, if set via config.
-        debug!(timeout_commit = ?self.min_block_time);
+        debug!(timeout_commit = ?self.emerald_config.min_block_time);
         let elapsed_height_time = self.last_block_time.elapsed();
 
         info!(
@@ -571,8 +576,8 @@ impl State {
             certificate.height, elapsed_height_time
         );
 
-        if elapsed_height_time < self.min_block_time {
-            tokio::time::sleep(self.min_block_time - elapsed_height_time).await;
+        if elapsed_height_time < self.emerald_config.min_block_time {
+            tokio::time::sleep(self.emerald_config.min_block_time - elapsed_height_time).await;
         }
 
         Ok(())

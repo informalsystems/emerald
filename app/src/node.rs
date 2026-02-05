@@ -131,11 +131,11 @@ impl App {
 
         let min_block_time = emerald_config.min_block_time;
         let num_certificates_to_retain = emerald_config.num_certificates_to_retain;
-        let num_temp_blocks_retain_height = emerald_config.num_temp_blocks_retained;
+        let num_temp_blocks_retained = emerald_config.num_temp_blocks_retained;
 
-        if num_certificates_to_retain < num_temp_blocks_retain_height {
+        if num_certificates_to_retain < num_temp_blocks_retained {
             return Err(eyre::eyre!(
-                "num_certificates_to_retain has to be >= than num_temp_blocks_retain_height."
+                "num_certificates_to_retain has to be >= than num_temp_blocks_retained."
             ));
         }
 
@@ -161,7 +161,7 @@ impl App {
             state_metrics,
             num_certificates_to_retain,
             prune_at_block_interval,
-            num_temp_blocks_retain_height,
+            num_temp_blocks_retained,
             min_block_time,
             evm_chain_config,
         );

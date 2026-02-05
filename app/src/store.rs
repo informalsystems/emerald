@@ -397,7 +397,7 @@ impl Db {
     fn prune(
         &self,
         num_certificates_to_retain: u64,
-        num_temp_blocks_to_retain: u64,
+        num_temp_blocks_retained: u64,
         curr_height: Height,
         prune_certificates: bool,
     ) -> Result<(), StoreError> {
@@ -406,12 +406,12 @@ impl Db {
         let tx = self.db.begin_write().unwrap();
 
         {
-            if curr_height > Height::new(num_temp_blocks_to_retain) {
+            if curr_height > Height::new(num_temp_blocks_retained) {
                 // Compute actual height until which we will retain temporary data
                 let block_data_retain_height = Height::new(
                     curr_height
                         .as_u64()
-                        .saturating_sub(num_temp_blocks_to_retain),
+                        .saturating_sub(num_temp_blocks_retained),
                 );
 
                 // Remove all undecided proposals with height < retain_height
@@ -1011,7 +1011,7 @@ mod tests {
         //
         // Parameters:
         //   num_certificates_to_retain = 2
-        //   num_temp_blocks_to_retain  = 1
+        //   num_temp_blocks_retained   = 1
         //   curr_height                = 4
         //   prune_certificates         = true
         //

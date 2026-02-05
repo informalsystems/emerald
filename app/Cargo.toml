@@ -48,3 +48,6 @@ toml            = { workspace = true }
 tracing         = { workspace = true }
 url             = { workspace = true }
 humantime-serde = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

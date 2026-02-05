@@ -216,7 +216,7 @@ impl State {
             last_block_time: Instant::now(),
             previous_block_commit_time: Instant::now(),
             eth_chain_config,
-            emerald_config: emerald_config,
+            emerald_config,
         }
     }
 

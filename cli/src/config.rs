@@ -62,7 +62,7 @@ pub struct EmeraldConfig {
     /// Note that this applies only to pruning certificates.
     /// Certificates are pruned based on num_certificates_to_retain.
     /// This value cannot be 0.
-    /// Defatul: 10.
+    /// Default: 10.
     #[serde(default = "prune_at_interval_default")]
     pub prune_at_block_interval: u64,
 

@@ -371,14 +371,12 @@ impl State {
         let (value, data) = assemble_value_from_parts(parts.clone());
 
         // Log first 32 bytes of proposal data and total size
-        if data.len() >= 32 {
-            info!(
-                "Proposal data[0..32]: {}, total_size: {} bytes, id: {:x}",
-                hex::encode(&data[..32]),
-                data.len(),
-                value.value.id().as_u64()
-            );
-        }
+        info!(
+            data = %hex::encode(&data[..data.len().min(32)]),
+            total_size = %data.len(),
+            id = %value.value.id().as_u64(),
+            "Proposal data"
+        );
 
         // Validate the execution payload with the execution engine
         let validity = validate_execution_payload(
@@ -869,6 +867,3 @@ pub fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<Emerald
 pub fn decode_value(bytes: Bytes) -> Value {
     ProtobufCodec.decode(bytes).unwrap()
 }
-
-// Re-export payload utilities for backwards compatibility
-pub use crate::payload::reconstruct_execution_payload;

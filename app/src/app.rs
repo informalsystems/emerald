@@ -768,6 +768,14 @@ pub async fn on_process_synced_value(
 
     info!(%height, %round, "🟢🟢 Processing synced value");
 
+    // NOTE: Malachite has already validated the height and verified the certificate,
+    // which proves that 2/3+ of the validator set accepted this value. Therefore,
+    // we don't need to validate the proposer.
+    //
+    // However, we do validate the execution payload here as an optimization: by caching
+    // the validity result now, we avoid re-validation when the value is decided.
+
+    // Check that the value can be decoded
     let value = match decode_value(value_bytes) {
         Ok(value) => value,
         Err(e) => {

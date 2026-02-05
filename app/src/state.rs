@@ -571,18 +571,16 @@ impl State {
         let prune_certificates = self.num_certificates_to_retain != u64::MAX
             && certificate.height.as_u64() % self.prune_at_block_interval == 0;
 
-        //        Prune only if the current height is above the minimum block retain height
-        if certificate.height >= Height::new(self.num_temp_blocks_retained) {
-            // If storege becomes a bottleneck, consider optimizing this by pruning every INTERVAL heights
-            self.store
-                .prune(
-                    self.num_certificates_to_retain,
-                    self.num_temp_blocks_retained,
-                    certificate.height,
-                    prune_certificates,
-                )
-                .await?;
-        }
+        // If storege becomes a bottleneck, consider optimizing this by pruning every INTERVAL heights
+        self.store
+            .prune(
+                self.num_certificates_to_retain,
+                self.num_temp_blocks_retained,
+                certificate.height,
+                prune_certificates,
+            )
+            .await?;
+
         // Sleep to reduce the block speed, if set via config.
         debug!(timeout_commit = ?self.min_block_time);
         let elapsed_height_time = self.last_block_time.elapsed();

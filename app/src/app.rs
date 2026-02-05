@@ -824,12 +824,10 @@ pub async fn on_process_synced_value(
         validity: Validity::Valid,
     };
 
-    if let Err(e) = state
+    // Store block data so on_decided() can retrieve it when the Decided message arrives.
+    state
         .store_undecided_value(&proposed_value, block_bytes)
-        .await
-    {
-        error!(%height, %round, error = %e, "Failed to store synced value");
-    }
+        .await?;
 
     // Send to consensus to see if it has been decided on
     if reply.send(Some(proposed_value)).is_err() {

@@ -468,7 +468,10 @@ impl State {
     /// Stores an undecided proposal along with its block data.
     ///
     /// WARN: The order of the two storage operations is important.
-    /// TODO: Add more context on why the order is important.
+    /// Block data must be stored before the proposal metadata to prevent crashes from
+    /// leaving a proposal that references non-existent block data. If a crash occurs
+    /// between the operations, orphaned block data is safe, but a dangling proposal
+    /// reference would cause retrieval failures.
     pub async fn store_undecided_value(
         &self,
         value: &ProposedValue<EmeraldContext>,

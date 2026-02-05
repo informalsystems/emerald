@@ -68,8 +68,12 @@ async fn replay_heights_to_engine(
         let height = Height::new(height);
 
         // Sending the whole block to the execution engine.
-        let value_bytes = store.get_raw_decided_value(height).await?
-            .ok_or_else(|| eyre!("Decided value not found at height {height}, data integrity error"))?
+        let value_bytes = store
+            .get_raw_decided_value(height)
+            .await?
+            .ok_or_else(|| {
+                eyre!("Decided value not found at height {height}, data integrity error")
+            })?
             .value_bytes;
 
         let value = decode_value(value_bytes);

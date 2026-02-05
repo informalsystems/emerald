@@ -1,7 +1,11 @@
 #![allow(clippy::result_large_err)]
 
-use bytes::Bytes;
 use core::mem::size_of;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Instant;
+
+use bytes::Bytes;
 use color_eyre::eyre;
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Round};
@@ -13,9 +17,6 @@ use malachitebft_eth_types::{proto, EmeraldContext, Height, Value, ValueId};
 use malachitebft_proto::{Error as ProtoError, Protobuf};
 use prost::Message;
 use redb::ReadableTable;
-use std::path::Path;
-use std::sync::Arc;
-use std::time::Instant;
 use thiserror::Error;
 
 mod keys;

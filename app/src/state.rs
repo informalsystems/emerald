@@ -11,6 +11,7 @@ use malachitebft_app_channel::app::streaming::{StreamContent, StreamId, StreamMe
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Context, Round, Validity};
 use malachitebft_app_channel::app::types::{LocallyProposedValue, PeerId, ProposedValue};
+use malachitebft_eth_cli::config::EmeraldConfig;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::engine_rpc::Fork;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
@@ -31,7 +32,6 @@ use crate::metrics::Metrics;
 use crate::payload::{extract_block_header, validate_execution_payload, ValidatedPayloadCache};
 use crate::store::Store;
 use crate::streaming::{PartStreamsMap, ProposalParts};
-use malachitebft_eth_cli::config::EmeraldConfig;
 
 pub struct StateMetrics {
     pub txs_count: u64,

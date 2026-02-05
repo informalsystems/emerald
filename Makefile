@@ -36,10 +36,11 @@ testnet-config: testnet-clean build
 testnet-reth-recreate:
 	docker compose down -v $(RETH_NODES)
 	docker compose up -d $(RETH_NODES)
-	./scripts/add_peers.sh --nodes $(words $(RETH_NODES))
+	./scripts/add_peers.sh --nodes $$(docker compose ps --status running --format "{{.Name}}" | grep -c reth)
 
 testnet-reth-restart:
 	docker compose restart $(RETH_NODES)
+	./scripts/add_peers.sh --nodes $$(docker compose ps --status running --format "{{.Name}}" | grep -c reth)
 
 testnet-start: testnet-config testnet-reth-recreate
 	docker compose up -d prometheus grafana otterscan

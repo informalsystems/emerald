@@ -33,10 +33,16 @@ module emerald_types {
   // During normal operation, Emerald moves back to "Ready" at the end of each
   // consensus height (Decided), then back to "Working" once the new height
   // starts (StartedRound).
+  //
+  // The "Syncing" mode models the state after Malachite's sync protocol
+  // triggers the ProcessSyncedValue message, which Malachite is expected to
+  // immediately follow with a Decided message confirming the newly received
+  // proposal.
   type AppPhase =
     | Uninitialized // Before ConsensusReady
     | Ready         // After ConsensusReady or Decided, before StartedRound
     | Working       // After StartedRound
+    | Syncing       // After ProcessSyncedValue
 
   // A consensus proposal
   type Proposal = {

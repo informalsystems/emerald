@@ -119,7 +119,6 @@ impl App {
         };
 
         let emerald_config = self.load_emerald_config()?;
-
         let engine: Engine = {
             let engine_url = Url::parse(&emerald_config.engine_authrpc_address)?;
             let jwt_path = PathBuf::from_str(&emerald_config.jwt_token_path)?;
@@ -130,8 +129,16 @@ impl App {
             )
         };
 
-        let min_block_time = emerald_config.min_block_time;
-        let max_retain_blocks = emerald_config.max_retain_blocks;
+        // Check the validity of the configuration parameters
+        let num_certificates_to_retain = emerald_config.num_certificates_to_retain;
+        let num_temp_blocks_retained = emerald_config.num_temp_blocks_retained;
+
+        if num_certificates_to_retain < num_temp_blocks_retained {
+            return Err(eyre::eyre!(
+                "num_certificates_to_retain has to be >= than num_temp_blocks_retained."
+            ));
+        }
+
         let prune_at_block_interval = emerald_config.prune_at_block_interval;
 
         assert!(
@@ -152,10 +159,8 @@ impl App {
             start_height,
             store,
             state_metrics,
-            max_retain_blocks,
-            prune_at_block_interval,
-            min_block_time,
             evm_chain_config,
+            emerald_config.clone(),
         );
 
         Ok(AppRuntime {

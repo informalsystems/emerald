@@ -6,8 +6,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use bytes::Bytes;
+use color_eyre::eyre;
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Round};
+use malachitebft_app_channel::app::types::sync::RawDecidedValue;
 use malachitebft_app_channel::app::types::ProposedValue;
 use malachitebft_eth_types::codec::proto as codec;
 use malachitebft_eth_types::codec::proto::ProtobufCodec;
@@ -24,12 +26,6 @@ use crate::metrics::DbMetrics;
 use crate::store::keys::PendingValueKey;
 use crate::streaming::ProposalParts;
 
-/// Malachite keeps values (block data) during processing a height and stores it.
-/// For blocks decided on, that data is stored by the execution engine as well.
-/// We therefore want to prune these heights to decrease the storage usage.
-/// The retain height set via config refers to storing certificate data which is
-/// stored only in the consensus engine.
-const VALUE_RETAIN_HEIGHT: Height = Height::new(10);
 #[derive(Clone, Debug)]
 pub struct DecidedValue {
     pub value: Value,
@@ -402,7 +398,8 @@ impl Db {
     // But if we prune certificates, other nodes will not be able to catchup.
     fn prune(
         &self,
-        retain_height: Height,
+        num_certificates_to_retain: u64,
+        num_temp_blocks_retained: u64,
         curr_height: Height,
         prune_certificates: bool,
     ) -> Result<(), StoreError> {
@@ -411,11 +408,12 @@ impl Db {
         let tx = self.db.begin_write().unwrap();
 
         {
-            if curr_height > VALUE_RETAIN_HEIGHT {
+            if curr_height > Height::new(num_temp_blocks_retained) {
+                // Compute actual height until which we will retain temporary data
                 let block_data_retain_height = Height::new(
                     curr_height
                         .as_u64()
-                        .saturating_sub(VALUE_RETAIN_HEIGHT.as_u64()),
+                        .saturating_sub(num_temp_blocks_retained),
                 );
 
                 // Remove all undecided proposals with height < retain_height
@@ -439,9 +437,18 @@ impl Db {
                 decided_block_data.retain(|k, _| k >= block_data_retain_height)?;
             }
             if prune_certificates {
+                // This will compute the retain height for the certificates which is based on the
+                // retain height set in the config.
+                // The intermediary block data stored for Consensus is pruned at every height after
+                // num_temp_blocks_retained
+                let certificate_retain_height = Height::new(
+                    curr_height
+                        .as_u64()
+                        .saturating_sub(num_certificates_to_retain),
+                );
                 // We prune certificates only if pruning is set.
                 let mut certificate_data = tx.open_table(CERTIFICATES_TABLE)?;
-                certificate_data.retain(|k, _| k >= retain_height)?;
+                certificate_data.retain(|k, _| k >= certificate_retain_height)?;
             }
         }
 
@@ -836,13 +843,19 @@ impl Store {
     /// Pruned certificates cannot be retrieved later on.
     pub async fn prune(
         &self,
-        retain_height: Height,
+        num_certificates_to_retain: u64,
+        num_temp_blocks_retained: u64,
         curr_height: Height,
         prune_certificates: bool,
     ) -> Result<(), StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || {
-            db.prune(retain_height, curr_height, prune_certificates)
+            db.prune(
+                num_certificates_to_retain,
+                num_temp_blocks_retained,
+                curr_height,
+                prune_certificates,
+            )
         })
         .await?
     }
@@ -904,5 +917,221 @@ impl Store {
     pub async fn load_cumulative_metrics(&self) -> Result<Option<(u64, u64, u64)>, StoreError> {
         let db = Arc::clone(&self.db);
         tokio::task::spawn_blocking(move || db.get_cumulative_metrics()).await?
+    }
+
+    /// Retrieves a decided value encoded as a RawDecidedValue for the given height.
+    /// Returns None if no decided value exists at the given height.
+    pub async fn get_raw_decided_value(
+        &self,
+        height: Height,
+    ) -> eyre::Result<Option<RawDecidedValue<EmeraldContext>>> {
+        self.get_decided_value(height)
+            .await?
+            .map(|decided_value| {
+                Ok(RawDecidedValue {
+                    certificate: decided_value.certificate,
+                    value_bytes: ProtobufCodec.encode(&decided_value.value)?,
+                })
+            })
+            .transpose()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use malachitebft_app_channel::app::types::core::{CommitCertificate, Validity};
+    use malachitebft_eth_types::Address;
+
+    use super::*;
+
+    /// Create a test database backed by a temporary directory.
+    /// Returns both the Db and the TempDir (must be kept alive for the DB to remain valid).
+    fn create_test_db(name: &str) -> (Db, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Db::new(dir.path().join(format!("{name}.redb")), DbMetrics::new()).unwrap();
+        db.create_tables().unwrap();
+        (db, dir)
+    }
+
+    /// Build a DecidedValue (Value + CommitCertificate) and a block header for a given height.
+    fn make_decided_value(height: u64) -> (DecidedValue, Bytes) {
+        let value = Value::new(Bytes::from(vec![height as u8; 10]));
+        let certificate = CommitCertificate {
+            height: Height::new(height),
+            round: Round::new(0),
+            value_id: value.id(),
+            commit_signatures: vec![],
+        };
+        let block_header = Bytes::from(vec![height as u8; 20]);
+        (DecidedValue { value, certificate }, block_header)
+    }
+
+    /// Build a minimal ProposedValue for a given height.
+    fn make_proposed_value(height: u64) -> ProposedValue<EmeraldContext> {
+        let value = Value::new(Bytes::from(vec![height as u8; 10]));
+        ProposedValue {
+            height: Height::new(height),
+            round: Round::new(0),
+            valid_round: Round::Nil,
+            proposer: Address::new([height as u8; 20]),
+            value,
+            validity: Validity::Valid,
+        }
+    }
+
+    #[test]
+    fn test_prune() {
+        let (db, _dir) = create_test_db("prune_test");
+
+        // --- Populate all tables at heights 1, 2, 3 ---
+        for h in 1..=4u64 {
+            // Decided values table + certificates table + block headers table
+            let (decided, header) = make_decided_value(h);
+            db.insert_decided_value(decided, header).unwrap();
+
+            // Decided block data table
+            db.insert_decided_block_data(Height::new(h), Bytes::from(vec![h as u8; 30]))
+                .unwrap();
+
+            // Undecided proposals table
+            let proposal = make_proposed_value(h);
+            db.insert_undecided_proposal(proposal).unwrap();
+
+            // Undecided block data table
+            db.insert_undecided_block_data(
+                Height::new(h),
+                Round::new(0),
+                ValueId::new(h),
+                Bytes::from(vec![h as u8; 40]),
+            )
+            .unwrap();
+        }
+
+        // Verify all data is present before pruning
+        for h in 1..=4u64 {
+            assert!(
+                db.get_decided_value(Height::new(h)).unwrap().is_some(),
+                "decided value at height {h} should exist before pruning"
+            );
+            assert!(
+                db.get_certificate_and_header(Height::new(h))
+                    .unwrap()
+                    .is_some(),
+                "certificate at height {h} should exist before pruning"
+            );
+            assert!(
+                db.get_block_data(Height::new(h), Round::new(0), ValueId::new(h))
+                    .unwrap()
+                    .is_some(),
+                "block data at height {h} should exist before pruning"
+            );
+        }
+
+        // --- Prune ---
+        //
+        // Parameters:
+        //   num_certificates_to_retain = 2
+        //   num_temp_blocks_retained   = 1
+        //   curr_height                = 4
+        //   prune_certificates         = true
+        //
+        // Computed retain heights:
+        //   block_data_retain_height    = 4 - 1 = 3  →  keep heights >= 3
+        //   certificate_retain_height   = 4 - 2 = 2  →  keep heights >= 2
+        db.prune(2, 1, Height::new(4), true).unwrap();
+
+        // === Certificates (certificate_retain_height = 2, all survive) ===
+        assert!(
+            db.get_certificate_and_header(Height::new(3))
+                .unwrap()
+                .is_some(),
+            "certificate at height 3 should survive"
+        );
+        assert!(
+            db.get_certificate_and_header(Height::new(2))
+                .unwrap()
+                .is_some(),
+            "certificate at height 2 should survive"
+        );
+        // Certificate retain height is 1, so height 1 does not survive
+        assert!(
+            db.get_certificate_and_header(Height::new(1))
+                .unwrap()
+                .is_none(),
+            "certificate at height 1 does not survive (retain height = curr_height - num_certs_to_retain = 2)"
+        );
+
+        // === Decided block data (retain height = 3, heights > 2 survive) ===
+        // Use a dummy round/value_id — decided block data is keyed by height only
+        let r = Round::new(0);
+        let vid = ValueId::new(0);
+        assert!(
+            db.get_block_data(Height::new(3), r, vid).unwrap().is_some(),
+            "decided block data at height 3 should survive"
+        );
+        assert!(
+            db.get_block_data(Height::new(2), r, vid).unwrap().is_none(),
+            "decided block data at height 2 should not survive (retain height = 3)"
+        );
+        assert!(
+            db.get_block_data(Height::new(1), r, vid).unwrap().is_none(),
+            "decided block data at height 1 should be pruned"
+        );
+
+        // === Decided values (retain height = 3, heights > 2 survive) ===
+        assert!(
+            db.get_decided_value(Height::new(3)).unwrap().is_some(),
+            "decided value at height 3 should survive"
+        );
+        assert!(
+            db.get_decided_value(Height::new(2)).unwrap().is_none(),
+            "decided value at height 2 should not survive"
+        );
+        // Decided value at height 1: the value is pruned from DECIDED_VALUES_TABLE,
+        // but the certificate still exists. get_decided_value zips both, so returns None.
+        assert!(
+            db.get_decided_value(Height::new(1)).unwrap().is_none(),
+            "decided value at height 1 should be pruned"
+        );
+
+        // === Undecided block data (retain height = 3, heights > 2 survive) ===
+        assert!(
+            db.get_block_data(Height::new(3), Round::new(0), ValueId::new(3))
+                .unwrap()
+                .is_some(),
+            "undecided block data at height 3 should survive"
+        );
+        assert!(
+            db.get_block_data(Height::new(2), Round::new(0), ValueId::new(2))
+                .unwrap()
+                .is_none(),
+            "undecided block data at height 2 should be pruned"
+        );
+        assert!(
+            db.get_block_data(Height::new(1), Round::new(0), ValueId::new(1))
+                .unwrap()
+                .is_none(),
+            "undecided block data at height 1 should be pruned"
+        );
+
+        // === Undecided proposals (retain height = 3, heights > 2 survive) ===
+        assert!(
+            !db.get_undecided_proposals(Height::new(3), Round::new(0))
+                .unwrap()
+                .is_empty(),
+            "undecided proposals at height 3 should survive"
+        );
+        assert!(
+            db.get_undecided_proposals(Height::new(2), Round::new(0))
+                .unwrap()
+                .is_empty(),
+            "undecided proposals at height 2 should be pruned"
+        );
+        assert!(
+            db.get_undecided_proposals(Height::new(1), Round::new(0))
+                .unwrap()
+                .is_empty(),
+            "undecided proposals at height 1 should be pruned"
+        );
     }
 }

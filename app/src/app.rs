@@ -772,8 +772,11 @@ pub async fn on_process_synced_value(
     // which proves that 2/3+ of the validator set accepted this value. Therefore,
     // we don't need to validate the proposer.
     //
-    // However, we do validate the execution payload here as an optimization: by caching
-    // the validity result now, we avoid re-validation when the value is decided.
+    // We do validate the execution payload here for two reasons:
+    // 1. Optimization: Cache the validity result to avoid re-validation when decided
+    // 2. Safety check: If validation fails despite 2/3+ validators accepting it, this
+    //    indicates a serious issue (state divergence, execution client problems, or
+    //    Byzantine behavior) that should be investigated.
 
     // Check that the value can be decoded
     let value = match decode_value(value_bytes) {
@@ -786,9 +789,9 @@ pub async fn on_process_synced_value(
             return Ok(());
         }
     };
-    let block_bytes = value.extensions.clone();
 
-    // Validate the synced block
+    // Validate the execution payload
+    let block_bytes = value.extensions.clone();
     let validity = validate_execution_payload(
         state.validated_cache_mut(),
         &block_bytes,
@@ -800,21 +803,15 @@ pub async fn on_process_synced_value(
     .await?;
 
     if validity == Validity::Invalid {
-        // Reject invalid blocks - don't store or reply with them
-        if reply
-            .send(Some(ProposedValue {
-                height,
-                round,
-                valid_round: Round::Nil,
-                proposer,
-                value,
-                validity: Validity::Invalid,
-            }))
-            .is_err()
-        {
-            error!("Failed to send ProcessSyncedValue rejection reply");
-        }
-        return Ok(());
+        // This indicates a serious issue: 2/3+ validators accepted this value,
+        // but our validation failed. This suggests state divergence, execution
+        // client problems, or Byzantine behavior.
+        return Err(eyre::eyre!(
+            "Execution payload validation failed for synced value at height {}, round {}. \
+             This is a serious issue as 2/3+ validators accepted this value.",
+            height,
+            round
+        ));
     }
 
     debug!(%height, "💡 Sync block validated");

@@ -920,9 +920,10 @@ impl Store {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use malachitebft_app_channel::app::types::core::{CommitCertificate, Validity};
     use malachitebft_eth_types::Address;
+
+    use super::*;
 
     /// Create a test database backed by a temporary directory.
     /// Returns both the Db and the TempDir (must be kept alive for the DB to remain valid).

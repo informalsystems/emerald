@@ -1,13 +1,13 @@
 moniker = "test-0"
-execution_authrpc_address = "http://<RETH_IP>:8545"
-engine_authrpc_address = "http://<RETH_IP>:8551"
-jwt_token_path = "/home/emerald/jwt"
+el_config.execution_authrpc_address = "http://<RETH_IP>:8545"
+el_config.engine_authrpc_address = "http://<RETH_IP>:8551"
+el_config.jwt_token_path = "/home/emerald/jwt"
+el_config.eth_genesis_path="./assets/genesis.json"
 el_node_type = "archive"
 retry_config.initial_delay = "100ms"
 retry_config.max_delay = "2s"
 retry_config.max_elapsed_time = "20s"
 fee_recipient = "0x4242424242424242424242424242424242424242"
-eth_genesis_path="./assets/genesis.json"
 num_certificates_to_retain = 64000
 num_temp_blocks_retained = 0
 prune_at_block_interval = 5

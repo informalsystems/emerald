@@ -16,7 +16,7 @@ malachitebft-eth-engine = { workspace = true }
 malachitebft-metrics    = { workspace = true }
 malachitebft-config     = { workspace = true }
 malachitebft-app        = { workspace = true }
-
+alloy-genesis           = { version = "=1.4.3" }
 
 alloy-primitives = { workspace = true }
 humantime-serde = { workspace = true }

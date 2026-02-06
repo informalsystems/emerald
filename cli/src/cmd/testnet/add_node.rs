@@ -311,12 +311,15 @@ impl TestnetAddNodeCmd {
         // JWT secret is in the assets directory
         let jwt_path = home_dir.join("assets").join("jwtsecret");
 
+        let eth_genesis_path = home_dir.join("assets").join("genesis.json");
+
         // Create Emerald config for non-validator node
         let config_content = format!(
             r#"moniker = "node-{}"
-execution_authrpc_address = "http://localhost:{}"
-engine_authrpc_address = "http://localhost:{}"
-jwt_token_path = "{}"
+el_config.execution_authrpc_address = "http://localhost:{}"
+el_config.engine_authrpc_address = "http://localhost:{}"
+el_config.jwt_token_path = "{}"
+el_config.eth_genesis_path = "{}"
 retry_config.initial_delay = "100ms"
 retry_config.max_delay = "2s"
 retry_config.max_elapsed_time = "20s"
@@ -328,6 +331,7 @@ fee_recipient = "{}"
             ports.http,    // execution RPC port
             ports.authrpc, // engine auth RPC port
             jwt_path.display(),
+            eth_genesis_path.display(),
             fee_receiver,
         );
 

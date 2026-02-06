@@ -16,8 +16,9 @@ use malachitebft_eth_types::{
 };
 use tracing::debug;
 
-use crate::validator_manager::contract::{ValidatorManager, GENESIS_VALIDATOR_MANAGER_ACCOUNT};
-use crate::validator_manager::{generate_storage_data, Validator};
+use crate::validator_manager::{
+    generate_storage_data, Validator, ValidatorManager, GENESIS_VALIDATOR_MANAGER_ACCOUNT,
+};
 
 /// EIP-4788 Beacon Roots Contract address
 const BEACON_ROOTS_ADDRESS: Address = address!("0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02");

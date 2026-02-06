@@ -1,0 +1,24 @@
+[package]
+name         = "emerald-contracts"
+version      = { workspace = true }
+edition      = { workspace = true }
+repository   = { workspace = true }
+license      = { workspace = true }
+rust-version = { workspace = true }
+publish      = { workspace = true }
+
+[dependencies]
+alloy-sol-types  = { workspace = true }
+alloy-primitives = { workspace = true }
+alloy-contract   = { workspace = true }
+
+[dev-dependencies]
+alloy-network       = "1.4.3"
+alloy-node-bindings = "1.4.3"
+alloy-provider      = "1.4.3"
+alloy-signer-local  = "1.4.3"
+color-eyre          = { workspace = true }
+tokio               = { workspace = true, features = [ "rt-multi-thread", "macros" ] }
+
+[lints]
+workspace = true

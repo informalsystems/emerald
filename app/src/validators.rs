@@ -1,18 +1,9 @@
-use alloy_primitives::{address, Address, U256};
+use alloy_primitives::U256;
 use alloy_provider::ProviderBuilder;
 use color_eyre::eyre;
+use emerald_contracts::{ValidatorManager, GENESIS_VALIDATOR_MANAGER_ACCOUNT};
 use malachitebft_eth_types::secp256k1::PublicKey;
 use malachitebft_eth_types::{BlockHash, Validator, ValidatorSet};
-
-const GENESIS_VALIDATOR_MANAGER_ACCOUNT: Address =
-    address!("0x0000000000000000000000000000000000002000");
-
-alloy_sol_types::sol!(
-    #[derive(Debug)]
-    #[sol(rpc)]
-    ValidatorManager,
-    "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
-);
 
 /// Parse a validator's uncompressed SEC1 public key from x and y coordinates.
 fn parse_validator_public_key(x: &U256, y: &U256) -> eyre::Result<PublicKey> {

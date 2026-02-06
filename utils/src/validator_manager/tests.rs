@@ -11,7 +11,7 @@ use reqwest::Url;
 use tracing::debug;
 
 use super::{generate_storage_data, Validator};
-use crate::validator_manager::contract::ValidatorManager;
+use crate::validator_manager::ValidatorManager;
 
 /// Generate validators from "test test ... junk" mnemonic using sequential derivation paths.
 ///

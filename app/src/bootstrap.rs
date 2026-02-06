@@ -305,8 +305,9 @@ pub async fn initialize_state_from_existing_block(
 
     // Consensus will start at consensus_height, so we set the validator set for that height
     debug!(
-        "🌈 Got validator set: {:?} for height {}",
-        block_validator_set, state.consensus_height
+        validator_set = ?block_validator_set,
+        height = %state.consensus_height,
+        "Got validator set"
     );
     state.set_validator_set(state.consensus_height, block_validator_set);
 

@@ -5,7 +5,6 @@ use core::str::FromStr;
 use std::fs;
 use std::path::PathBuf;
 
-use alloy_genesis::Genesis as EvmGenesis;
 use async_trait::async_trait;
 use color_eyre::eyre;
 use libp2p_identity::Keypair;
@@ -120,9 +119,9 @@ impl App {
 
         let emerald_config = self.load_emerald_config()?;
         let engine: Engine = {
-            let engine_url = Url::parse(&emerald_config.engine_authrpc_address)?;
-            let jwt_path = PathBuf::from_str(&emerald_config.jwt_token_path)?;
-            let eth_url = Url::parse(&emerald_config.execution_authrpc_address)?;
+            let engine_url = Url::parse(&emerald_config.ethereum_config.engine_authrpc_address)?;
+            let jwt_path = PathBuf::from_str(&emerald_config.ethereum_config.jwt_token_path)?;
+            let eth_url = Url::parse(&emerald_config.ethereum_config.execution_authrpc_address)?;
             Engine::new(
                 EngineRPC::new(engine_url, jwt_path.as_path())?,
                 EthereumRPC::new(eth_url)?,
@@ -146,11 +145,6 @@ impl App {
             "prune block interval cannot be 0"
         );
 
-        let eth_genesis_path = PathBuf::from_str(&emerald_config.eth_genesis_path)?;
-        let eth_genesis: EvmGenesis = serde_json::from_str(&fs::read_to_string(eth_genesis_path)?)?;
-
-        let evm_chain_config = eth_genesis.config;
-
         let state = State::new(
             genesis,
             ctx,
@@ -159,7 +153,6 @@ impl App {
             start_height,
             store,
             state_metrics,
-            evm_chain_config,
             emerald_config.clone(),
         );
 

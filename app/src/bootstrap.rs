@@ -293,8 +293,7 @@ pub async fn initialize_state_from_existing_block(
     // Set consensus_height to the next height where consensus will work (the tip)
     state.consensus_height = height.increment();
     state.latest_block = Some(latest_block_candidate_from_store);
-    debug!("Payload is valid");
-    debug!("latest block {:?}", state.latest_block);
+    debug!(latest_block = ?state.latest_block, "Payload is valid");
 
     // Read the validator set at the stored block - this is the validator set
     // that will be active for the NEXT height (where consensus will start)

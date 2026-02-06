@@ -18,23 +18,6 @@ curl -X POST http://127.0.0.1:8645 \
   -d '{"jsonrpc":"2.0","method":"eth_getBalance","params":["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266","latest"],"id":1}'
 ```
 
-**Send a transaction:**
-```bash
-curl -X POST http://127.0.0.1:8645 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc":"2.0",
-    "method":"eth_sendTransaction",
-    "params":[{
-      "from":"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-      "to":"0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
-      "value":"0x1000000000000000000",
-      "gas":"0x5208"
-    }],
-    "id":1
-  }'
-```
-
 ## Using `cast` (Foundry)
 
 **Prerequisite:** [Foundry](https://getfoundry.sh/introduction/installation/)
@@ -63,7 +46,7 @@ Configure your Web3 library to connect to `http://127.0.0.1:8645`:
 
 **ethers.js (JavaScript):**
 ```javascript
-const { ethers } = require('ethers');
+import { ethers } from 'ethers';
 
 const provider = new ethers.JsonRpcProvider('http://127.0.0.1:8645');
 const wallet = new ethers.Wallet('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80', provider);

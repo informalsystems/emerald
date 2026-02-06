@@ -148,7 +148,7 @@ Use the following command to check the network status:
 ```
 </details>
 
-For example, checking the status after having started a four-node testnet should results in the following output:
+For example, checking the status after having started a four-node testnet should result in the following output:
 
 <details>
 <summary>Output for <code>emerald testnet status</code></summary>
@@ -200,7 +200,7 @@ Use the following command to stop a single node:
 ```
 </details>
 
-For example, running this command for Node `1` should results in the following output:
+For example, running this command for Node `1` should result in the following output:
 <details>
 <summary>Output for <code>emerald stop-node 1</code></summary>
 
@@ -213,7 +213,7 @@ For example, running this command for Node `1` should results in the following o
 ```
 </details>
 
-And checking the network status should results in the following output:
+And checking the network status should result in the following output:
 <details>
 <summary>Output for <code>emerald status</code></summary>
 
@@ -262,7 +262,7 @@ Use the following command to restart an existing node:
 ```
 </details>
 
-For example, restarting the node that was previously stopped should results in the following output:
+For example, restarting the node that was previously stopped should result in the following output:
 
 <details>
 <summary>Output for <code>emerald start-node 1</code></summary>
@@ -301,7 +301,7 @@ Starting Reth node 1 on ports:
 ```
 </details>
 
-And checking the network status should results in the following output:
+And checking the network status should result in the following output:
 <details>
 <summary>Output for <code>emerald status</code></summary>
 
@@ -352,7 +352,7 @@ Use the following command to add a new node to the network:
 ```
 </details>
 
-Running this command should results in the following output:
+Running this command should result in the following output:
 <details>
 <summary>Output for <code>emerald add-node</code></summary>
 
@@ -411,7 +411,7 @@ Starting Reth node 4 on ports:
 ```
 </details>
 
-And checking the network status should results in the following output:
+And checking the network status should result in the following output:
 <details>
 <summary>Output for <code>emerald status</code></summary>
 
@@ -520,7 +520,7 @@ Gas used: 153301
 ```
 </details>
 
-And listing the validators should results in the following output:
+And listing the validators should result in the following output:
 
 <details>
 <summary>Output for <code>emerald-utils poa -r http://127.0.0.1:8645 list</code></summary>
@@ -571,7 +571,7 @@ Use the following command to stop the local testnet:
 ```
 </details>
 
-Running this command should results in the following output:
+Running this command should result in the following output:
 
 <details>
 <summary>Output for <code>emerald testnet stop</code></summary>
@@ -611,7 +611,7 @@ Use the following command to remove all testnet data:
 ```
 </details>
 
-Running this command should results in the following output:
+Running this command should result in the following output:
 
 <details>
 <summary>Output for <code>emerald testnet destroy</code></summary>

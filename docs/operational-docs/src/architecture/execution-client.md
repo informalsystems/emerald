@@ -49,7 +49,7 @@ Emerald is calling the Engine API RPC methods when handling events emitted by th
 - `AppMsg::ReceivedProposalPart` When all the parts of a proposed blocked have been received, Emerald validates the block against the execution client by calling `newPayload`.
 
 - `AppMsg::Decided` Once consensus is reached, the block is validated again against the execution client (via a `newPayload` call).
-  This is necessary as the proposer has not called `newPayload` in `ReceiveProposalParts`
+  This is necessary as the proposer has not called `newPayload` in `ReceiveProposalParts`.
   Then, a call to `forkchoiceUpdated` updates the head of the chain in the execution client. 
   As an optimization, Emerald avoid re-validation by caching blocks that have been validated already so that non-proposing nodes do not have to call `newPayload` twice.
 
@@ -57,4 +57,3 @@ Emerald is calling the Engine API RPC methods when handling events emitted by th
 
 - `AppMsg::GetDecidedValue` When other Emerald nodes are syncing, they might ask for blocks that are no longer in the local store. 
   In that case, Emerald is calling `getPayload` to get the block from the execution client. 
-

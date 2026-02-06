@@ -10,12 +10,14 @@ Before starting, ensure you have:
 - Docker Compose (usually included with Docker Desktop)
 - Make (typically pre-installed on Linux/macOS; Windows users can use WSL)
 - Git (for cloning the repository)
+- [Protobuf](https://protobuf.dev/installation) (to compile Emerald `.proto` files)
 
 **Verify installations:**
 ```bash
-rustc --version   # Should show rustc 1.85+
+rustc --version   # Should show rustc 1.88+
 docker --version # Should show Docker 20.10+
-make --version   # Should show GNU Make
+make --version   # Should show GNU Make 3.81+
+protoc --version # Should show libprotoc 33.1+
 ```
 
 ## Installation

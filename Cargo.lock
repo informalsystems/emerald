@@ -4819,6 +4819,7 @@ dependencies = [
  "alloy-consensus",
  "alloy-primitives",
  "async-trait",
+ "blst",
  "bytes",
  "hex",
  "humantime-serde",

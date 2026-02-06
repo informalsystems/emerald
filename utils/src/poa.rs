@@ -5,17 +5,10 @@ use alloy_signer::utils::raw_public_key_to_address;
 use alloy_signer_local::PrivateKeySigner;
 use color_eyre::eyre;
 use color_eyre::eyre::{Context, Result};
+use emerald_contracts::ValidatorManager;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::PublicKey;
 use reqwest::Url;
-
-// Define the Solidity contract ABI
-alloy_sol_types::sol!(
-    #[derive(Debug)]
-    #[sol(rpc)]
-    ValidatorManager,
-    "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
-);
 
 pub fn pubkey_parser(validator_pubkey: &str) -> Result<(U256, U256)> {
     let pubkey_bytes = hex::decode(

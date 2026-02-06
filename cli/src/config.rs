@@ -29,18 +29,8 @@ pub struct EmeraldConfig {
     /// A custom human-readable name for this node
     pub moniker: String,
 
-    /// RPC endpoint of Ethereum execution client
-    pub execution_authrpc_address: String,
-
-    /// RPC endpoint of Ethereum Engine API
-    pub engine_authrpc_address: String,
-
-    /// Path of the JWT token file
-    pub jwt_token_path: String,
-
-    /// Path of the EVM genesis file
-    #[serde(default = "default_eth_gensesis_path")]
-    pub eth_genesis_path: String,
+    /// Execution layer config
+    pub el_config: ExecutionLayerConfig,
 
     /// Retry configuration for execution client sync operations
     #[serde(default)]
@@ -109,6 +99,21 @@ fn default_eth_gensesis_path() -> String {
     "./assets/genesis.json".to_string()
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ExecutionLayerConfig {
+    /// RPC endpoint of Ethereum execution client
+    pub execution_authrpc_address: String,
+
+    /// RPC endpoint of Ethereum Engine API
+    pub engine_authrpc_address: String,
+
+    /// Path of the JWT token file
+    pub jwt_token_path: String,
+
+    /// Path of the EVM genesis file
+    #[serde(default = "default_eth_gensesis_path")]
+    pub eth_genesis_path: String,
+}
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     /// A custom human-readable name for this node

@@ -241,13 +241,13 @@ for ((i = 0; i < nodes; i++)); do
     NODE_IP=$(get_node_ip $i "$custom_config_path")
     cat > "$TESTNET_DIR/config/$i/config.toml" <<EOF
 moniker = "test-$i"
-execution_authrpc_address = "http://$NODE_IP:$ENGINE_PORT"
-engine_authrpc_address = "http://$NODE_IP:$AUTH_PORT"
-jwt_token_path = "$ROOT_DIR/assets/jwtsecret"
 retry_config.initial_delay = "100ms"
 retry_config.max_delay = "2s"
 retry_config.max_elapsed_time = "20s"
-eth_genesis_path="$ROOT_DIR/assets/genesis.json"
+el_config.execution_authrpc_address = "http://$NODE_IP:$ENGINE_PORT"
+el_config.engine_authrpc_address = "http://$NODE_IP:$AUTH_PORT"
+el_config.jwt_token_path = "$ROOT_DIR/assets/jwtsecret"
+el_config.eth_genesis_path="$ROOT_DIR/assets/genesis.json"
 EOF
  # Set num_certificates_to_retain for pruning nodes
       if [[ ${#PRUNING_NODES[@]} -gt 0 && " ${PRUNING_NODES[@]} " =~ " ${i} " ]]; then

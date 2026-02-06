@@ -18,7 +18,7 @@ alloy-node-bindings = "1.4.3"
 alloy-provider      = "1.4.3"
 alloy-signer-local  = "1.4.3"
 color-eyre          = { workspace = true }
-tokio               = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tokio               = { workspace = true, features = [ "rt-multi-thread", "macros" ] }
 
 [lints]
 workspace = true

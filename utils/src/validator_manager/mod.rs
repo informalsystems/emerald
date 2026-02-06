@@ -3,7 +3,6 @@
 //! This library provides functionality to generate storage slots and values
 //! for the ValidatorSet smart contract based on a given validator list.
 
-pub mod contract;
 pub mod error;
 pub mod storage;
 #[cfg(test)]
@@ -13,6 +12,7 @@ pub mod types;
 use std::collections::{BTreeMap, HashSet};
 
 use alloy_primitives::{Address, B256, U256};
+pub use emerald_contracts::{ValidatorManager, GENESIS_VALIDATOR_MANAGER_ACCOUNT};
 pub use error::{Error as ValidatroManagerError, Result};
 pub use storage::StorageSlotCalculator;
 pub use types::{Validator, ValidatorKey, ValidatorSet};

@@ -499,10 +499,30 @@ pub async fn on_process_synced_value(
 
     info!(%height, %round, "🟢🟢 Processing synced value");
 
-    let value = decode_value(value_bytes);
-    let block_bytes = value.extensions.clone();
+    // NOTE: Malachite has already validated the height and verified the certificate,
+    // which proves that 2/3+ of the validator set accepted this value. Therefore,
+    // we don't need to validate the proposer.
+    //
+    // We do validate the execution payload here for two reasons:
+    // 1. Optimization: Cache the validity result to avoid re-validation when decided
+    // 2. Safety check: If validation fails despite 2/3+ validators accepting it, this
+    //    indicates a serious issue (state divergence, execution client problems, or
+    //    Byzantine behavior) that should be investigated.
 
-    // Validate the synced block
+    // Check that the value can be decoded
+    let value = match decode_value(value_bytes) {
+        Ok(value) => value,
+        Err(e) => {
+            error!(%height, %round, error = %e, "Failed to decode synced value");
+            if reply.send(None).is_err() {
+                error!(%height, %round, "Failed to send ProcessSyncedValue None reply");
+            }
+            return Ok(());
+        }
+    };
+
+    // Validate the execution payload
+    let block_bytes = value.extensions.clone();
     let validity = validate_execution_payload(
         state.validated_cache_mut(),
         &block_bytes,
@@ -514,21 +534,15 @@ pub async fn on_process_synced_value(
     .await?;
 
     if validity == Validity::Invalid {
-        // Reject invalid blocks - don't store or reply with them
-        if reply
-            .send(Some(ProposedValue {
-                height,
-                round,
-                valid_round: Round::Nil,
-                proposer,
-                value,
-                validity: Validity::Invalid,
-            }))
-            .is_err()
-        {
-            error!("Failed to send ProcessSyncedValue rejection reply");
-        }
-        return Ok(());
+        // This indicates a serious issue: 2/3+ validators accepted this value,
+        // but our validation failed. This suggests state divergence, execution
+        // client problems, or Byzantine behavior.
+        return Err(eyre::eyre!(
+            "Execution payload validation failed for synced value at height {}, round {}. \
+             This is a serious issue as 2/3+ validators accepted this value.",
+            height,
+            round
+        ));
     }
 
     debug!(%height, "💡 Sync block validated");
@@ -541,12 +555,10 @@ pub async fn on_process_synced_value(
         validity: Validity::Valid,
     };
 
-    if let Err(e) = state
+    // Store block data so on_decided() can retrieve it when the Decided message arrives.
+    state
         .store_undecided_value(&proposed_value, block_bytes)
-        .await
-    {
-        error!(%height, %round, error = %e, "Failed to store synced value");
-    }
+        .await?;
 
     // Send to consensus to see if it has been decided on
     if reply.send(Some(proposed_value)).is_err() {
@@ -563,7 +575,7 @@ pub async fn on_process_synced_value(
 /// The application MUST respond with that value if available, or `None` otherwise.
 pub async fn on_get_decided_value(
     get_decided_value: AppMsg<EmeraldContext>,
-    state: &State,
+    state: &mut State,
     engine: &Engine,
 ) -> eyre::Result<()> {
     let AppMsg::GetDecidedValue { height, reply } = get_decided_value else {
@@ -572,12 +584,12 @@ pub async fn on_get_decided_value(
 
     info!(%height, "🟢🟢 GetDecidedValue");
 
-    let earliest_height_available = state.get_earliest_height().await;
+    let earliest_height_available = state.get_earliest_certificate_height().await;
     // Check if requested height is beyond our consensus height
     let raw_decided_value = if (earliest_height_available..state.consensus_height).contains(&height)
     {
-        let earliest_unpruned = state.get_earliest_unpruned_height().await;
-        get_decided_value_for_sync(&state.store, engine, height, earliest_unpruned).await?
+        let earliest_value_height = state.get_earliest_value_height().await;
+        get_decided_value_for_sync(&state.store, engine, height, earliest_value_height).await?
     } else {
         info!(%height, consensus_height = %state.consensus_height, "Requested height is >= consensus height or < earliest_height_available.");
         None
@@ -597,13 +609,13 @@ pub async fn on_get_decided_value(
 /// The application MUST respond with its earliest available height.
 pub async fn on_get_history_min_height(
     get_history_min_height: AppMsg<EmeraldContext>,
-    state: &State,
+    state: &mut State,
 ) -> eyre::Result<()> {
     let AppMsg::GetHistoryMinHeight { reply } = get_history_min_height else {
         unreachable!("on_get_history_min_height called with non-GetHistoryMinHeight message");
     };
 
-    let min_height = state.get_earliest_height().await;
+    let min_height = state.get_earliest_certificate_height().await;
 
     if reply.send(min_height).is_err() {
         error!("Failed to send GetHistoryMinHeight reply");

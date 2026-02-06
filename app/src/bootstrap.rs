@@ -243,7 +243,7 @@ pub async fn initialize_state_from_existing_block(
     // that will be active for the NEXT height (where consensus will start)
     let block_validator_set = read_validators_from_contract(
         engine.eth.url().as_ref(),
-        &state.latest_block.as_ref().unwrap().block_hash,
+        &latest_block_candidate_from_store.block_hash,
     )
     .await?;
 

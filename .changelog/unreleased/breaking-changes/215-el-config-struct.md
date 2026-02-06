@@ -1,0 +1,2 @@
+- `[config]` EL config params are now all placed under the `el_config` section in `EmeraldConfig`. In your config prefix the following parameters with `el_config.`: `execution_authrpc_address` , `engine_authrpc_address`, `jwt_token_path` ,`eth_genesis_path`.
+  ([\#215](https://github.com/informalsystems/emerald/pull/215))

@@ -30,7 +30,7 @@ pub struct EmeraldConfig {
     pub moniker: String,
 
     /// Execution layer config
-    pub el_config: ExecutionLayerConfig,
+    pub ethereum_config: EthereumConfig,
 
     /// Retry configuration for execution client sync operations
     #[serde(default)]
@@ -100,7 +100,7 @@ fn default_eth_gensesis_path() -> String {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ExecutionLayerConfig {
+pub struct EthereumConfig {
     /// RPC endpoint of Ethereum execution client
     pub execution_authrpc_address: String,
 

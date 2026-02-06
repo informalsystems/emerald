@@ -270,10 +270,10 @@ impl TestnetStartCmd {
             // Create Emerald config
             let config_content = format!(
                 r#"moniker = "node-{}"
-el_config.execution_authrpc_address = "http://localhost:{}"
-el_config.engine_authrpc_address = "http://localhost:{}"
-el_config.jwt_token_path = "{}"
-el_config.eth_genesis_path = "{}"
+ethereum_config.execution_authrpc_address = "http://localhost:{}"
+ethereum_config.engine_authrpc_address = "http://localhost:{}"
+ethereum_config.jwt_token_path = "{}"
+ethereum_config.eth_genesis_path = "{}"
 retry_config.initial_delay = "100ms"
 retry_config.max_delay = "2s"
 retry_config.max_elapsed_time = "20s"

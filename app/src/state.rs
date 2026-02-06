@@ -68,7 +68,7 @@ pub struct State {
     /// prune_at_block_interval
     /// num_temp_blocks_retained
     /// min_block_time
-    /// el_config : ExecutionEngineConfig (path to eth genesis and EL relevant information)
+    /// ethereum_config : EthereumConfig (path to eth genesis and EL relevant information)
     pub emerald_config: EmeraldConfig,
 
     /// Needed to extract chain configuration contained in the ethereum genesis file.
@@ -195,7 +195,7 @@ impl State {
         let start_time =
             Instant::now() - core::time::Duration::from_secs(state_metrics.elapsed_seconds);
 
-        let eth_genesis_path = PathBuf::from_str(&emerald_config.el_config.eth_genesis_path)
+        let eth_genesis_path = PathBuf::from_str(&emerald_config.ethereum_config.eth_genesis_path)
             .unwrap_or_else(|_| panic!("failed to read evm genesis file path from config"));
 
         let eth_genesis_path_str = &fs::read_to_string(eth_genesis_path)

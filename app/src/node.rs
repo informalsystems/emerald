@@ -119,9 +119,9 @@ impl App {
 
         let emerald_config = self.load_emerald_config()?;
         let engine: Engine = {
-            let engine_url = Url::parse(&emerald_config.el_config.engine_authrpc_address)?;
-            let jwt_path = PathBuf::from_str(&emerald_config.el_config.jwt_token_path)?;
-            let eth_url = Url::parse(&emerald_config.el_config.execution_authrpc_address)?;
+            let engine_url = Url::parse(&emerald_config.ethereum_config.engine_authrpc_address)?;
+            let jwt_path = PathBuf::from_str(&emerald_config.ethereum_config.jwt_token_path)?;
+            let eth_url = Url::parse(&emerald_config.ethereum_config.execution_authrpc_address)?;
             Engine::new(
                 EngineRPC::new(engine_url, jwt_path.as_path())?,
                 EthereumRPC::new(eth_url)?,

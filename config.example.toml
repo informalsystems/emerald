@@ -4,7 +4,7 @@
 # Moniker prefix used when creating the Malachite configuration file
 moniker = "test-0"
 
-[el_config]
+[ethereum_config]
 # RPC endpoint for Ethereum execution client
 execution_authrpc_address = "http://localhost:8645"
 

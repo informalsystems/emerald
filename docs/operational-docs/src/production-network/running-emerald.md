@@ -37,10 +37,10 @@ See [emerald-config.toml](../config-examples/emerald-config.toml) for a complete
 
 ```toml
 moniker = "validator-0"
-el_config.execution_authrpc_address = "http://<RETH_IP>:8545"
-el_config.engine_authrpc_address = "http://<RETH_IP>:8551"
-el_config.jwt_token_path = "/path/to/jwt.hex"
-el_config.eth_genesis_path="<PATH_TO_RETH_GENESIS>"
+ethereum_config.execution_authrpc_address = "http://<RETH_IP>:8545"
+ethereum_config.engine_authrpc_address = "http://<RETH_IP>:8551"
+ethereum_config.jwt_token_path = "/path/to/jwt.hex"
+ethereum_config.eth_genesis_path="<PATH_TO_RETH_GENESIS>"
 el_node_type = "archive"
 retry_config.initial_delay = "100ms"
 retry_config.max_delay = "2s"

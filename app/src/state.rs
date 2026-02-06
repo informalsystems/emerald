@@ -1,12 +1,14 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
-use alloy_genesis::ChainConfig;
-use alloy_genesis::Genesis as EvmGenesis;
+use core::str::FromStr;
+use std::path::PathBuf;
+use std::{fmt, fs};
+
+use alloy_genesis::{ChainConfig, Genesis as EvmGenesis};
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use color_eyre::eyre;
-use core::str::FromStr;
 use malachitebft_app_channel::app::streaming::{StreamContent, StreamId, StreamMessage};
 use malachitebft_app_channel::app::types::codec::Codec;
 use malachitebft_app_channel::app::types::core::{CommitCertificate, Context, Round, Validity};
@@ -25,9 +27,6 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sha3::Digest;
 use ssz::{Decode, Encode};
-use std::fmt;
-use std::fs;
-use std::path::PathBuf;
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
 
@@ -69,7 +68,7 @@ pub struct State {
     /// prune_at_block_interval
     /// num_temp_blocks_retained
     /// min_block_time
-    /// el_config : ExecutionEngineConfig (path to eth genesis and EL relevant information)
+    /// ethereum_config : EthereumConfig (path to eth genesis and EL relevant information)
     pub emerald_config: EmeraldConfig,
 
     /// Needed to extract chain configuration contained in the ethereum genesis file.
@@ -196,7 +195,7 @@ impl State {
         let start_time =
             Instant::now() - core::time::Duration::from_secs(state_metrics.elapsed_seconds);
 
-        let eth_genesis_path = PathBuf::from_str(&emerald_config.el_config.eth_genesis_path)
+        let eth_genesis_path = PathBuf::from_str(&emerald_config.ethereum_config.eth_genesis_path)
             .unwrap_or_else(|_| panic!("failed to read evm genesis file path from config"));
 
         let eth_genesis_path_str = &fs::read_to_string(eth_genesis_path)

@@ -49,7 +49,7 @@ pub fn determine_replay_range(
             ReplayDecision::NoReplay
         }
         None => {
-            // No blocks in Reth yet - replay from genesis (height 1)
+            // No blocks in Reth yet - replay from genesis + 1 (height 1)
             ReplayDecision::ReplayRange {
                 start: Height::new(1),
                 end: emerald_stored_height,
@@ -58,75 +58,29 @@ pub fn determine_replay_range(
     }
 }
 
-/// Error type for payload status validation during replay.
+/// Error returned when an execution client payload status is not `Valid`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum ReplayPayloadError {
-    /// Block was rejected as invalid by the execution client.
+pub enum PayloadStatusError {
+    /// Payload was rejected as invalid by the execution client.
     #[error("invalid payload: {validation_error}")]
     Invalid { validation_error: String },
-    /// Execution client returned ACCEPTED, which indicates no instant finality.
-    #[error("ACCEPTED status not supported during replay (no instant finality)")]
+    /// Execution client returned ACCEPTED unexpectedly.
+    #[error("execution client returned ACCEPTED status")]
     Accepted,
     /// Execution client is still syncing.
-    #[error("execution client still syncing")]
+    #[error("execution client returned SYNCING status")]
     Syncing,
 }
 
-/// Validates the payload status returned after submitting a block during replay.
-///
-/// During replay, only `Valid` status is acceptable. Other statuses indicate
-/// problems that should abort the replay process.
-pub fn validate_replay_payload_status(status: &PayloadStatus) -> Result<(), ReplayPayloadError> {
+/// Validates that a payload status is `Valid`, returning an error otherwise.
+pub fn validate_payload_status(status: &PayloadStatus) -> Result<(), PayloadStatusError> {
     match &status.status {
         PayloadStatusEnum::Valid => Ok(()),
-        PayloadStatusEnum::Invalid { validation_error } => Err(ReplayPayloadError::Invalid {
+        PayloadStatusEnum::Invalid { validation_error } => Err(PayloadStatusError::Invalid {
             validation_error: validation_error.clone(),
         }),
-        PayloadStatusEnum::Accepted => Err(ReplayPayloadError::Accepted),
-        PayloadStatusEnum::Syncing => Err(ReplayPayloadError::Syncing),
-    }
-}
-
-/// Error type for forkchoice update payload status validation.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ForkchoicePayloadError {
-    /// Payload was rejected as invalid.
-    Invalid { validation_error: String },
-    /// Execution client returned ACCEPTED unexpectedly.
-    Accepted,
-    /// Execution client is syncing (should be retried).
-    Syncing,
-}
-
-impl core::fmt::Display for ForkchoicePayloadError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Invalid { validation_error } => write!(f, "{validation_error}"),
-            Self::Accepted => write!(
-                f,
-                "execution engine returned ACCEPTED for payload, this should not happen"
-            ),
-            Self::Syncing => write!(
-                f,
-                "SYNCING status passed for payload, this should not happen due to retry logic"
-            ),
-        }
-    }
-}
-
-/// Validates the payload status returned after a forkchoice update.
-///
-/// Only `Valid` status is acceptable for initializing from an existing block.
-pub fn validate_forkchoice_payload_status(
-    status: &PayloadStatus,
-) -> Result<(), ForkchoicePayloadError> {
-    match &status.status {
-        PayloadStatusEnum::Valid => Ok(()),
-        PayloadStatusEnum::Invalid { validation_error } => Err(ForkchoicePayloadError::Invalid {
-            validation_error: validation_error.clone(),
-        }),
-        PayloadStatusEnum::Accepted => Err(ForkchoicePayloadError::Accepted),
-        PayloadStatusEnum::Syncing => Err(ForkchoicePayloadError::Syncing),
+        PayloadStatusEnum::Accepted => Err(PayloadStatusError::Accepted),
+        PayloadStatusEnum::Syncing => Err(PayloadStatusError::Syncing),
     }
 }
 
@@ -211,7 +165,7 @@ async fn replay_heights_to_engine(
             .await?;
 
         // Verify the block was accepted
-        validate_replay_payload_status(&payload_status)
+        validate_payload_status(&payload_status)
             .map_err(|e| eyre::eyre!("Block replay failed at height {}: {}", height, e))?;
         debug!("✅ Block at height {} replayed successfully", height);
 
@@ -278,7 +232,7 @@ pub async fn initialize_state_from_existing_block(
         )
         .await?;
 
-    validate_forkchoice_payload_status(&payload_status).map_err(|e| eyre::eyre!("{}", e))?;
+    validate_payload_status(&payload_status).map_err(|e| eyre::eyre!("{}", e))?;
 
     // Set consensus_height to the next height where consensus will work (the tip)
     state.consensus_height = height.increment();
@@ -366,7 +320,7 @@ mod tests {
         );
     }
 
-    // ==================== validate_replay_payload_status tests ====================
+    // ==================== validate_payload_status tests ====================
 
     fn make_payload_status(status: PayloadStatusEnum) -> PayloadStatus {
         PayloadStatus {
@@ -376,109 +330,59 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_replay_payload_status_valid() {
+    fn test_validate_payload_status_valid() {
         let status = make_payload_status(PayloadStatusEnum::Valid);
-        assert!(validate_replay_payload_status(&status).is_ok());
+        assert!(validate_payload_status(&status).is_ok());
     }
 
     #[test]
-    fn test_validate_replay_payload_status_invalid() {
+    fn test_validate_payload_status_invalid() {
         let status = make_payload_status(PayloadStatusEnum::Invalid {
             validation_error: "block gas limit exceeded".to_string(),
         });
-        let result = validate_replay_payload_status(&status);
+        let result = validate_payload_status(&status);
         assert!(result.is_err());
-        let err = result.unwrap_err();
         assert_eq!(
-            err,
-            ReplayPayloadError::Invalid {
+            result.unwrap_err(),
+            PayloadStatusError::Invalid {
                 validation_error: "block gas limit exceeded".to_string()
             }
         );
     }
 
     #[test]
-    fn test_validate_replay_payload_status_accepted() {
+    fn test_validate_payload_status_accepted() {
         let status = make_payload_status(PayloadStatusEnum::Accepted);
-        let result = validate_replay_payload_status(&status);
-        assert_eq!(result, Err(ReplayPayloadError::Accepted));
-    }
-
-    #[test]
-    fn test_validate_replay_payload_status_syncing() {
-        let status = make_payload_status(PayloadStatusEnum::Syncing);
-        let result = validate_replay_payload_status(&status);
-        assert_eq!(result, Err(ReplayPayloadError::Syncing));
-    }
-
-    // ==================== validate_forkchoice_payload_status tests ====================
-
-    #[test]
-    fn test_validate_forkchoice_payload_status_valid() {
-        let status = make_payload_status(PayloadStatusEnum::Valid);
-        assert!(validate_forkchoice_payload_status(&status).is_ok());
-    }
-
-    #[test]
-    fn test_validate_forkchoice_payload_status_invalid() {
-        let status = make_payload_status(PayloadStatusEnum::Invalid {
-            validation_error: "unknown ancestor".to_string(),
-        });
-        let result = validate_forkchoice_payload_status(&status);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
         assert_eq!(
-            err,
-            ForkchoicePayloadError::Invalid {
-                validation_error: "unknown ancestor".to_string()
-            }
+            validate_payload_status(&status),
+            Err(PayloadStatusError::Accepted)
         );
     }
 
     #[test]
-    fn test_validate_forkchoice_payload_status_accepted() {
-        let status = make_payload_status(PayloadStatusEnum::Accepted);
-        let result = validate_forkchoice_payload_status(&status);
-        assert_eq!(result, Err(ForkchoicePayloadError::Accepted));
-    }
-
-    #[test]
-    fn test_validate_forkchoice_payload_status_syncing() {
+    fn test_validate_payload_status_syncing() {
         let status = make_payload_status(PayloadStatusEnum::Syncing);
-        let result = validate_forkchoice_payload_status(&status);
-        assert_eq!(result, Err(ForkchoicePayloadError::Syncing));
+        assert_eq!(
+            validate_payload_status(&status),
+            Err(PayloadStatusError::Syncing)
+        );
     }
 
     // ==================== Error Display tests ====================
 
     #[test]
-    fn test_replay_payload_error_display() {
+    fn test_payload_status_error_display() {
         assert_eq!(
-            ReplayPayloadError::Invalid {
+            PayloadStatusError::Invalid {
                 validation_error: "bad block".to_string()
             }
             .to_string(),
             "invalid payload: bad block"
         );
-        assert!(ReplayPayloadError::Accepted
+        assert!(PayloadStatusError::Accepted
             .to_string()
             .contains("ACCEPTED"));
-        assert!(ReplayPayloadError::Syncing.to_string().contains("syncing"));
-    }
-
-    #[test]
-    fn test_forkchoice_payload_error_display() {
-        assert_eq!(
-            ForkchoicePayloadError::Invalid {
-                validation_error: "bad hash".to_string()
-            }
-            .to_string(),
-            "bad hash"
-        );
-        assert!(ForkchoicePayloadError::Accepted
-            .to_string()
-            .contains("ACCEPTED"));
-        assert!(ForkchoicePayloadError::Syncing
+        assert!(PayloadStatusError::Syncing
             .to_string()
             .contains("SYNCING"));
     }

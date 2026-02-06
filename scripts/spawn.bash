@@ -5,7 +5,7 @@
 # - the home directory for the nodes configuration folders
 
 function help {
-    echo "Usage: spawn.sh [--help] --nodes NODES_COUNT --home NODES_HOME [--app APP_BINARY] [--no-reset] [--no-wait]"
+    echo "Usage: spawn.sh [--help] --nodes NODES_COUNT --home NODES_HOME [--app APP_BINARY] [--exec_engine reth|ethrex] [--no-reset] [--no-wait]"
 }
 
 # Parse arguments
@@ -16,6 +16,7 @@ while [[ "$#" -gt 0 ]]; do
         --home) NODES_HOME="$2"; shift ;;
         --app) APP_BINARY="$2"; shift ;;
         --no-reset) NO_RESET=1 ;;
+        --exec-engine) EXEC_ENGINE="$2"; shift ;;
         --no-delay) NO_DELAY=1 ;;
         --no-wait) NO_WAIT=1 ;;
         *) echo "Unknown parameter passed: $1"; help; exit 1 ;;
@@ -36,6 +37,13 @@ fi
 
 if [[ -z "$APP_BINARY" ]]; then
     APP_BINARY="emerald"
+fi
+
+if [[ -z "$EXEC_ENGINE" ]]; then
+    EXEC_ENGINE="reth"
+elif [[ "$EXEC_ENGINE" != "reth" && "$EXEC_ENGINE" != "ethrex" ]]; then
+    echo "Invalid exec_engine: $EXEC_ENGINE. Must be 'reth' or 'ethrex'."
+    exit 1
 fi
 
 echo "Compiling '$APP_BINARY'..."
@@ -105,7 +113,7 @@ function spawn_node {
     rm -rf "$NODES_HOME/$NODE/traces"
     mkdir -p "$NODES_HOME/$NODE/traces"
     echo "[Node $NODE] Spawning node..."
-    cargo run --bin $APP_BINARY -q -- start --home "$NODES_HOME/$NODE" --log-level debug --config ".testnet/config/$NODE"/config.toml > "$NODES_HOME/$NODE/logs/node.log" 2>&1 &
+    cargo run --bin $APP_BINARY -q -- start --home "$NODES_HOME/$NODE" --log-level debug --config ".testnet/config/$NODE"/config.toml --exec-engine "$EXEC_ENGINE" > "$NODES_HOME/$NODE/logs/node.log" 2>&1 &
     echo $! > "$NODES_HOME/$NODE/node.pid"
     echo "[Node $NODE] Logs are available at: $NODES_HOME/$NODE/logs/node.log"
 }

@@ -55,7 +55,7 @@ testnet-start: testnet-config testnet-reth-recreate
 testnet-start-ethrex: testnet-config testnet-ethrex-recreate
 # 	docker compose up -d prometheus grafana otterscan
 # 	@echo 👉 Grafana dashboard is available at http://localhost:4000
-	bash scripts/spawn.bash --nodes 3 --home nodes --no-delay
+	bash scripts/spawn.bash --nodes 3 --home nodes --no-delay --exec-engine ethrex
 
 sync: testnet-config testnet-reth-recreate
 	docker compose up -d prometheus grafana otterscan

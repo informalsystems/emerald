@@ -1,15 +1,29 @@
 #!/bin/bash
 
+EXEC_ENGINE="reth"
+COMPOSE_FILE="compose.yaml"
+
 # Check if node ID argument is provided
 if [ -z "$1" ]; then
     echo "Usage: $0 <node_id>"
     exit 1
 fi
 
+# Check if node ID argument is provided
+if [ "$2" ]; then
+EXEC_ENGINE=$2
+COMPOSE_FILE="compose_$EXEC_ENGINE.yaml"
+fi
+
+echo "execution engine set to $EXEC_ENGINE, using compose file $COMPOSE_FILE" 
+
 NODE_ID=$1
 PID_FILE="nodes/$NODE_ID/node.pid"
 
-docker compose stop reth$NODE_ID
+echo "Stopping $EXEC_ENGINE node"
+
+
+docker compose -f $COMPOSE_FILE stop $EXEC_ENGINE$NODE_ID
 
 # Check if PID file exists
 if [ ! -f "$PID_FILE" ]; then

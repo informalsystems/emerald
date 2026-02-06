@@ -59,8 +59,9 @@ pub async fn read_validators_from_contract(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alloy_primitives::U256;
+
+    use super::*;
 
     /// Helper to create a ValidatorInfo from hex-encoded x, y coordinates and power.
     fn make_validator_info(

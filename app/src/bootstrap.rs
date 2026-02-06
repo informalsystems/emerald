@@ -382,8 +382,6 @@ mod tests {
         assert!(PayloadStatusError::Accepted
             .to_string()
             .contains("ACCEPTED"));
-        assert!(PayloadStatusError::Syncing
-            .to_string()
-            .contains("SYNCING"));
+        assert!(PayloadStatusError::Syncing.to_string().contains("SYNCING"));
     }
 }

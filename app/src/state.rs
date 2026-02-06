@@ -1,9 +1,11 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
-use std::fmt;
+use core::str::FromStr;
+use std::path::PathBuf;
+use std::{fmt, fs};
 
-use alloy_genesis::ChainConfig;
+use alloy_genesis::{ChainConfig, Genesis as EvmGenesis};
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use color_eyre::eyre;
@@ -67,6 +69,7 @@ pub struct State {
     /// prune_at_block_interval
     /// num_temp_blocks_retained
     /// min_block_time
+    /// ethereum_config : EthereumConfig (path to eth genesis and EL relevant information)
     pub emerald_config: EmeraldConfig,
 
     /// Needed to extract chain configuration contained in the ethereum genesis file.
@@ -193,7 +196,6 @@ impl State {
         height: Height,
         store: Store,
         state_metrics: StateMetrics,
-        eth_chain_config: ChainConfig,
         emerald_config: EmeraldConfig,
     ) -> Self {
         // Calculate start_time by subtracting elapsed_seconds from now.
@@ -201,6 +203,14 @@ impl State {
         // This allows us to continue accumulating time correctly after a restart
         let start_time =
             Instant::now() - core::time::Duration::from_secs(state_metrics.elapsed_seconds);
+
+        let eth_genesis_path = PathBuf::from_str(&emerald_config.ethereum_config.eth_genesis_path)
+            .unwrap_or_else(|_| panic!("failed to read evm genesis file path from config"));
+
+        let eth_genesis_path_str = &fs::read_to_string(eth_genesis_path)
+            .unwrap_or_else(|_| panic!("failed to read evm genesis path"));
+        let eth_genesis: EvmGenesis = serde_json::from_str(eth_genesis_path_str)
+            .unwrap_or_else(|_| panic!("failed to read evm genesis file"));
 
         Self {
             ctx,
@@ -226,7 +236,7 @@ impl State {
             metrics: state_metrics.metrics,
             last_block_time: Instant::now(),
             previous_block_commit_time: Instant::now(),
-            eth_chain_config,
+            eth_chain_config: eth_genesis.config,
             emerald_config,
         }
     }

@@ -121,11 +121,22 @@ impl Engine {
             .ok_or_else(|| eyre::eyre!("Invalid payload status: {}", payload_status.status))
     }
 
+    fn generate_block_ts(&self, subsecond: bool, prev_ts: u64) -> u64 {
+        if subsecond {
+            return std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+        }
+
+        prev_ts + 1
+    }
     pub async fn generate_block(
         &self,
         latest_block: &Option<ExecutionBlock>,
         retry_config: &RetryConfig,
         fee_recipient: &Address,
+        subsecond_ts_supported: bool,
         fork: Fork,
     ) -> eyre::Result<ExecutionPayloadV3> {
         debug!("🟠 current fork is {:?}", fork);
@@ -138,12 +149,10 @@ impl Engine {
                 block_hash = lb.block_hash;
 
                 payload_attributes = PayloadAttributes {
-                    // Use current time to enable sub-second block production.
-                    timestamp: lb.timestamp + 1, // We did not yet modify Ethrex to accept subsecond TS
-                    // std::time::SystemTime::now()
-                    // .duration_since(std::time::UNIX_EPOCH)
-                    // .unwrap()
-                    // .as_secs(),
+                    // If blocks are produced in subsecond time, when using Reth we will have the same timestamp
+                    // for multiple blocks.
+                    // For other executon engines we return pre_block_time + 1.
+                    timestamp: self.generate_block_ts(subsecond_ts_supported, lb.timestamp),
 
                     // prev_randao comes from the previous beacon block and influences the proposer selection mechanism.
                     // prev_randao is derived from the RANDAO mix (randomness accumulator) of the parent beacon block.

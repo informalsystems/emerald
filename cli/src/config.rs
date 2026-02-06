@@ -7,6 +7,7 @@ pub use malachitebft_config::{
     MempoolLoadConfig, MetricsConfig, P2pConfig, PubSubProtocol, RuntimeConfig, ScoringStrategy,
     Selector, TestConfig, TimeoutConfig, TransportProtocol, ValuePayload, ValueSyncConfig,
 };
+
 use malachitebft_eth_types::{Address, RetryConfig};
 use serde::{Deserialize, Serialize};
 use tokio::time::Duration;
@@ -99,6 +100,17 @@ fn default_eth_gensesis_path() -> String {
     "./assets/genesis.json".to_string()
 }
 
+fn default_subsecond_ts_support() -> bool {
+    false
+}
+
+pub fn set_subsecond_ts_suppot(exec_engine: String, ethereum_config: &mut EthereumConfig) {
+    match exec_engine.as_str() {
+        "reth" => ethereum_config.subsecond_ts_support = true,
+        _ => ethereum_config.subsecond_ts_support = false,
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EthereumConfig {
     /// RPC endpoint of Ethereum execution client
@@ -113,6 +125,16 @@ pub struct EthereumConfig {
     /// Path of the EVM genesis file
     #[serde(default = "default_eth_gensesis_path")]
     pub eth_genesis_path: String,
+
+    /// subsecond_ts_support indicates whether
+    /// the execution engine connected to emerald
+    /// supports timestamps expressed in subsecond
+    /// granularity.
+    /// Be default, Ethereum expresses this in seconds
+    /// and currently we only support subsecond granularity
+    /// when using Reth.
+    #[serde(default = "default_subsecond_ts_support")]
+    pub subsecond_ts_support: bool,
 }
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Config {

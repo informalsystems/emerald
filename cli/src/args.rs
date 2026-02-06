@@ -43,6 +43,11 @@ pub struct Args {
     #[arg(long, global = true, value_name = "CONFIG_FILE")]
     pub config: Option<PathBuf>,
 
+    /// Flag to indicate which execution engine to use.
+    /// Currently there is automated support for Reth and Ethrex.
+    #[arg(long, global = true, value_name = "EXEC_ENGINE")]
+    pub exec_engine: Option<String>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -75,6 +80,18 @@ impl Args {
     /// new returns a new instance of the arguments.
     pub fn new() -> Self {
         Self::parse()
+    }
+
+    /// get_execution_engine returns the execution engine to deploy
+    /// Defaults to `reth`.
+    pub fn get_exec_engine(&self) -> Result<String, Error> {
+        match self.exec_engine {
+            Some(ref exec_engine_name) => match exec_engine_name.as_str() {
+                "reth" | "ethrex" => Ok(exec_engine_name.clone()),
+                _ => Ok("reth".to_string()),
+            },
+            None => Ok("reth".to_string()),
+        }
     }
 
     /// get_home_dir returns the application home folder.

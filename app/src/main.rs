@@ -68,6 +68,9 @@ fn start(args: &Args, cmd: &StartCmd, logging: config::LoggingConfig) -> Result<
 
     trace!(?config, "Configuration");
 
+    // TODO get args.get_exec_engine and set
+    // and forward to app
+
     // Setup the application
     let app = App {
         config,
@@ -76,6 +79,7 @@ fn start(args: &Args, cmd: &StartCmd, logging: config::LoggingConfig) -> Result<
         emerald_config_file: args.get_emerald_config_file()?,
         private_key_file: args.get_priv_validator_key_file_path()?,
         start_height: cmd.start_height.map(Height::new),
+        exec_engine: args.get_exec_engine()?,
     };
 
     // Start the node
@@ -92,6 +96,7 @@ fn init(args: &Args, cmd: &InitCmd, logging: config::LoggingConfig) -> Result<()
         emerald_config_file: args.get_emerald_config_file()?,
         private_key_file: args.get_priv_validator_key_file_path()?,
         start_height: Some(Height::new(1)), // We always start at height 1
+        exec_engine: args.get_exec_engine()?,
     };
 
     cmd.run(
@@ -113,6 +118,7 @@ fn testnet(args: &Args, cmd: &TestnetCmd, logging: config::LoggingConfig) -> Res
         emerald_config_file: args.get_emerald_config_file()?,
         private_key_file: args.get_priv_validator_key_file_path()?,
         start_height: Some(Height::new(1)), // We always start at height 1
+        exec_engine: args.get_exec_engine()?,
     };
 
     cmd.run(&app, &args.get_home_dir()?, logging)

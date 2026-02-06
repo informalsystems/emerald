@@ -15,7 +15,7 @@ use malachitebft_app_channel::app::node::{
 };
 use malachitebft_app_channel::app::types::core::VotingPower;
 use malachitebft_app_channel::Channels;
-use malachitebft_eth_cli::config::{Config, EmeraldConfig};
+use malachitebft_eth_cli::config::{set_subsecond_ts_suppot, Config, EmeraldConfig};
 use malachitebft_eth_cli::metrics;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::engine_rpc::EngineRPC;
@@ -42,6 +42,7 @@ pub struct App {
     pub emerald_config_file: PathBuf,
     pub private_key_file: PathBuf,
     pub start_height: Option<Height>,
+    pub exec_engine: String,
 }
 
 /// Components needed to run the application
@@ -117,7 +118,13 @@ impl App {
             metrics,
         };
 
+        // TODO Get exec_engine from here and set variable in ethereum config regarding timestamp
         let emerald_config = self.load_emerald_config()?;
+
+        println!(
+            "XX Subsecond latency supported: {:?}",
+            emerald_config.ethereum_config.subsecond_ts_support
+        );
         let engine: Engine = {
             let engine_url = Url::parse(&emerald_config.ethereum_config.engine_authrpc_address)?;
             let jwt_path = PathBuf::from_str(&emerald_config.ethereum_config.jwt_token_path)?;
@@ -174,8 +181,14 @@ impl App {
                     self.emerald_config_file.display()
                 )
             })?;
-        let emerald_config = toml::from_str::<EmeraldConfig>(&emerald_config_content)
+        let mut emerald_config = toml::from_str::<EmeraldConfig>(&emerald_config_content)
             .map_err(|e| eyre::eyre!("Failed to parse emerald config file: {e}"))?;
+
+        set_subsecond_ts_suppot(
+            self.exec_engine.clone(),
+            &mut emerald_config.ethereum_config,
+        );
+
         Ok(emerald_config)
     }
 }

@@ -510,6 +510,7 @@ pub async fn on_get_value(
                         &Some(latest_block),
                         &emerald_config.retry_config,
                         &emerald_config.fee_recipient,
+                        emerald_config.ethereum_config.subsecond_ts_support,
                         state.get_fork(latest_block.timestamp),
                     )
                     .await?;

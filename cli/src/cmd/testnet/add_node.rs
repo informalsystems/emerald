@@ -316,10 +316,10 @@ impl TestnetAddNodeCmd {
         // Create Emerald config for non-validator node
         let config_content = format!(
             r#"moniker = "node-{}"
-execution_authrpc_address = "http://localhost:{}"
-engine_authrpc_address = "http://localhost:{}"
-jwt_token_path = "{}"
-eth_genesis_path = "{}"
+ethereum_config.execution_authrpc_address = "http://localhost:{}"
+ethereum_config.engine_authrpc_address = "http://localhost:{}"
+ethereum_config.jwt_token_path = "{}"
+ethereum_config.eth_genesis_path = "{}"
 retry_config.initial_delay = "100ms"
 retry_config.max_delay = "2s"
 retry_config.max_elapsed_time = "20s"

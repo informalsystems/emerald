@@ -15,6 +15,7 @@
   - [Consensus Layer](./architecture/consensus.md)
   - [Execution Layer](./architecture/execution-client.md)
   - [Proof-of-Authority Model](./architecture/poa.md)
+  - [Block Syncing](./architecture/syncing.md)
 - [EVM Compatibility](./evm-compatibility.md)
 
 ---

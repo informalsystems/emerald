@@ -20,6 +20,7 @@ malachitebft-signing-ecdsa   = { workspace = true, features = [ "rand", "serde" 
 malachitebft-sync            = { workspace = true }
 
 async-trait     = { workspace = true }
+blst            = { workspace = true }
 bytes           = { workspace = true }
 hex             = { workspace = true }
 humantime-serde = "1.1"

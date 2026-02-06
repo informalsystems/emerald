@@ -54,9 +54,6 @@ jobs:
         uses: taiki-e/install-action@cargo-nextest
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
-      - name: Run Forge build
-        run: forge build
-        if: steps.filter.outputs.code == 'true'
       - name: Run tests
         run: |
           cargo nextest run \

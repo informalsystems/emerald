@@ -262,10 +262,10 @@ pub async fn initialize_state_from_existing_block(
 
     match determine_replay_range(reth_latest_height, height) {
         ReplayDecision::ReplayRange { start, end } => {
-            if reth_latest_height.is_some() {
+            if let Some(reth_height) = reth_latest_height {
                 warn!(
                     "⚠️  Execution client is at height {} but Emerald has blocks up to height {}. Starting height replay.",
-                    reth_latest_height.unwrap(), height
+                    reth_height, height
                 );
             } else {
                 warn!("⚠️  Execution client has no blocks, replaying from genesis");

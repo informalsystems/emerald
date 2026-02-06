@@ -59,27 +59,17 @@ pub fn determine_replay_range(
 }
 
 /// Error type for payload status validation during replay.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ReplayPayloadError {
     /// Block was rejected as invalid by the execution client.
+    #[error("invalid payload: {validation_error}")]
     Invalid { validation_error: String },
     /// Execution client returned ACCEPTED, which indicates no instant finality.
+    #[error("ACCEPTED status not supported during replay (no instant finality)")]
     Accepted,
     /// Execution client is still syncing.
+    #[error("execution client still syncing")]
     Syncing,
-}
-
-impl core::fmt::Display for ReplayPayloadError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Invalid { validation_error } => write!(f, "invalid payload: {validation_error}"),
-            Self::Accepted => write!(
-                f,
-                "ACCEPTED status not supported during replay (no instant finality)"
-            ),
-            Self::Syncing => write!(f, "execution client still syncing"),
-        }
-    }
 }
 
 /// Validates the payload status returned after submitting a block during replay.

@@ -20,6 +20,9 @@ RUN apt-get update -qq && \
 	protobuf-compiler && \
 	rm -rf /var/lib/apt/lists/*
 
+RUN curl -sSL https://foundry.paradigm.xyz | bash && \
+	/root/.foundry/bin/foundryup
+
 COPY . /root
 RUN cargo build --release --locked
 

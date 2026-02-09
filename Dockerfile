@@ -23,6 +23,8 @@ RUN apt-get update -qq && \
 RUN curl -sSL https://foundry.paradigm.xyz | bash && \
 	/root/.foundry/bin/foundryup
 
+ENV PATH="/root/.foundry/bin:${PATH}"
+
 COPY . /root
 RUN cargo build --release --locked
 

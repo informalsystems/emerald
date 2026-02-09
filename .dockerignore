@@ -1,2 +1,22 @@
-target
-solidity/cache
+/target
+/nodes
+/rethdata
+monitoring/data-grafana/
+monitoring/data-prometheus/
+/assets
+.testnet
+.claude
+CLAUDE.md
+
+# Custom-reth build artifacts
+custom-reth/target/
+
+# Docs and env
+example/docs/
+.env
+.example.env
+
+cache/
+
+# Solidity deployment artifacts
+deploy_output.json

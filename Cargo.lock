@@ -2550,18 +2550,17 @@ name = "emerald"
 version = "0.0.1"
 dependencies = [
  "alloy-consensus",
- "alloy-contract",
  "alloy-genesis",
  "alloy-primitives",
  "alloy-provider",
  "alloy-rpc-types-engine",
  "alloy-rpc-types-eth",
- "alloy-sol-types",
  "async-trait",
  "bytes",
  "caches",
  "color-eyre",
  "derive-where",
+ "emerald-contracts",
  "ethereum_ssz",
  "hex",
  "humantime-serde",
@@ -2584,6 +2583,21 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "emerald-contracts"
+version = "0.0.1"
+dependencies = [
+ "alloy-contract",
+ "alloy-network",
+ "alloy-node-bindings",
+ "alloy-primitives",
+ "alloy-provider",
+ "alloy-signer-local",
+ "alloy-sol-types",
+ "color-eyre",
+ "tokio",
 ]
 
 [[package]]
@@ -2612,6 +2626,7 @@ dependencies = [
  "chrono",
  "clap",
  "color-eyre",
+ "emerald-contracts",
  "ethereum_serde_utils",
  "hex",
  "jsonrpsee-core",

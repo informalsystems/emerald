@@ -16,12 +16,11 @@ malachitebft-eth-cli     = { workspace = true }
 malachitebft-eth-engine  = { workspace = true }
 malachitebft-app-channel = { workspace = true }
 malachitebft-proto       = { workspace = true }
+emerald-contracts        = { workspace = true }
 
 alloy-provider         = { version = "1.4.3" }
 alloy-genesis          = "1.4.3"
 alloy-primitives       = { workspace = true }
-alloy-contract         = { workspace = true }
-alloy-sol-types        = { workspace = true, features = [ "json" ] }
 alloy-consensus        = { workspace = true }
 alloy-rpc-types-eth    = { workspace = true }
 alloy-rpc-types-engine = { workspace = true }

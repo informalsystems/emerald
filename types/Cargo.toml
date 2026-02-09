@@ -30,6 +30,7 @@ rand            = { workspace = true }
 serde           = { workspace = true, features = [ "derive", "rc" ] }
 serde_json      = { workspace = true }
 signature       = { workspace = true }
+thiserror       = { workspace = true }
 
 alloy-consensus  = { workspace = true }
 alloy-primitives = { workspace = true, default-features = false, features = [ "serde" ] }

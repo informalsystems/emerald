@@ -2601,6 +2601,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "emerald-core"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "emerald-utils"
 version = "0.0.1"
 dependencies = [

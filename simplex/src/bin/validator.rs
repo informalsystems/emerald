@@ -229,7 +229,7 @@ fn main() {
             marshal::resolver::p2p::init(&context, marshal_resolver_cfg, marshal);
 
         // Use engine address from emerald config
-        let engine_api_url = emerald.engine_authrpc_address.clone();
+        let engine_api_url = emerald.ethereum_config.engine_authrpc_address.clone();
 
         let fee_recipient = if let Some(fee_recipient_hex) = config.fee_recipient.clone() {
             let fee_recipient_bytes =
@@ -250,7 +250,7 @@ fn main() {
         };
 
         // Use JWT directly from the path specified in config - no need to rewrite
-        let jwt_path = PathBuf::from(&emerald.jwt_token_path);
+        let jwt_path = PathBuf::from(&emerald.ethereum_config.jwt_token_path);
 
         let emerald_engine = EngineClient::new(engine_url, eth_url, &jwt_path)
             .expect("Failed to create Engine client");

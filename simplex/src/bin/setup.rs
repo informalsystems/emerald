@@ -18,7 +18,7 @@ use commonware_cryptography::Signer;
 use commonware_math::algebra::Random;
 use commonware_utils::{from_hex_formatted, hex};
 use emerald_simplex::config::{Peers, SimplexConfig, SimplexConfigFile};
-use malachitebft_eth_cli::config::{ElNodeType, EmeraldConfig};
+use malachitebft_eth_cli::config::{ElNodeType, EmeraldConfig, EthereumConfig};
 use malachitebft_eth_types::RetryConfig;
 use rand::rngs::OsRng;
 
@@ -165,16 +165,25 @@ fn generate_testnet(
 
         let emerald = EmeraldConfig {
             moniker: format!("simplex-{i}"),
-            execution_authrpc_address: format!("http://127.0.0.1:{}", base_http_port + index * 100),
-            engine_authrpc_address: format!("http://127.0.0.1:{}", base_engine_port + index * 100),
-            jwt_token_path: jwt_file_path.display().to_string(),
-            eth_genesis_path: eth_genesis_path.display().to_string(),
+            ethereum_config: EthereumConfig {
+                execution_authrpc_address: format!(
+                    "http://127.0.0.1:{}",
+                    base_http_port + index * 100
+                ),
+                engine_authrpc_address: format!(
+                    "http://127.0.0.1:{}",
+                    base_engine_port + index * 100
+                ),
+                jwt_token_path: jwt_file_path.display().to_string(),
+                eth_genesis_path: eth_genesis_path.display().to_string(),
+            },
             retry_config: RetryConfig::default(),
             el_node_type: ElNodeType::Archive,
-            max_retain_blocks: 0,
+            num_certificates_to_retain: u64::MAX,
             prune_at_block_interval: 10,
             min_block_time: Duration::from_millis(500),
             fee_recipient: fee_recipient_addr.into(),
+            num_temp_blocks_retained: 10,
         };
 
         let simplex = SimplexConfig {

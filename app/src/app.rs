@@ -522,7 +522,7 @@ pub async fn on_process_synced_value(
         valid_round: Round::Nil,
         proposer,
         value,
-        validity: Validity::Valid,
+        validity: Validity::Valid, // already validated by 2/3+ of the validator set
     };
 
     // Store block data so on_decided() can retrieve it when the Decided message arrives.

@@ -1798,7 +1798,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0c952ebd9e8c333bc49ded7f5c894cdfff85fef27b342b43a2659cc1a338173"
 dependencies = [
  "bitvec",
- "getrandom 0.2.16",
+ "getrandom 0.2.17",
  "rand 0.8.5",
 ]
 
@@ -2099,7 +2099,7 @@ dependencies = [
  "commonware-utils",
  "futures",
  "prometheus-client 0.24.0",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -2113,7 +2113,7 @@ dependencies = [
  "paste",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2140,7 +2140,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rand_distr",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -2165,13 +2165,13 @@ dependencies = [
  "ctutils",
  "ecdsa",
  "ed25519-consensus",
- "getrandom 0.2.16",
+ "getrandom 0.2.17",
  "p256",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "sha2 0.10.9",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "x25519-dalek",
  "zeroize",
 ]
@@ -2186,8 +2186,8 @@ dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.111",
- "toml 0.9.10+spec-1.1.0",
+ "syn 2.0.114",
+ "toml 0.9.11+spec-1.1.0",
  "tracing",
  "tracing-subscriber 0.3.22",
 ]
@@ -2228,7 +2228,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rand_distr",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -2259,7 +2259,7 @@ dependencies = [
  "futures",
  "prometheus-client 0.24.0",
  "rand 0.8.5",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -2280,7 +2280,7 @@ dependencies = [
  "commonware-utils",
  "criterion",
  "futures",
- "getrandom 0.2.16",
+ "getrandom 0.2.17",
  "governor",
  "libc",
  "opentelemetry",
@@ -2292,7 +2292,7 @@ dependencies = [
  "rayon",
  "sha2 0.10.9",
  "sysinfo",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "tracing-opentelemetry",
@@ -2318,7 +2318,7 @@ dependencies = [
  "futures-util",
  "prometheus-client 0.24.0",
  "rayon",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
  "zstd",
 ]
@@ -2339,7 +2339,7 @@ dependencies = [
  "futures",
  "rand 0.8.5",
  "rand_core 0.6.4",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "x25519-dalek",
  "zeroize",
 ]
@@ -2354,7 +2354,7 @@ dependencies = [
  "cfg-if",
  "commonware-codec",
  "futures",
- "getrandom 0.2.16",
+ "getrandom 0.2.17",
  "hashbrown 0.16.1",
  "num-bigint",
  "num-integer",
@@ -2362,7 +2362,7 @@ dependencies = [
  "num-traits",
  "pin-project",
  "rand 0.8.5",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "zeroize",
 ]
 
@@ -6139,7 +6139,7 @@ dependencies = [
  "opentelemetry_sdk",
  "prost 0.14.3",
  "reqwest",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -6168,7 +6168,7 @@ dependencies = [
  "opentelemetry",
  "percent-encoding",
  "rand 0.9.2",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
 ]
@@ -6629,7 +6629,7 @@ checksum = "9adf1691c04c0a5ff46ff8f262b58beb07b0dbb61f96f9f54f6cbd82106ed87f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.111",
+ "syn 2.0.114",
 ]
 
 [[package]]
@@ -8376,7 +8376,7 @@ version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "itoa",
  "ryu",
  "serde",
@@ -9009,7 +9009,7 @@ version = "0.9.11+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3afc9a848309fe1aaffaed6e1546a7a14de1f935dc9d89d32afd9a44bab7c46"
 dependencies = [
- "indexmap 2.12.1",
+ "indexmap 2.13.0",
  "serde_core",
  "serde_spanned 1.0.4",
  "toml_datetime 0.7.5+spec-1.1.0",

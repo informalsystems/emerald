@@ -2,14 +2,6 @@
 
 ## Overview
 
-### Reth Sync Overview
-
-When a Reth node falls behind other Reth nodes while the consensus layer (CL) is not advancing, Reth continues to receive new blocks through the P2P networking layer (`crates/net/`). 
-Other peers announce new blocks via `NewBlockHashes` and `NewBlock` messages, which Reth can then download and validate locally.
-
-Reth waits for a command from the CL through Engine API method calls before advancing the canonical chain. 
-This ensures that the execution layer (EL) remains synchronized with the CL decided values -- the CL is the authority on what's canonical. 
-
 ### Malachite Sync Overview
 
 [ValueSync](https://github.com/informalsystems/malachite/tree/main/specs/synchronization) is a protocol that runs alongside consensus to help nodes catch up when they fall behind. 
@@ -29,6 +21,18 @@ When using Malachite's Channel API, ValueSync interacts with the application thr
 - `ProcessSyncedValue` — Malachite notifies the application that a value has been synced from the network (used by the client to deliver received data)
 
 This design keeps syncing logic separate from consensus while reusing the same validation and commitment paths, i.e, a synced block goes through the same checks as a block decided in real-time.
+
+### Reth Sync Overview
+
+Post-merge, Reth does not autonomously advance its canonical chain. It relies on the consensus layer (CL) to drive block import and chain head selection via the Engine API. Reth's P2P sync is purely reactive and on-demand:
+
+- **`newPayload`** is the primary way blocks enter Reth. It validates and executes the payload, then inserts it into the in-memory block tree (`tree_state.blocks_by_hash`). If the parent is unknown, the block is **buffered** (not rejected) and automatically connected when the parent arrives.
+- **`forkchoiceUpdated`** sets the canonical chain head. It requires the target block to already exist in the tree state (imported via `newPayload`). If the block is missing, Reth returns `SYNCING` and emits a `Download` event to fetch it from peers via P2P.
+- **`getPayload`** only reads from Reth's in-memory `PayloadStore` (built payloads). It does **not** import blocks into the tree state.
+
+Reth nodes are connected via P2P (explicit peering via `add_peers.sh` or `--trusted-peers`). When Reth detects missing blocks — either through a `forkchoiceUpdated` pointing to an unknown hash or through peer announcements (`NewBlockHashes`, `NewBlock`) — it downloads them from peers. However, it will not advance the canonical chain until the CL instructs it via `forkchoiceUpdated`. The CL is the authority on what's canonical.
+
+In Emerald's architecture, `newPayload` is the optimal path for feeding blocks to Reth during sync: Emerald already has the full payload from Malachite's ValueSync, so importing it directly is faster and more reliable than waiting for Reth P2P download.
 
 ### Emerald Sync Overview
 

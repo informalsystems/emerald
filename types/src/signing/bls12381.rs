@@ -108,10 +108,6 @@ impl<V: BlsVariant> Signature<V> {
         self.bytes.clone()
     }
 
-    pub fn to_vec(&self) -> Vec<u8> {
-        self.bytes.clone()
-    }
-
     pub fn verify(&self, data: &[u8], public_key: &PublicKey<V>) -> bool {
         public_key.verify(data, self)
     }
@@ -168,10 +164,6 @@ impl<V: BlsVariant> PublicKey<V> {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        self.bytes.clone()
-    }
-
-    pub fn to_vec(&self) -> Vec<u8> {
         self.bytes.clone()
     }
 
@@ -259,7 +251,7 @@ impl<V: BlsVariant> SigningScheme for Bls12381<V> {
     }
 
     fn encode_signature(signature: &Self::Signature) -> Vec<u8> {
-        signature.to_vec()
+        signature.to_bytes()
     }
 }
 

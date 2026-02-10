@@ -366,10 +366,37 @@ pub type BlsProviderMinPk = BlsProvider<MinPk>;
 
 #[cfg(test)]
 mod tests {
+    use alloy_primitives::hex;
     use rand::rngs::OsRng;
     use rand::RngCore;
 
     use super::*;
+
+    const MESSAGE: [u8; 32] = hex!(
+        "abababababababababababababababab"
+        "abababababababababababababababab"
+    );
+    const PUBKEY: [u8; 48] = hex!(
+        "b53d21a4cfd562c469cc81514d4ce5a6"
+        "b577d8403d32a394dc265dd190b47fa9"
+        "f829fdd7963afdf972e5e77854051f6f"
+    );
+    const SIGNATURE_VALID: [u8; 96] = hex!(
+        "ae82747ddeefe4fd64cf9cedb9b04ae3"
+        "e8a43420cd255e3c7cd06a8d88b7c7f8"
+        "638543719981c5d16fa3527c468c25f0"
+        "026704a6951bde891360c7e8d12ddee0"
+        "559004ccdbe6046b55bae1b257ee97f7"
+        "cdb955773d7cf29adf3ccbb9975e4eb9"
+    );
+    const SIGNATURE_WRONG_PUBKEY: [u8; 96] = hex!(
+        "9674e2228034527f4c083206032b0203"
+        "10face156d4a4685e2fcaec2f6f3665a"
+        "a635d90347b6ce124eb879266b1e801d"
+        "185de36a0a289b85e9039662634f2eea"
+        "1e02e670bc7ab849d006a70b2f93b845"
+        "97558a05b879c8d445f387a5d5b653df"
+    );
 
     fn sign_and_verify_roundtrip<V: BlsVariant>() {
         let mut ikm = vec![0u8; V::SK_LEN];
@@ -393,5 +420,27 @@ mod tests {
     #[test]
     fn min_pk_sign_and_verify_roundtrip() {
         sign_and_verify_roundtrip::<MinPk>();
+    }
+
+    #[test]
+    fn min_pk_ethereum_vector_verify_valid_case() {
+        // Source: ethereum/bls12-381-tests v0.1.2 release asset `bls_tests_json.tar.gz`,
+        // file `verify/verify_valid_case_195246ee3bd3b6ec.json`
+        // URL: https://github.com/ethereum/bls12-381-tests/releases/tag/v0.1.2
+        let public_key = PublicKey::<MinPk>::from_bytes(&PUBKEY).unwrap();
+        let signature = Signature::<MinPk>::from_bytes(&SIGNATURE_VALID).unwrap();
+
+        assert!(signature.verify(&MESSAGE, &public_key));
+    }
+
+    #[test]
+    fn min_pk_ethereum_vector_verify_wrong_pubkey_case() {
+        // Source: ethereum/bls12-381-tests v0.1.2 release asset `bls_tests_json.tar.gz`,
+        // file `verify/verify_wrong_pubkey_case_195246ee3bd3b6ec.json`
+        // URL: https://github.com/ethereum/bls12-381-tests/releases/tag/v0.1.2
+        let public_key = PublicKey::<MinPk>::from_bytes(&PUBKEY).unwrap();
+        let signature = Signature::<MinPk>::from_bytes(&SIGNATURE_WRONG_PUBKEY).unwrap();
+
+        assert!(!signature.verify(&MESSAGE, &public_key));
     }
 }

@@ -25,10 +25,10 @@ pub struct MinSig;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct MinPk;
 
-pub trait BlsVariant: Copy + core::fmt::Debug + Eq + Ord + Send + Sync + 'static {
+pub trait BlsVariant: Clone + core::fmt::Debug + Eq + Ord + Send + Sync + 'static {
     type SecretKey: Clone + Send + Sync;
-    type PublicKey: Clone + Send + Sync;
-    type Signature: Clone + Send + Sync;
+    type PublicKey;
+    type Signature;
 
     const SK_LEN: usize = 32;
     const PK_LEN: usize;
@@ -170,7 +170,10 @@ impl<V: BlsVariant> Hashable for PublicKey<V> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct Bls12381<V: BlsVariant>(PhantomData<V>);
 
-impl<V: BlsVariant> SigningScheme for Bls12381<V> {
+impl<V> SigningScheme for Bls12381<V>
+where
+    V: BlsVariant,
+{
     type DecodingError = BlsDecodingError;
     type Signature = Signature<V>;
     type PublicKey = PublicKey<V>;

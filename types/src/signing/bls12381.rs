@@ -11,12 +11,12 @@ use thiserror::Error;
 use super::Hashable;
 use crate::{Proposal, ProposalPart, Vote};
 
-// BLS signatures ciphersuite for min-sig (sig in G1, pk in G2) with PoP.
-// Ethereum CL uses the G2 variant of the same ciphersuite (G1 <-> G2 swapped).
+// IETF BLS ciphersuite for min-sig mode (signature in G1, public key in G2), with PoP.
+// Ethereum consensus uses the companion min-pk ciphersuite below (signature in G2).
 const DST_BLS_SIG_IN_G1_WITH_POP: &[u8] = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
 
-// BLS signatures ciphersuite for min-pk (sig in G2, pk in G1) with PoP.
-// Ethereum CL uses the same ciphersuite string for its G2 signatures.
+// IETF BLS ciphersuite for min-pk mode (signature in G2, public key in G1), with PoP.
+// This is the ciphersuite used by Ethereum consensus BLS signatures.
 const DST_BLS_SIG_IN_G2_WITH_POP: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
 pub trait BlsVariant: Clone + core::fmt::Debug + Eq + Ord + Send + Sync + 'static {

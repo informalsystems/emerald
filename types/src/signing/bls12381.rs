@@ -19,12 +19,6 @@ const DST_BLS_SIG_IN_G1_WITH_POP: &[u8] = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_
 // Ethereum CL uses the same ciphersuite string for its G2 signatures.
 const DST_BLS_SIG_IN_G2_WITH_POP: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct MinSig;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct MinPk;
-
 pub trait BlsVariant: Clone + core::fmt::Debug + Eq + Ord + Send + Sync + 'static {
     type SecretKey: Clone + Send + Sync;
     type PublicKey;
@@ -301,105 +295,69 @@ where
     }
 }
 
-impl BlsVariant for MinSig {
-    type SecretKey = min_sig::SecretKey;
-    type PublicKey = min_sig::PublicKey;
-    type Signature = min_sig::Signature;
+macro_rules! impl_bls_variant {
+    ($variant:ident, $module:ident, $pk_len:expr, $sig_len:expr, $dst:expr) => {
+        #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+        pub struct $variant;
 
-    const PK_LEN: usize = 96;
-    const SIG_LEN: usize = 48;
-    const DST: &'static [u8] = DST_BLS_SIG_IN_G1_WITH_POP;
+        impl BlsVariant for $variant {
+            type SecretKey = $module::SecretKey;
+            type PublicKey = $module::PublicKey;
+            type Signature = $module::Signature;
 
-    fn key_gen(ikm: &[u8]) -> Result<Self::SecretKey, BLST_ERROR> {
-        min_sig::SecretKey::key_gen(ikm, &[])
-    }
+            const PK_LEN: usize = $pk_len;
+            const SIG_LEN: usize = $sig_len;
+            const DST: &'static [u8] = $dst;
 
-    fn secret_key_from_bytes(bytes: &[u8]) -> Result<Self::SecretKey, BLST_ERROR> {
-        min_sig::SecretKey::from_bytes(bytes)
-    }
+            fn key_gen(ikm: &[u8]) -> Result<Self::SecretKey, BLST_ERROR> {
+                $module::SecretKey::key_gen(ikm, &[])
+            }
 
-    fn secret_key_to_bytes(secret_key: &Self::SecretKey) -> Vec<u8> {
-        secret_key.to_bytes().to_vec()
-    }
+            fn secret_key_from_bytes(bytes: &[u8]) -> Result<Self::SecretKey, BLST_ERROR> {
+                $module::SecretKey::from_bytes(bytes)
+            }
 
-    fn public_key_from_bytes(bytes: &[u8]) -> Result<Self::PublicKey, BLST_ERROR> {
-        min_sig::PublicKey::from_bytes(bytes)
-    }
+            fn secret_key_to_bytes(secret_key: &Self::SecretKey) -> Vec<u8> {
+                secret_key.to_bytes().to_vec()
+            }
 
-    fn public_key_to_bytes(public_key: &Self::PublicKey) -> Vec<u8> {
-        public_key.to_bytes().to_vec()
-    }
+            fn public_key_from_bytes(bytes: &[u8]) -> Result<Self::PublicKey, BLST_ERROR> {
+                $module::PublicKey::from_bytes(bytes)
+            }
 
-    fn public_key_from_secret_key(secret_key: &Self::SecretKey) -> Self::PublicKey {
-        secret_key.sk_to_pk()
-    }
+            fn public_key_to_bytes(public_key: &Self::PublicKey) -> Vec<u8> {
+                public_key.to_bytes().to_vec()
+            }
 
-    fn signature_from_bytes(bytes: &[u8]) -> Result<Self::Signature, BLST_ERROR> {
-        min_sig::Signature::from_bytes(bytes)
-    }
+            fn public_key_from_secret_key(secret_key: &Self::SecretKey) -> Self::PublicKey {
+                secret_key.sk_to_pk()
+            }
 
-    fn signature_to_bytes(signature: &Self::Signature) -> Vec<u8> {
-        signature.to_bytes().to_vec()
-    }
+            fn signature_from_bytes(bytes: &[u8]) -> Result<Self::Signature, BLST_ERROR> {
+                $module::Signature::from_bytes(bytes)
+            }
 
-    fn sign(secret_key: &Self::SecretKey, msg: &[u8]) -> Self::Signature {
-        secret_key.sign(msg, Self::DST, &[])
-    }
+            fn signature_to_bytes(signature: &Self::Signature) -> Vec<u8> {
+                signature.to_bytes().to_vec()
+            }
 
-    fn verify(signature: &Self::Signature, msg: &[u8], public_key: &Self::PublicKey) -> BLST_ERROR {
-        signature.verify(true, msg, Self::DST, &[], public_key, true)
-    }
+            fn sign(secret_key: &Self::SecretKey, msg: &[u8]) -> Self::Signature {
+                secret_key.sign(msg, Self::DST, &[])
+            }
+
+            fn verify(
+                signature: &Self::Signature,
+                msg: &[u8],
+                public_key: &Self::PublicKey,
+            ) -> BLST_ERROR {
+                signature.verify(true, msg, Self::DST, &[], public_key, true)
+            }
+        }
+    };
 }
 
-impl BlsVariant for MinPk {
-    type SecretKey = min_pk::SecretKey;
-    type PublicKey = min_pk::PublicKey;
-    type Signature = min_pk::Signature;
-
-    const PK_LEN: usize = 48;
-    const SIG_LEN: usize = 96;
-    const DST: &'static [u8] = DST_BLS_SIG_IN_G2_WITH_POP;
-
-    fn key_gen(ikm: &[u8]) -> Result<Self::SecretKey, BLST_ERROR> {
-        min_pk::SecretKey::key_gen(ikm, &[])
-    }
-
-    fn secret_key_from_bytes(bytes: &[u8]) -> Result<Self::SecretKey, BLST_ERROR> {
-        min_pk::SecretKey::from_bytes(bytes)
-    }
-
-    fn secret_key_to_bytes(secret_key: &Self::SecretKey) -> Vec<u8> {
-        secret_key.to_bytes().to_vec()
-    }
-
-    fn public_key_from_bytes(bytes: &[u8]) -> Result<Self::PublicKey, BLST_ERROR> {
-        min_pk::PublicKey::from_bytes(bytes)
-    }
-
-    fn public_key_to_bytes(public_key: &Self::PublicKey) -> Vec<u8> {
-        public_key.to_bytes().to_vec()
-    }
-
-    fn public_key_from_secret_key(secret_key: &Self::SecretKey) -> Self::PublicKey {
-        secret_key.sk_to_pk()
-    }
-
-    fn signature_from_bytes(bytes: &[u8]) -> Result<Self::Signature, BLST_ERROR> {
-        min_pk::Signature::from_bytes(bytes)
-    }
-
-    fn signature_to_bytes(signature: &Self::Signature) -> Vec<u8> {
-        signature.to_bytes().to_vec()
-    }
-
-    fn sign(secret_key: &Self::SecretKey, msg: &[u8]) -> Self::Signature {
-        secret_key.sign(msg, Self::DST, &[])
-    }
-
-    fn verify(signature: &Self::Signature, msg: &[u8], public_key: &Self::PublicKey) -> BLST_ERROR {
-        signature.verify(true, msg, Self::DST, &[], public_key, true)
-    }
-}
+impl_bls_variant!(MinSig, min_sig, 96, 48, DST_BLS_SIG_IN_G1_WITH_POP);
+impl_bls_variant!(MinPk, min_pk, 48, 96, DST_BLS_SIG_IN_G2_WITH_POP);
 
 pub type Bls12381MinSig = Bls12381<MinSig>;
 pub type Bls12381MinPk = Bls12381<MinPk>;

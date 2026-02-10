@@ -4,13 +4,13 @@ use std::vec::Vec;
 
 pub trait Block: Send + Sync + Clone {
     type Id: Send + Sync + Clone + Eq + fmt::Debug;
+    type Error: Error + Send + Sync;
 
     fn id(&self) -> Self::Id;
     fn parent_id(&self) -> Self::Id;
     fn height(&self) -> u64;
     fn encode(&self) -> Vec<u8>;
-    // TODO: return Result<Self, Error> once we define a core error type.
-    fn decode(bytes: &[u8]) -> Option<Self>;
+    fn decode(bytes: &[u8]) -> Result<Self, Self::Error>;
 }
 
 #[async_trait::async_trait]

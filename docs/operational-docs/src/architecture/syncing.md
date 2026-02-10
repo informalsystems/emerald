@@ -2,7 +2,7 @@
 
 ## Overview
 
-### Malachite Sync Overview
+### Malachite
 
 [ValueSync](https://github.com/informalsystems/malachite/tree/main/specs/synchronization) is a protocol that runs alongside consensus to help nodes catch up when they fall behind. 
 It operates as a client-server system where each node runs both roles simultaneously.
@@ -22,7 +22,7 @@ When using Malachite's Channel API, ValueSync interacts with the application thr
 
 This design keeps syncing logic separate from consensus while reusing the same validation and commitment paths, i.e, a synced block goes through the same checks as a block decided in real-time.
 
-### Reth Sync Overview
+### Reth
 
 Post-merge, Reth does not autonomously advance its canonical chain. It relies on the consensus layer (CL) to drive block import and chain head selection via the Engine API. Reth's P2P sync is purely reactive and on-demand:
 
@@ -34,7 +34,7 @@ Reth nodes are connected via P2P (explicit peering via `add_peers.sh` or `--trus
 
 In Emerald's architecture, `newPayload` is the optimal path for feeding blocks to Reth during sync: Emerald already has the full payload from Malachite's ValueSync, so importing it directly is faster and more reliable than waiting for Reth P2P download.
 
-### Emerald Sync Overview
+### Emerald
 
 ```mermaid
 sequenceDiagram
@@ -94,9 +94,9 @@ When Emerald receives `AppMsg::GetDecidedValue`, it processes it as follows:
 
 1. Check if the requested height falls within the available range (`earliest_certificate_height..consensus_height`). If not, return `None`. See [Pruning](#pruning).
 2. If the full block data is available locally (height >= earliest unpruned height), return it directly from storage.
-3. Otherwise, reconstruct the payload from the locally stored block header and the block body fetched from the EL via `engine_getPayloadBodiesByRange`. If the EL cannot provide the body (pruned or unavailable), return `None`. See [EL Payload Retrieval](#el-payload-retrieval).
+3. Otherwise, reconstruct the payload from the locally stored block header and the block body fetched from the EL via `engine_getPayloadBodiesByRange`. If the EL cannot provide the body (pruned or unavailable), return `None`. See [Block Reconstruction](#block-reconstruction).
 
-### EL Payload Retrieval
+### Block Reconstruction
 
 `engine_getPayloadBodiesByRange` returns only transactions and withdrawals — not the header fields (parent_hash, state_root, timestamp, etc.). To reconstruct a full payload, Emerald stores block headers (the payload with transactions and withdrawals stripped) at commit time. This keeps storage lightweight while allowing full payloads to be reconstructed on demand from header + EL body.
 
@@ -109,7 +109,7 @@ Emerald prunes two categories of data independently:
 - **Certificates + block headers**: retained for the last `num_certificates_to_retain` heights (default: unlimited). Pruned every `prune_at_block_interval` heights (default: 10). This defines the `earliest_certificate_height` — the lower bound for sync requests.
 - **Block data** (decided values, undecided proposals, pending parts): retained for the last `num_temp_blocks_retained` heights (default: 10). This defines the `earliest_unpruned_height` — below this, block bodies must be fetched from the EL.
 
-For heights where block data has been pruned but certificates remain, Emerald reconstructs the payload from the stored header + EL body (see [EL Payload Retrieval](#el-payload-retrieval)). If the EL has also pruned the block (depends on Reth's node type and pruning config), the sync request returns `None`.
+For heights where block data has been pruned but certificates remain, Emerald reconstructs the payload from the stored header + EL body (see [Block Reconstruction](#block-reconstruction)). If the EL has also pruned the block (depends on Reth's node type and pruning config), the sync request returns `None`.
 
 > [!WARNING]
 > In order for a node to be able to sync from any height, there has to be at least one archival node in the network that can provide historical data. We plan to add snapshot syncing to remove this constraint.
@@ -126,6 +126,30 @@ The application processes it as follows:
 No `newPayload` call is made during this step. Malachite has already verified the commit certificate, proving that 2/3+ of the validator set accepted this value, so EL validation is redundant.
 
 The `newPayload` call is deferred to the `Decided` handler, where it is required to import the block into Reth's tree state before `forkchoiceUpdated` can set it as canonical head. If Reth returns `SYNCING` (e.g., because the parent block is not yet available), the retry mechanism re-sends the request until Reth returns `VALID` or `INVALID`.
+
+## Sync Configuration
+
+### Emerald Configuration (`emerald.toml`)
+
+| Parameter | Default | Impact on syncing |
+|-----------|---------|-------------------|
+| `num_certificates_to_retain` | unlimited (`u64::MAX`) | Determines how far back this node can serve sync requests. Once a certificate is pruned, the corresponding height can no longer be served to peers. |
+| `num_temp_blocks_retained` | 10 | Number of heights for which full block data is kept locally. Below this, block bodies must be reconstructed from stored headers + EL. |
+| `prune_at_block_interval` | 10 | How often (in heights) certificate pruning runs. Does not affect block data pruning, which runs every height. |
+| `retry_config.max_elapsed_time` | 10s | Total timeout for `newPayload` retries when Reth returns `SYNCING` during the `Decided` handler. If exceeded, the node errors. |
+| `retry_config.initial_delay` | 100ms | Initial delay between retry attempts (exponential backoff with 2x multiplier, capped at `max_delay`). |
+| `el_node_type` | `archive` | Declares the Reth pruning mode. Affects whether `getPayloadBodiesByRange` can serve old blocks when reconstructing pruned data. |
+
+> [!IMPORTANT]
+> `num_temp_blocks_retained` must be >= Reth's `engine.persistence-threshold`. If it is lower, the node will not be able to restart after a crash because Emerald will have pruned block data that Reth has not yet persisted to disk.
+
+### Reth Configuration
+
+| Parameter | Impact on syncing |
+|-----------|-------------------|
+| `--trusted-peers` / `add_peers.sh` | P2P connectivity between Reth nodes. Required for Reth to download blocks from peers when `forkchoiceUpdated` points to an unknown block. |
+| Node type (archive / full / custom) | Archive nodes retain all blocks from genesis. Full nodes prune old blocks, which means `getPayloadBodiesByRange` may return `null` for pruned heights. Must match Emerald's `el_node_type` setting. |
+| `engine.persistence-threshold` | How many blocks Reth keeps in memory before flushing to disk. Must be <= Emerald's `num_temp_blocks_retained` (see above). |
 
 ## Example Flow
 

@@ -1,4 +1,5 @@
 pub mod app;
+mod bootstrap;
 mod metrics;
 pub mod node;
 mod payload;
@@ -6,3 +7,4 @@ pub mod state;
 mod store;
 mod streaming;
 mod sync_handler;
+mod validators;

@@ -1,9 +1,11 @@
 //! Internal state of the application. This is a simplified abstract to keep it simple.
 //! A regular application would have mempool implemented, a proper database and input methods like RPC.
 
-use std::fmt;
+use core::str::FromStr;
+use std::path::PathBuf;
+use std::{fmt, fs};
 
-use alloy_genesis::ChainConfig;
+use alloy_genesis::{ChainConfig, Genesis as EvmGenesis};
 use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use color_eyre::eyre;
@@ -21,6 +23,7 @@ use malachitebft_eth_types::{
     Address, BlockTimestamp, EmeraldContext, Genesis, Height, ProposalData, ProposalFin,
     ProposalInit, ProposalPart, RetryConfig, ValidatorSet, Value, ValueId,
 };
+use malachitebft_proto::Error as ProtoError;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sha3::Digest;
@@ -66,6 +69,7 @@ pub struct State {
     /// prune_at_block_interval
     /// num_temp_blocks_retained
     /// min_block_time
+    /// ethereum_config : EthereumConfig (path to eth genesis and EL relevant information)
     pub emerald_config: EmeraldConfig,
 
     /// Needed to extract chain configuration contained in the ethereum genesis file.
@@ -88,6 +92,14 @@ pub struct State {
 
     // Cache for tracking recently validated payloads to avoid duplicate validation
     validated_payload_cache: ValidatedPayloadCache,
+
+    /// Cached earliest height with a certificate in the store.
+    /// Lazily loaded on first access and updated after pruning.
+    earliest_certificate_height: Option<Height>,
+
+    /// Cached earliest height with decided value data in the store.
+    /// Lazily loaded on first access and updated after pruning.
+    earliest_value_height: Option<Height>,
 
     /// Time it took to execute last block.
     /// Used to decide on whether we should sleep in case min_block_time
@@ -184,7 +196,6 @@ impl State {
         height: Height,
         store: Store,
         state_metrics: StateMetrics,
-        eth_chain_config: ChainConfig,
         emerald_config: EmeraldConfig,
     ) -> Self {
         // Calculate start_time by subtracting elapsed_seconds from now.
@@ -192,6 +203,14 @@ impl State {
         // This allows us to continue accumulating time correctly after a restart
         let start_time =
             Instant::now() - core::time::Duration::from_secs(state_metrics.elapsed_seconds);
+
+        let eth_genesis_path = PathBuf::from_str(&emerald_config.ethereum_config.eth_genesis_path)
+            .unwrap_or_else(|_| panic!("failed to read evm genesis file path from config"));
+
+        let eth_genesis_path_str = &fs::read_to_string(eth_genesis_path)
+            .unwrap_or_else(|_| panic!("failed to read evm genesis path"));
+        let eth_genesis: EvmGenesis = serde_json::from_str(eth_genesis_path_str)
+            .unwrap_or_else(|_| panic!("failed to read evm genesis file"));
 
         Self {
             ctx,
@@ -208,6 +227,8 @@ impl State {
             validator_set: None,
 
             validated_payload_cache: ValidatedPayloadCache::new(10),
+            earliest_certificate_height: None,
+            earliest_value_height: None,
 
             txs_count: state_metrics.txs_count,
             chain_bytes: state_metrics.chain_bytes,
@@ -215,7 +236,7 @@ impl State {
             metrics: state_metrics.metrics,
             last_block_time: Instant::now(),
             previous_block_commit_time: Instant::now(),
-            eth_chain_config,
+            eth_chain_config: eth_genesis.config,
             emerald_config,
         }
     }
@@ -259,20 +280,36 @@ impl State {
         Some(build_execution_block_from_bytes(raw_block_data))
     }
 
-    /// Returns the earliest height available via EL
-    pub async fn get_earliest_height(&self) -> Height {
-        self.store
+    /// Returns the earliest height with a certificate in the store.
+    /// The value is cached and updated after pruning.
+    pub async fn get_earliest_certificate_height(&mut self) -> Height {
+        if let Some(height) = self.earliest_certificate_height {
+            return height;
+        }
+
+        let height = self
+            .store
             .min_decided_value_height()
             .await
-            .unwrap_or_default()
+            .unwrap_or_default();
+        self.earliest_certificate_height = Some(height);
+        height
     }
 
-    /// Returns the earliest height available in the state
-    pub async fn get_earliest_unpruned_height(&self) -> Height {
-        self.store
+    /// Returns the earliest height with decided value data in the store.
+    /// The value is cached and updated after pruning.
+    pub async fn get_earliest_value_height(&mut self) -> Height {
+        if let Some(height) = self.earliest_value_height {
+            return height;
+        }
+
+        let height = self
+            .store
             .min_unpruned_decided_value_height()
             .await
-            .unwrap_or_default()
+            .unwrap_or_default();
+        self.earliest_value_height = Some(height);
+        height
     }
 
     /// Validates a proposal by checking both proposer and signature
@@ -558,7 +595,8 @@ impl State {
             && certificate.height.as_u64() % self.emerald_config.prune_at_block_interval == 0;
 
         // If storege becomes a bottleneck, consider optimizing this by pruning every INTERVAL heights
-        self.store
+        let prune_result = self
+            .store
             .prune(
                 self.emerald_config.num_certificates_to_retain,
                 self.emerald_config.num_temp_blocks_retained,
@@ -566,6 +604,13 @@ impl State {
                 prune_certificates,
             )
             .await?;
+
+        if let Some(height) = prune_result.earliest_certificate_height {
+            self.earliest_certificate_height = Some(height);
+        }
+        if let Some(height) = prune_result.earliest_value_height {
+            self.earliest_value_height = Some(height);
+        }
 
         // Sleep to reduce the block speed, if set via config.
         debug!(timeout_commit = ?self.emerald_config.min_block_time);
@@ -872,6 +917,6 @@ pub fn assemble_value_from_parts(parts: ProposalParts) -> (ProposedValue<Emerald
 }
 
 /// Decodes a Value from its byte representation using ProtobufCodec
-pub fn decode_value(bytes: Bytes) -> Value {
-    ProtobufCodec.decode(bytes).unwrap()
+pub fn decode_value(bytes: Bytes) -> Result<Value, ProtoError> {
+    ProtobufCodec.decode(bytes)
 }

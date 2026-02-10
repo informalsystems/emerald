@@ -1,6 +1,4 @@
-use alloy_primitives::{address, Address};
-use alloy_provider::ProviderBuilder;
-use alloy_rpc_types_engine::{ExecutionPayloadV3, PayloadStatusEnum};
+use alloy_rpc_types_engine::ExecutionPayloadV3;
 use bytes::Bytes;
 use color_eyre::eyre::{self, eyre, OptionExt};
 use malachitebft_app_channel::app::engine::host::Next;
@@ -11,282 +9,16 @@ use malachitebft_app_channel::{AppMsg, Channels, NetworkMsg};
 use malachitebft_eth_cli::config::EmeraldConfig;
 use malachitebft_eth_engine::engine::Engine;
 use malachitebft_eth_engine::json_structures::ExecutionBlock;
-use malachitebft_eth_types::secp256k1::PublicKey;
-use malachitebft_eth_types::{Block, BlockHash, EmeraldContext, Height, Validator, ValidatorSet};
+use malachitebft_eth_types::EmeraldContext;
 use ssz::{Decode, Encode};
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
 
-const GENESIS_VALIDATOR_MANAGER_ACCOUNT: Address =
-    address!("0x0000000000000000000000000000000000002000");
-
-alloy_sol_types::sol!(
-    #[derive(Debug)]
-    #[sol(rpc)]
-    ValidatorManager,
-    "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
-);
-
+use crate::bootstrap::{initialize_state_from_existing_block, initialize_state_from_genesis};
 use crate::payload::validate_execution_payload;
 use crate::state::{decode_value, State};
-use crate::store::Store;
 use crate::sync_handler::get_decided_value_for_sync;
-
-pub async fn initialize_state_from_genesis(state: &mut State, engine: &Engine) -> eyre::Result<()> {
-    // Get the genesis block from the execution engine
-    let genesis_block = engine
-        .eth
-        .get_block_by_number("earliest")
-        .await?
-        .ok_or_eyre("Genesis block does not exist")?;
-    debug!("👉 genesis_block: {:?}", genesis_block);
-    state.latest_block = Some(genesis_block);
-    let genesis_validator_set =
-        read_validators_from_contract(engine.eth.url().as_ref(), &genesis_block.block_hash).await?;
-    debug!("🌈 Got genesis validator set: {:?}", genesis_validator_set);
-    // Set consensus_height to the next height where consensus will work (the tip)
-    state.consensus_height = Height::new(genesis_block.block_number).increment();
-    state.set_validator_set(state.consensus_height, genesis_validator_set);
-    Ok(())
-}
-
-/// Replay blocks from Emerald's store to the execution client (Reth).
-/// This is needed when Reth is behind Emerald's stored height after a crash.
-async fn replay_heights_to_engine(
-    store: &Store,
-    engine: &Engine,
-    start_height: Height,
-    end_height: Height,
-    emerald_config: &EmeraldConfig,
-) -> eyre::Result<()> {
-    info!(
-        "🔄 Replaying heights {} to {} to execution client",
-        start_height, end_height
-    );
-
-    for height in start_height.as_u64()..=end_height.as_u64() {
-        let height = Height::new(height);
-
-        // Sending the whole block to the execution engine.
-        let value_bytes = store
-            .get_raw_decided_value(height)
-            .await?
-            .ok_or_else(|| {
-                eyre!("Decided value not found at height {height}, data integrity error")
-            })?
-            .value_bytes;
-
-        let value = decode_value(value_bytes);
-        let block_bytes = value.extensions.clone();
-        // Deserialize the execution payload
-        let execution_payload = ExecutionPayloadV3::from_ssz_bytes(&block_bytes).map_err(|e| {
-            eyre!(
-                "Failed to deserialize execution payload at height {}: {:?}",
-                height,
-                e
-            )
-        })?;
-
-        debug!(
-            "🔄 Replaying block at height {} with hash {:?}",
-            height, execution_payload.payload_inner.payload_inner.block_hash
-        );
-
-        // Extract versioned hashes from blob transactions
-        let block: Block = execution_payload.clone().try_into_block().map_err(|e| {
-            eyre!(
-                "Failed to convert execution payload to block at height {}: {}",
-                height,
-                e
-            )
-        })?;
-        let versioned_hashes: Vec<BlockHash> =
-            block.body.blob_versioned_hashes_iter().copied().collect();
-
-        // Submit the block to Reth
-        let payload_status = engine
-            .notify_new_block_with_retry(
-                execution_payload.clone(),
-                versioned_hashes,
-                &emerald_config.retry_config,
-            )
-            .await?;
-
-        // Verify the block was accepted
-        match payload_status.status {
-            PayloadStatusEnum::Valid => {
-                debug!("✅ Block at height {} replayed successfully", height);
-            }
-            PayloadStatusEnum::Invalid { validation_error } => {
-                return Err(eyre::eyre!(
-                    "Block replay failed at height {}: {}",
-                    height,
-                    validation_error
-                ));
-            }
-            PayloadStatusEnum::Accepted => {
-                // ACCEPTED is no instant finality and there is a possibility of a fork.
-                return Err(eyre::eyre!(
-                    "Block replay failed at height {}: execution client returned ACCEPTED status, which is not supported during replay",
-                    height
-                ));
-            }
-            PayloadStatusEnum::Syncing => {
-                return Err(eyre::eyre!(
-                    "Block replay failed at height {}: execution client still syncing",
-                    height
-                ));
-            }
-        }
-
-        // Update forkchoice to this block
-        engine
-            .set_latest_forkchoice_state(
-                execution_payload.payload_inner.payload_inner.block_hash,
-                &emerald_config.retry_config,
-            )
-            .await?;
-
-        debug!("🎯 Forkchoice updated to height {}", height);
-    }
-
-    info!("✅ Successfully replayed all heights to execution client");
-    Ok(())
-}
-
-/// Initialize state from a previously decided block stored locally by catching the
-/// execution client up to that height, updating forkchoice, and loading the validator
-/// set for the next consensus height.
-pub async fn initialize_state_from_existing_block(
-    state: &mut State,
-    engine: &Engine,
-    height: Height,
-    emerald_config: &EmeraldConfig,
-) -> eyre::Result<()> {
-    // If there was somethign stored in the store for height, we should be able to retrieve
-    // block data as well.
-
-    let latest_block_candidate_from_store = state
-        .get_latest_block_candidate(height)
-        .await
-        .ok_or_eyre("we have not atomically stored the last block, database corrupted")?;
-
-    // Check if Reth is behind Emerald's stored height
-    let reth_latest_height = engine.get_latest_block_number().await?;
-
-    match reth_latest_height {
-        Some(reth_height) if reth_height < height.as_u64() => {
-            // Reth is behind - we need to replay blocks
-            warn!(
-                "⚠️  Execution client is at height {} but Emerald has blocks up to height {}. Starting height replay.",
-                reth_height, height
-            );
-
-            // Replay from Reth's next height to Emerald's stored height
-            let replay_start = Height::new(reth_height + 1);
-            replay_heights_to_engine(&state.store, engine, replay_start, height, emerald_config)
-                .await?;
-
-            info!("✅ Height replay completed successfully");
-        }
-        Some(reth_height) => {
-            debug!(
-                "Execution client at height {} is aligned with or ahead of Emerald's stored height {}",
-                reth_height, height
-            );
-        }
-        None => {
-            // No blocks in Reth yet (genesis case) - this shouldn't happen here
-            // but handle it gracefully
-            warn!("⚠️  Execution client has no blocks, replaying from genesis");
-            replay_heights_to_engine(&state.store, engine, Height::new(1), height, emerald_config)
-                .await?;
-        }
-    }
-
-    let payload_status = engine
-        .send_forkchoice_updated(
-            latest_block_candidate_from_store.block_hash,
-            &emerald_config.retry_config,
-        )
-        .await?;
-    match payload_status.status {
-        PayloadStatusEnum::Valid => {
-            // Set consensus_height to the next height where consensus will work (the tip)
-            state.consensus_height = height.increment();
-            state.latest_block = Some(latest_block_candidate_from_store);
-            // From the Engine API spec:
-            // 8. Client software MUST respond to this method call in the
-            //    following way:
-            //   * {payloadStatus: {status: SYNCING, latestValidHash: null,
-            //   * validationError: null}, payloadId: null} if
-            //     forkchoiceState.headBlockHash references an unknown
-            //     payload or a payload that can't be validated because
-            //     requisite data for the validation is missing
-            debug!("Payload is valid");
-            debug!("latest block {:?}", state.latest_block);
-
-            // Read the validator set at the stored block - this is the validator set
-            // that will be active for the NEXT height (where consensus will start)
-            let block_validator_set = read_validators_from_contract(
-                engine.eth.url().as_ref(),
-                &latest_block_candidate_from_store.block_hash,
-            )
-            .await?;
-
-            // Consensus will start at consensus_height, so we set the validator set for that height
-            debug!("🌈 Got validator set: {:?} for height {}", block_validator_set, state.consensus_height);
-            state.set_validator_set(state.consensus_height, block_validator_set);
-
-            Ok(())
-        }
-        PayloadStatusEnum::Invalid { validation_error } => Err(eyre::eyre!(validation_error)),
-
-        PayloadStatusEnum::Accepted => Err(eyre::eyre!(
-            "execution engine returned ACCEPTED for payload, this should not happen"
-        )),
-        PayloadStatusEnum::Syncing => Err(eyre::eyre!(
-            "SYNCING status passed for payload, this should not happen due to retry logic in send_forkchoice_updated function"
-        )),
-    }
-}
-
-pub async fn read_validators_from_contract(
-    eth_url: &str,
-    block_hash: &BlockHash,
-) -> eyre::Result<ValidatorSet> {
-    let provider = ProviderBuilder::new().connect(eth_url).await?;
-
-    let validator_manager_contract =
-        ValidatorManager::new(GENESIS_VALIDATOR_MANAGER_ACCOUNT, provider);
-
-    let genesis_validator_set_sol = validator_manager_contract
-        .getValidators()
-        .block((*block_hash).into())
-        .call()
-        .await?;
-
-    let validators = genesis_validator_set_sol
-        .into_iter()
-        .map(
-            |ValidatorManager::ValidatorInfo {
-                 validatorKey,
-                 power,
-             }| {
-                let mut uncompressed = [0u8; 65];
-                uncompressed[0] = 0x04;
-                uncompressed[1..33].copy_from_slice(&validatorKey.x.to_be_bytes::<32>());
-                uncompressed[33..].copy_from_slice(&validatorKey.y.to_be_bytes::<32>());
-
-                let pub_key = PublicKey::from_sec1_bytes(&uncompressed)?;
-
-                Ok(Validator::new(pub_key, power))
-            },
-        )
-        .collect::<eyre::Result<Vec<_>>>()?;
-
-    Ok(ValidatorSet::new(validators))
-}
+use crate::validators::read_validators_from_contract;
 
 /// Handle ConsensusReady messages from the consensus engine
 ///
@@ -767,10 +499,30 @@ pub async fn on_process_synced_value(
 
     info!(%height, %round, "🟢🟢 Processing synced value");
 
-    let value = decode_value(value_bytes);
-    let block_bytes = value.extensions.clone();
+    // NOTE: Malachite has already validated the height and verified the certificate,
+    // which proves that 2/3+ of the validator set accepted this value. Therefore,
+    // we don't need to validate the proposer.
+    //
+    // We do validate the execution payload here for two reasons:
+    // 1. Optimization: Cache the validity result to avoid re-validation when decided
+    // 2. Safety check: If validation fails despite 2/3+ validators accepting it, this
+    //    indicates a serious issue (state divergence, execution client problems, or
+    //    Byzantine behavior) that should be investigated.
 
-    // Validate the synced block
+    // Check that the value can be decoded
+    let value = match decode_value(value_bytes) {
+        Ok(value) => value,
+        Err(e) => {
+            error!(%height, %round, error = %e, "Failed to decode synced value");
+            if reply.send(None).is_err() {
+                error!(%height, %round, "Failed to send ProcessSyncedValue None reply");
+            }
+            return Ok(());
+        }
+    };
+
+    // Validate the execution payload
+    let block_bytes = value.extensions.clone();
     let validity = validate_execution_payload(
         state.validated_cache_mut(),
         &block_bytes,
@@ -782,21 +534,15 @@ pub async fn on_process_synced_value(
     .await?;
 
     if validity == Validity::Invalid {
-        // Reject invalid blocks - don't store or reply with them
-        if reply
-            .send(Some(ProposedValue {
-                height,
-                round,
-                valid_round: Round::Nil,
-                proposer,
-                value,
-                validity: Validity::Invalid,
-            }))
-            .is_err()
-        {
-            error!("Failed to send ProcessSyncedValue rejection reply");
-        }
-        return Ok(());
+        // This indicates a serious issue: 2/3+ validators accepted this value,
+        // but our validation failed. This suggests state divergence, execution
+        // client problems, or Byzantine behavior.
+        return Err(eyre::eyre!(
+            "Execution payload validation failed for synced value at height {}, round {}. \
+             This is a serious issue as 2/3+ validators accepted this value.",
+            height,
+            round
+        ));
     }
 
     debug!(%height, "💡 Sync block validated");
@@ -809,12 +555,10 @@ pub async fn on_process_synced_value(
         validity: Validity::Valid,
     };
 
-    if let Err(e) = state
+    // Store block data so on_decided() can retrieve it when the Decided message arrives.
+    state
         .store_undecided_value(&proposed_value, block_bytes)
-        .await
-    {
-        error!(%height, %round, error = %e, "Failed to store synced value");
-    }
+        .await?;
 
     // Send to consensus to see if it has been decided on
     if reply.send(Some(proposed_value)).is_err() {
@@ -831,7 +575,7 @@ pub async fn on_process_synced_value(
 /// The application MUST respond with that value if available, or `None` otherwise.
 pub async fn on_get_decided_value(
     get_decided_value: AppMsg<EmeraldContext>,
-    state: &State,
+    state: &mut State,
     engine: &Engine,
 ) -> eyre::Result<()> {
     let AppMsg::GetDecidedValue { height, reply } = get_decided_value else {
@@ -840,12 +584,12 @@ pub async fn on_get_decided_value(
 
     info!(%height, "🟢🟢 GetDecidedValue");
 
-    let earliest_height_available = state.get_earliest_height().await;
+    let earliest_height_available = state.get_earliest_certificate_height().await;
     // Check if requested height is beyond our consensus height
     let raw_decided_value = if (earliest_height_available..state.consensus_height).contains(&height)
     {
-        let earliest_unpruned = state.get_earliest_unpruned_height().await;
-        get_decided_value_for_sync(&state.store, engine, height, earliest_unpruned).await?
+        let earliest_value_height = state.get_earliest_value_height().await;
+        get_decided_value_for_sync(&state.store, engine, height, earliest_value_height).await?
     } else {
         info!(%height, consensus_height = %state.consensus_height, "Requested height is >= consensus height or < earliest_height_available.");
         None
@@ -865,13 +609,13 @@ pub async fn on_get_decided_value(
 /// The application MUST respond with its earliest available height.
 pub async fn on_get_history_min_height(
     get_history_min_height: AppMsg<EmeraldContext>,
-    state: &State,
+    state: &mut State,
 ) -> eyre::Result<()> {
     let AppMsg::GetHistoryMinHeight { reply } = get_history_min_height else {
         unreachable!("on_get_history_min_height called with non-GetHistoryMinHeight message");
     };
 
-    let min_height = state.get_earliest_height().await;
+    let min_height = state.get_earliest_certificate_height().await;
 
     if reply.send(min_height).is_err() {
         error!("Failed to send GetHistoryMinHeight reply");

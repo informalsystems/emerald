@@ -4,6 +4,8 @@ resolver = "2"
 members = [
   "app",
   "cli",
+  "contracts",
+  "crates/core",
   "engine",
   "utils",
   "types",
@@ -49,6 +51,8 @@ std_instead_of_core           = "deny"
 
 [workspace.dependencies]
 emerald                 = { version = "0.0.1", path = "app" }
+emerald-contracts       = { version = "0.0.1", path = "contracts" }
+emerald-core            = { version = "0.0.1", path = "crates/core" }
 malachitebft-eth-cli    = { version = "0.0.1", path = "cli" }
 malachitebft-eth-engine = { version = "0.0.1", path = "engine" }
 malachitebft-eth-types  = { version = "0.0.1", path = "types" }

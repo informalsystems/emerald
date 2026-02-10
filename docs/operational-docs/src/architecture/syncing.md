@@ -65,11 +65,17 @@ sequenceDiagram
     M2-->>M1: Return result
 
     M1->>E1: AppMsg::ProcessSyncedValue
-    E1->>EC1: newPayload (validation request)
+    E1->>E1: Decode and store value (no EL call)
+    E1-->>M1: Return result
+
+    M1->>E1: AppMsg::Decided
+    E1->>EC1: newPayload (import into tree state)
     EC1-->>E1: Validation result
 
-    alt Valid/Invalid/Accepted
-        E1->>E1: Set validity accordingly
+    alt Valid
+        E1->>EC1: forkchoiceUpdated (set canonical head)
+        EC1-->>E1: Updated
+        E1->>E1: Commit and advance height
     else Syncing
         loop Retry mechanism
             E1->>EC1: newPayload (retry)
@@ -132,25 +138,16 @@ Depending on the node type, behavior differs:
 
 ## Sync Response Handling
 
-> TODO: Ensure this is the correct way to handle ProcessSyncedValue. If not, open a different PR to fix the code and then update this section.
+Upon receiving a response from a peer, Malachite provides the `height`, `round`, `proposer`, and `value_bytes` to the application (Emerald) via the `AppMsg::ProcessSyncedValue` message.
+The application processes it as follows:
 
-Upon receiving a response from a peer, Malachite is providing to the application (Emerald) the `height`, `round`, `proposer`, and `value_bytes` via the `AppMsg::ProcessSyncedValue` message. 
-The application is processing it as follows:
+1. Decode the value from its wire format.
+2. Store the block data as undecided so that it can be retrieved when the `Decided` message arrives.
+3. Return the decoded value to Malachite without calling the EL.
 
-1. Extract the payload from the value and then validate it using the Engine API method `engine_newPayload`.
-   This validation ensures that the provided value is consistent with the EL rules before passing it back to Malachite.
-2. Handle the payload validation responses:
-    - If the EL returns a `SYNCING` status, the node retries validation.
-    - The retry mechanism re-sends the validation request until the EL returns either `VALID` or `INVALID`.
-    - After each `SYNCING` response, the application waits for a configurable sleep delay before retrying.
+No `newPayload` call is made during this step. Malachite has already verified the commit certificate, proving that 2/3+ of the validator set accepted this value, so EL validation is redundant.
 
-    This was added in order to ensure proper sync in scenarios where both CL and EL are recovering from a crash.
-
-3. Return the reconstructed proposal to Malachite once validation succeeds.
-
-> [!NOTE]
-> In the current Malachite implementation, there is no timeout during validation of syncing values.
-> A configurable syncing timeout has been introduced as part of the `EmeraldConfig` to address this.
+The `newPayload` call is deferred to the `Decided` handler, where it is required to import the block into Reth's tree state before `forkchoiceUpdated` can set it as canonical head. If Reth returns `SYNCING` (e.g., because the parent block is not yet available), the retry mechanism re-sends the request until Reth returns `VALID` or `INVALID`.
 
 ## Example Flow
 
@@ -169,7 +166,7 @@ When Emerald receives the `AppMsg::GetDecidedValue` message, several situations 
 Suppose a situation where metadata is available, but the payloads for the corresponding block heights must be retrieved from Reth. 
 In this case, the decided value is reconstructed and returned to Malachite, which then forwards it to the syncing peer.
 
-When the peer receives the decided value, it must validate it via the `engine_newPayload` API call.
-If Reth is still syncing and does not yet have the required data for validation, the call will return `PayloadStatus::SYNCING`.
-In that case, Emerald will retry until the operation either succeeds or times out. 
-Once Reth returns `Valid` or `Invalid`, the peer can proceed accordingly.
+When the peer receives the decided value, it stores it locally without calling the EL (the certificate already proves validity).
+When the `Decided` message arrives, Emerald calls `engine_newPayload` to import the block into Reth's tree state, followed by `forkchoiceUpdated` to set it as canonical head.
+If Reth is still syncing and does not yet have the parent block, the `newPayload` call will return `PayloadStatus::SYNCING`.
+In that case, Emerald will retry until the operation either succeeds or times out.

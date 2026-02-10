@@ -19,13 +19,13 @@ const DST_BLS_SIG_IN_G1_WITH_POP: &[u8] = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_
 // Ethereum CL uses the same ciphersuite string for its G2 signatures.
 const DST_BLS_SIG_IN_G2_WITH_POP: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct MinSig;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct MinPk;
 
-pub trait BlsVariant: Copy + Send + Sync + 'static {
+pub trait BlsVariant: Copy + core::fmt::Debug + Eq + Ord + Send + Sync + 'static {
     type SecretKey: Clone + Send + Sync;
     type PublicKey: Clone + Send + Sync;
     type Signature: Clone + Send + Sync;
@@ -54,38 +54,10 @@ pub trait BlsVariant: Copy + Send + Sync + 'static {
 #[error("BLS decoding failed: {0:?}")]
 pub struct BlsDecodingError(pub BLST_ERROR);
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Signature<V: BlsVariant> {
     bytes: Vec<u8>,
     _marker: PhantomData<V>,
-}
-
-impl<V: BlsVariant> core::fmt::Debug for Signature<V> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Signature")
-            .field("bytes", &self.bytes)
-            .finish()
-    }
-}
-
-impl<V: BlsVariant> PartialEq for Signature<V> {
-    fn eq(&self, other: &Self) -> bool {
-        self.bytes == other.bytes
-    }
-}
-
-impl<V: BlsVariant> Eq for Signature<V> {}
-
-impl<V: BlsVariant> PartialOrd for Signature<V> {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<V: BlsVariant> Ord for Signature<V> {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.bytes.cmp(&other.bytes)
-    }
 }
 
 impl<V: BlsVariant> Signature<V> {
@@ -113,38 +85,10 @@ impl<V: BlsVariant> Signature<V> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PublicKey<V: BlsVariant> {
     bytes: Vec<u8>,
     _marker: PhantomData<V>,
-}
-
-impl<V: BlsVariant> core::fmt::Debug for PublicKey<V> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("PublicKey")
-            .field("bytes", &self.bytes)
-            .finish()
-    }
-}
-
-impl<V: BlsVariant> PartialEq for PublicKey<V> {
-    fn eq(&self, other: &Self) -> bool {
-        self.bytes == other.bytes
-    }
-}
-
-impl<V: BlsVariant> Eq for PublicKey<V> {}
-
-impl<V: BlsVariant> PartialOrd for PublicKey<V> {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<V: BlsVariant> Ord for PublicKey<V> {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.bytes.cmp(&other.bytes)
-    }
 }
 
 impl<V: BlsVariant> PublicKey<V> {
@@ -223,22 +167,8 @@ impl<V: BlsVariant> Hashable for PublicKey<V> {
     }
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct Bls12381<V: BlsVariant>(PhantomData<V>);
-
-impl<V: BlsVariant> core::fmt::Debug for Bls12381<V> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Bls12381").finish()
-    }
-}
-
-impl<V: BlsVariant> PartialEq for Bls12381<V> {
-    fn eq(&self, _other: &Self) -> bool {
-        true
-    }
-}
-
-impl<V: BlsVariant> Eq for Bls12381<V> {}
 
 impl<V: BlsVariant> SigningScheme for Bls12381<V> {
     type DecodingError = BlsDecodingError;

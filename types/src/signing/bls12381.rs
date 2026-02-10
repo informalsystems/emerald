@@ -229,7 +229,7 @@ impl<V: BlsVariant> Hashable for PublicKey<V> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Bls12381<V: BlsVariant>(PhantomData<V>);
 
 impl<V: BlsVariant> core::fmt::Debug for Bls12381<V> {
@@ -245,12 +245,6 @@ impl<V: BlsVariant> PartialEq for Bls12381<V> {
 }
 
 impl<V: BlsVariant> Eq for Bls12381<V> {}
-
-impl<V: BlsVariant> Default for Bls12381<V> {
-    fn default() -> Self {
-        Self(PhantomData)
-    }
-}
 
 impl<V: BlsVariant> SigningScheme for Bls12381<V> {
     type DecodingError = BlsDecodingError;

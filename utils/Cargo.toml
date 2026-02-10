@@ -29,6 +29,7 @@ reqwest            = { version = "0.12.2", default-features = false, features = 
 
 ethereum_serde_utils   = "0.8"
 malachitebft-eth-types = { workspace = true }
+emerald-contracts      = { workspace = true }
 
 alloy-consensus        = { workspace = true }
 alloy-contract         = { workspace = true }

@@ -29,6 +29,78 @@ pub struct EmeraldConfig {
     /// A custom human-readable name for this node
     pub moniker: String,
 
+    /// Execution layer config
+    pub ethereum_config: EthereumConfig,
+
+    /// Retry configuration for execution client sync operations
+    #[serde(default)]
+    pub retry_config: RetryConfig,
+
+    /// Type of execution layer node (archive, full, or custom)
+    #[serde(default)]
+    pub el_node_type: ElNodeType,
+
+    /// Number of certificates to retain.
+    /// Default is retain all (u64::MAX).
+    /// Once the certificates are deleted those blocks
+    /// cannot be validated on this node.
+    /// Has to be >= num_temp_blocks_retained (whose default is 10)
+    #[serde(default = "default_num_certificates_to_retain")]
+    pub num_certificates_to_retain: u64,
+
+    /// Number of blocks to wait before attempting pruning
+    /// Note that this applies only to pruning certificates.
+    /// Certificates are pruned based on num_certificates_to_retain.
+    /// This value cannot be 0.
+    /// Default: 10.
+    #[serde(default = "prune_at_interval_default")]
+    pub prune_at_block_interval: u64,
+
+    // Application set min_block_time forcing the app to sleep
+    // before moving onto the next height.
+    // Malachite does not have a notion of min_block_time, thus
+    // this has to be handled by the application.
+    // Default: 500ms
+    #[serde(with = "humantime_serde", default = "default_min_block_time")]
+    pub min_block_time: Duration,
+
+    // Address used to receive fees
+    pub fee_recipient: Address,
+
+    /// Emerald will store up to num_temp_blocks_retained
+    /// blocks locally and then delete them. This data
+    /// is stored and managed by the execution layer
+    /// thus no need to store it twice.
+    /// WARN: For Reth, this parameter has to be equal or greater than
+    /// the value of `engine.persistence-threshold` passed
+    /// to Reth on startup. If it is lower, on a crash,
+    /// the node will NOT be able to restart
+    /// Default: 10
+    #[serde(default = "default_num_temp_blocks_retained")]
+    pub num_temp_blocks_retained: u64,
+}
+
+fn default_min_block_time() -> Duration {
+    Duration::from_millis(500)
+}
+
+fn default_num_certificates_to_retain() -> u64 {
+    u64::MAX
+}
+fn prune_at_interval_default() -> u64 {
+    10
+}
+
+fn default_num_temp_blocks_retained() -> u64 {
+    10
+}
+
+fn default_eth_gensesis_path() -> String {
+    "./assets/genesis.json".to_string()
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct EthereumConfig {
     /// RPC endpoint of Ethereum execution client
     pub execution_authrpc_address: String,
 
@@ -41,54 +113,7 @@ pub struct EmeraldConfig {
     /// Path of the EVM genesis file
     #[serde(default = "default_eth_gensesis_path")]
     pub eth_genesis_path: String,
-
-    /// Retry configuration for execution client sync operations
-    #[serde(default)]
-    pub retry_config: RetryConfig,
-
-    /// Type of execution layer node (archive, full, or custom)
-    #[serde(default)]
-    pub el_node_type: ElNodeType,
-
-    /// Number of certificates to retain.
-    /// Default is retain all (u64::MAX).
-    #[serde(default = "max_retain_block_default")]
-    pub max_retain_blocks: u64,
-
-    /// Number of blocks to wait before attempting pruning
-    /// Note that this applies only to pruning certificates.
-    /// Certificates are pruned based on max_retain_blocks.
-    /// This value cannot be 0.
-    /// Defatul: 10.
-    #[serde(default = "prune_at_interval_default")]
-    pub prune_at_block_interval: u64,
-    // Application set min_block_time forcing the app to sleep
-    // before moving onto the next height.
-    // Malachite does not have a notion of min_block_time, thus
-    // this has to be handled by the application.
-    // Default: 500ms
-    #[serde(with = "humantime_serde", default = "default_min_block_time")]
-    pub min_block_time: Duration,
-
-    // Address used to receive fees
-    pub fee_recipient: Address,
 }
-
-fn default_min_block_time() -> Duration {
-    Duration::from_millis(500)
-}
-
-fn max_retain_block_default() -> u64 {
-    u64::MAX
-}
-fn prune_at_interval_default() -> u64 {
-    10
-}
-
-fn default_eth_gensesis_path() -> String {
-    "./assets/genesis.json".to_string()
-}
-
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     /// A custom human-readable name for this node

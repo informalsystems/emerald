@@ -238,17 +238,17 @@ for ((i = 0; i < nodes; i++)); do
     NODE_IP=$(get_node_ip $i "$custom_config_path")
     cat > "$TESTNET_DIR/config/$i/config.toml" <<EOF
 moniker = "test-$i"
-execution_authrpc_address = "http://$NODE_IP:$ENGINE_PORT"
-engine_authrpc_address = "http://$NODE_IP:$AUTH_PORT"
-jwt_token_path = "$ROOT_DIR/assets/jwtsecret"
 retry_config.initial_delay = "100ms"
 retry_config.max_delay = "2s"
 retry_config.max_elapsed_time = "20s"
-eth_genesis_path="$ROOT_DIR/assets/genesis.json"
+ethereum_config.execution_authrpc_address = "http://$NODE_IP:$ENGINE_PORT"
+ethereum_config.engine_authrpc_address = "http://$NODE_IP:$AUTH_PORT"
+ethereum_config.jwt_token_path = "$ROOT_DIR/assets/jwtsecret"
+ethereum_config.eth_genesis_path="$ROOT_DIR/assets/genesis.json"
 EOF
- # Set max_retain_blocks for pruning nodes
+ # Set num_certificates_to_retain for pruning nodes
       if [[ ${#PRUNING_NODES[@]} -gt 0 && " ${PRUNING_NODES[@]} " =~ " ${i} " ]]; then
-          echo "max_retain_blocks = 10064" >> "$TESTNET_DIR/config/$i/config.toml"
+          echo "num_certificates_to_retain = 10064" >> "$TESTNET_DIR/config/$i/config.toml"
           echo "el_node_type = \"custom\"" >> "$TESTNET_DIR/config/$i/config.toml"
       else
           echo "el_node_type = \"archive\"" >> "$TESTNET_DIR/config/$i/config.toml"

@@ -5,17 +5,10 @@ use alloy_signer::utils::raw_public_key_to_address;
 use alloy_signer_local::PrivateKeySigner;
 use color_eyre::eyre;
 use color_eyre::eyre::{Context, Result};
+use emerald_contracts::ValidatorManager;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::PublicKey;
 use reqwest::Url;
-
-// Define the Solidity contract ABI
-alloy_sol_types::sol!(
-    #[derive(Debug)]
-    #[sol(rpc)]
-    ValidatorManager,
-    "../solidity/out/ValidatorManager.sol/ValidatorManager.json"
-);
 
 pub fn pubkey_parser(validator_pubkey: &str) -> Result<(U256, U256)> {
     let pubkey_bytes = hex::decode(
@@ -117,7 +110,7 @@ pub async fn list_validators(rpc_url: &Url, contract_address: &Address) -> Resul
 
     // sort validators by power descending
     let mut validators = validators;
-    validators.sort_by(|a, b| b.power.cmp(&a.power));
+    validators.sort_by_key(|b| core::cmp::Reverse(b.power));
 
     for (i, validator) in validators.iter().enumerate() {
         println!("Validator #{}:", i + 1);

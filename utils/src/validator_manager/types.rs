@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 use alloy_primitives::U256;
 
-use crate::validator_manager::contract::ValidatorManager;
 use crate::validator_manager::error::{Error as ValidatorManagerError, Result};
+use crate::validator_manager::ValidatorManager;
 
 /// Tuple wrapper for an uncompressed secp256k1 public key (x, y limbs)
 pub type ValidatorKey = (U256, U256);

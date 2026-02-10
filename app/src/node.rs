@@ -5,7 +5,6 @@ use core::str::FromStr;
 use std::fs;
 use std::path::PathBuf;
 
-use alloy_genesis::Genesis as EvmGenesis;
 use async_trait::async_trait;
 use color_eyre::eyre;
 use libp2p_identity::Keypair;
@@ -119,30 +118,32 @@ impl App {
         };
 
         let emerald_config = self.load_emerald_config()?;
-
         let engine: Engine = {
-            let engine_url = Url::parse(&emerald_config.engine_authrpc_address)?;
-            let jwt_path = PathBuf::from_str(&emerald_config.jwt_token_path)?;
-            let eth_url = Url::parse(&emerald_config.execution_authrpc_address)?;
+            let engine_url = Url::parse(&emerald_config.ethereum_config.engine_authrpc_address)?;
+            let jwt_path = PathBuf::from_str(&emerald_config.ethereum_config.jwt_token_path)?;
+            let eth_url = Url::parse(&emerald_config.ethereum_config.execution_authrpc_address)?;
             Engine::new(
                 EngineRPC::new(engine_url, jwt_path.as_path())?,
                 EthereumRPC::new(eth_url)?,
             )
         };
 
-        let min_block_time = emerald_config.min_block_time;
-        let max_retain_blocks = emerald_config.max_retain_blocks;
+        // Check the validity of the configuration parameters
+        let num_certificates_to_retain = emerald_config.num_certificates_to_retain;
+        let num_temp_blocks_retained = emerald_config.num_temp_blocks_retained;
+
+        if num_certificates_to_retain < num_temp_blocks_retained {
+            return Err(eyre::eyre!(
+                "num_certificates_to_retain has to be >= than num_temp_blocks_retained."
+            ));
+        }
+
         let prune_at_block_interval = emerald_config.prune_at_block_interval;
 
         assert!(
             prune_at_block_interval != 0,
             "prune block interval cannot be 0"
         );
-
-        let eth_genesis_path = PathBuf::from_str(&emerald_config.eth_genesis_path)?;
-        let eth_genesis: EvmGenesis = serde_json::from_str(&fs::read_to_string(eth_genesis_path)?)?;
-
-        let evm_chain_config = eth_genesis.config;
 
         let state = State::new(
             genesis,
@@ -152,10 +153,7 @@ impl App {
             start_height,
             store,
             state_metrics,
-            max_retain_blocks,
-            prune_at_block_interval,
-            min_block_time,
-            evm_chain_config,
+            emerald_config.clone(),
         );
 
         Ok(AppRuntime {

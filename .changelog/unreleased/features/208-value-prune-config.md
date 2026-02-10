@@ -1,0 +1,2 @@
+- `[state/config]` Temporary block data retention is now configurable through the `num_temp_blocks_retained` parameter in `EmeraldConfig`, allowing users to align pruning behavior with their Reth execution client's persistence threshold.
+  ([\#208](https://github.com/informalsystems/emerald/pull/208))

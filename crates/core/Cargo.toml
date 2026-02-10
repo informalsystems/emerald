@@ -1,0 +1,16 @@
+[package]
+name         = "emerald-core"
+version      = { workspace = true }
+edition      = { workspace = true }
+readme       = { workspace = true }
+repository   = { workspace = true }
+license      = { workspace = true }
+rust-version = { workspace = true }
+publish      = { workspace = true }
+
+[dependencies]
+async-trait = { workspace = true }
+thiserror   = { workspace = true }
+
+[lints]
+workspace = true

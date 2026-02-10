@@ -483,8 +483,6 @@ pub async fn on_decided(
 pub async fn on_process_synced_value(
     process_synced_value: AppMsg<EmeraldContext>,
     state: &mut State,
-    engine: &Engine,
-    emerald_config: &EmeraldConfig,
 ) -> eyre::Result<()> {
     let AppMsg::ProcessSyncedValue {
         height,
@@ -500,14 +498,9 @@ pub async fn on_process_synced_value(
     info!(%height, %round, "🟢🟢 Processing synced value");
 
     // NOTE: Malachite has already validated the height and verified the certificate,
-    // which proves that 2/3+ of the validator set accepted this value. Therefore,
-    // we don't need to validate the proposer.
-    //
-    // We do validate the execution payload here for two reasons:
-    // 1. Optimization: Cache the validity result to avoid re-validation when decided
-    // 2. Safety check: If validation fails despite 2/3+ validators accepting it, this
-    //    indicates a serious issue (state divergence, execution client problems, or
-    //    Byzantine behavior) that should be investigated.
+    // which proves that 2/3+ of the validator set accepted this value. We skip
+    // newPayload validation here and defer it to on_decided(), where it is required
+    // to import the block into Reth's tree state before forkchoiceUpdated.
 
     // Check that the value can be decoded
     let value = match decode_value(value_bytes) {
@@ -521,38 +514,15 @@ pub async fn on_process_synced_value(
         }
     };
 
-    // Validate the execution payload
     let block_bytes = value.extensions.clone();
-    let validity = validate_execution_payload(
-        state.validated_cache_mut(),
-        &block_bytes,
-        height,
-        round,
-        engine,
-        &emerald_config.retry_config,
-    )
-    .await?;
 
-    if validity == Validity::Invalid {
-        // This indicates a serious issue: 2/3+ validators accepted this value,
-        // but our validation failed. This suggests state divergence, execution
-        // client problems, or Byzantine behavior.
-        return Err(eyre::eyre!(
-            "Execution payload validation failed for synced value at height {}, round {}. \
-             This is a serious issue as 2/3+ validators accepted this value.",
-            height,
-            round
-        ));
-    }
-
-    debug!(%height, "💡 Sync block validated");
     let proposed_value: ProposedValue<EmeraldContext> = ProposedValue {
         height,
         round,
         valid_round: Round::Nil,
         proposer,
         value,
-        validity: Validity::Valid,
+        validity: Validity::Valid, // already validated by 2/3+ of the validator set
     };
 
     // Store block data so on_decided() can retrieve it when the Decided message arrives.
@@ -779,7 +749,7 @@ pub async fn process_consensus_message(
         // that they are at. When the engine receives such a value, it will forward to the application
         // to decode it from its wire format and send back the decoded value to consensus.
         msg @ AppMsg::ProcessSyncedValue { .. } => {
-            on_process_synced_value(msg, state, engine, emerald_config).await?;
+            on_process_synced_value(msg, state).await?;
         }
 
         // If, on the other hand, we are not lagging behind but are instead asked by one of

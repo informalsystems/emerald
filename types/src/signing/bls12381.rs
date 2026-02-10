@@ -372,6 +372,17 @@ mod tests {
 
     use super::*;
 
+    /*
+    Source: ethereum/bls12-381-tests v0.1.2 release asset `bls_tests_json.tar.gz`
+    URL: https://github.com/ethereum/bls12-381-tests/releases/tag/v0.1.2
+    Fetch with:
+    curl -sL "https://github.com/ethereum/bls12-381-tests/releases/download/v0.1.2/bls_tests_json.tar.gz" \
+      | tar -xzO "./verify/verify_valid_case_195246ee3bd3b6ec.json" \
+      | jq
+    curl -sL "https://github.com/ethereum/bls12-381-tests/releases/download/v0.1.2/bls_tests_json.tar.gz" \
+      | tar -xzO "./verify/verify_wrong_pubkey_case_195246ee3bd3b6ec.json" \
+      | jq
+    */
     const MESSAGE: [u8; 32] = hex!(
         "abababababababababababababababab"
         "abababababababababababababababab"
@@ -424,9 +435,6 @@ mod tests {
 
     #[test]
     fn min_pk_ethereum_vector_verify_valid_case() {
-        // Source: ethereum/bls12-381-tests v0.1.2 release asset `bls_tests_json.tar.gz`,
-        // file `verify/verify_valid_case_195246ee3bd3b6ec.json`
-        // URL: https://github.com/ethereum/bls12-381-tests/releases/tag/v0.1.2
         let public_key = PublicKey::<MinPk>::from_bytes(&PUBKEY).unwrap();
         let signature = Signature::<MinPk>::from_bytes(&SIGNATURE_VALID).unwrap();
 
@@ -435,9 +443,6 @@ mod tests {
 
     #[test]
     fn min_pk_ethereum_vector_verify_wrong_pubkey_case() {
-        // Source: ethereum/bls12-381-tests v0.1.2 release asset `bls_tests_json.tar.gz`,
-        // file `verify/verify_wrong_pubkey_case_195246ee3bd3b6ec.json`
-        // URL: https://github.com/ethereum/bls12-381-tests/releases/tag/v0.1.2
         let public_key = PublicKey::<MinPk>::from_bytes(&PUBKEY).unwrap();
         let signature = Signature::<MinPk>::from_bytes(&SIGNATURE_WRONG_PUBKEY).unwrap();
 

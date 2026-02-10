@@ -4841,6 +4841,7 @@ dependencies = [
  "serde",
  "serde_json",
  "signature",
+ "thiserror 2.0.17",
 ]
 
 [[package]]

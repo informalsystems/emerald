@@ -176,6 +176,8 @@ impl<V: BlsVariant> PublicKey<V> {
     }
 
     pub fn verify(&self, data: &[u8], signature: &Signature<V>) -> bool {
+        // TODO: avoid reparsing signature/public key bytes on every verify call; keep a parsed form
+        // or cache decoded blst values for consensus hot paths.
         let Ok(sig) = V::signature_from_bytes(&signature.bytes) else {
             return false;
         };

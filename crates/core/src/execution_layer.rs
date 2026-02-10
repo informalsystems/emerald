@@ -14,10 +14,10 @@ pub trait Block: Send + Sync + Clone {
 }
 
 #[async_trait::async_trait]
-pub trait ExecutionLayer: Send + Sync + 'static {
+pub trait ExecutionLayer: Send + Sync {
     type Block: Block;
     type ValidatorSet: Send + Sync + Clone;
-    type Error: Error + Send + Sync + 'static;
+    type Error: Error + Send + Sync;
 
     async fn genesis_block(&self) -> Result<Self::Block, Self::Error>;
 

@@ -129,22 +129,10 @@ The `newPayload` call is deferred to the `Decided` handler, where it is required
 
 ## Example Flow
 
-Consider a scenario where the entire node falls behind. In this case, 
+Consider a node that falls behind. Both Malachite and Reth detect they are lagging (Malachite via status exchanges, Reth via P2P peer announcements).
 
-- Reth will detect from its peers that it is lagging; 
-- and Malachite will trigger its syncing protocol through status exchanges.
+Malachite drives the catch-up. For each missing height, a peer's Malachite asks its local Emerald for the decided value (`GetDecidedValue`). Depending on what's available locally, Emerald either returns the value from storage or reconstructs it from the stored header + EL body (see [Sync Request Handling](#sync-request-handling)).
 
-On the Malachite side, data needs to be retrieved from its application (i.e., Emerald with Reth as EL) to provide information to peers. 
-When Emerald receives the `AppMsg::GetDecidedValue` message, several situations are possible:
+On the catching-up node, Malachite delivers each synced value to Emerald (`ProcessSyncedValue`), which decodes and stores it. When Malachite confirms the decision (`Decided`), Emerald imports the block into Reth via `newPayload` and advances the canonical head via `forkchoiceUpdated` (see [Sync Response Handling](#sync-response-handling)).
 
-1. Data is available locally in Emerald - this applies only for the last few heights (5).
-2. Metadata is available, but the full decided value is missing - Emerald needs to query Reth for the missing data.
-3. No data is available at all.
-
-Suppose a situation where metadata is available, but the payloads for the corresponding block heights must be retrieved from Reth. 
-In this case, the decided value is reconstructed and returned to Malachite, which then forwards it to the syncing peer.
-
-When the peer receives the decided value, it stores it locally without calling the EL (the certificate already proves validity).
-When the `Decided` message arrives, Emerald calls `engine_newPayload` to import the block into Reth's tree state, followed by `forkchoiceUpdated` to set it as canonical head.
-If Reth is still syncing and does not yet have the parent block, the `newPayload` call will return `PayloadStatus::SYNCING`.
-In that case, Emerald will retry until the operation either succeeds or times out.
+If Reth returns `SYNCING` (e.g., because it hasn't yet received the parent block from its own P2P sync), Emerald retries until the import succeeds or times out.

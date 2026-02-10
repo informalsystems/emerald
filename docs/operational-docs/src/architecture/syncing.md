@@ -2,7 +2,7 @@
 
 ## Overview
 
-### Malachite
+### Malachite Sync
 
 [ValueSync](https://github.com/informalsystems/malachite/tree/main/specs/synchronization) is a protocol that runs alongside consensus to help nodes catch up when they fall behind. 
 It operates as a client-server system where each node runs both roles simultaneously.
@@ -22,7 +22,7 @@ When using Malachite's Channel API, ValueSync interacts with the application thr
 
 This design keeps syncing logic separate from consensus while reusing the same validation and commitment paths, i.e, a synced block goes through the same checks as a block decided in real-time.
 
-### Reth
+### Reth Sync
 
 Post-merge, Reth does not autonomously advance its canonical chain. It relies on the consensus layer (CL) to drive block import and chain head selection via the Engine API. Reth's P2P sync is purely reactive and on-demand:
 
@@ -34,7 +34,7 @@ Reth nodes are connected via P2P (explicit peering via `add_peers.sh` or `--trus
 
 In Emerald's architecture, `newPayload` is the optimal path for feeding blocks to Reth during sync: Emerald already has the full payload from Malachite's ValueSync, so importing it directly is faster and more reliable than waiting for Reth P2P download.
 
-### Emerald
+### Emerald Sync
 
 ```mermaid
 sequenceDiagram

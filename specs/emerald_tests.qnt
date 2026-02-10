@@ -44,6 +44,12 @@ module emerald_tests {
       .perform(handle_started_round)
       .expect(s.system.get(node).phase == Working)
 
+  run skipRound(node: Node, height: Height, round: Round): bool =
+    node
+      .with_cue(listen_skip_round, (height, round))
+      .perform(handle_started_round)
+      .expect(s.system.get(node).consensus_round == round)
+
   run getValue(node: Node, proposal: Proposal): bool =
     node
       .with_cue(listen_get_value, ())
@@ -192,6 +198,31 @@ module emerald_tests {
       .then("node3".receivedProposal(proposal(1, 1, 1)))
       .then("node2".decided(proposal(1, 1, 1)))
       .then("node1".decided(proposal(1, 1, 1)))
+      .then("node3".decided(proposal(1, 1, 1)))
+      .expect(NODES.toSet().forall(node =>
+        val st = s.system.get(node)
+        and {
+          st.last_decided_height == 1,
+          st.last_decided_payload == Some(1)
+        }
+      ))
+
+  // Unhappy path: node decides after skipping a round
+  run emeraldSkipsRoundAndDecide =
+    genesisStart
+      .then("node1".getValue(proposal(1, 0, 0)))
+      .then("node1".timeout(1, 0))
+      .then("node2".timeout(1, 0))
+      .then("node1".startedRound(1, 1))
+      .then("node2".startedRound(1, 1))
+      .expect(proposer_for(1, 1) == "node2")
+      .then("node2".getValue(proposal(1, 1, 1)))
+      .then("node1".receivedProposal(proposal(1, 1, 1)))
+      .then("node2".decided(proposal(1, 1, 1)))
+      .then("node1".decided(proposal(1, 1, 1)))
+      .expect(s.system.get("node3").consensus_round == 0)
+      .then("node3".receivedProposal(proposal(1, 1, 1)))
+      .then("node3".skipRound(1, 1))
       .then("node3".decided(proposal(1, 1, 1)))
       .expect(NODES.toSet().forall(node =>
         val st = s.system.get(node)

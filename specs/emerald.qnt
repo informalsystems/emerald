@@ -119,6 +119,10 @@ module emerald {
   // Assumption: After ConsensusReady, on new heights, or upon a timeout,
   // Malachite will call StartedRound informing Emerald of a new round starting.
   // In response, Emerald will track the consensus height and round.
+  //
+  // Assumption: If a decision can be made for the height but at a higher round,
+  // Malachite will call StartedRound informing the application to skip to that
+  // round before calling Decided.
 
   pure def listen_started_round(ctx: LocalContext): Set[(Height, Round)] = {
     val s = ctx.state
@@ -134,6 +138,22 @@ module emerald {
     if (timeout != None)       Set((s.consensus_height, s.consensus_round + 1))
     else if (s.phase == Ready) Set((s.consensus_height, s.consensus_round))
     else                       Set()
+  }
+
+  pure def listen_skip_round(ctx: LocalContext): Set[(Height, Round)] = {
+    val s = ctx.state
+
+    if (s.phase == Working)
+      match get_global_decision(ctx, s.consensus_height) {
+        | None => Set()
+        | Some(p) =>
+            if (p.in(s.proposals) and p.round > s.consensus_round)
+              Set((s.consensus_height, p.round))
+            else
+              Set()
+      }
+    else
+      Set()
   }
 
   pure def handle_started_round(ctx: LocalContext, params: (Height, Round)): Transition = {
@@ -274,11 +294,14 @@ module emerald {
               | None    => Set()
             }
         // A decision has been made for the consensus height. Let's replicate
-        // the decision as long as the Emerald node is at the same height.
+        // the decision as long as the Emerald node is at the same height, the
+        // node is syncing OR the node is working at the same round as the
+        // decision (see listen_skip_round).
         | Some(p) =>
             if (and {
               p.in(s.proposals),
-              p.height == s.consensus_height
+              p.height == s.consensus_height,
+              s.phase == Working implies p.round == s.consensus_round
             })
               Set(p)
             else
@@ -547,6 +570,7 @@ module emerald {
 
       // Round progression
       choreo::cue(ctx, listen_started_round, handle_started_round),
+      choreo::cue(ctx, listen_skip_round, handle_started_round),
 
       // Proposal building and broadcast
       choreo::cue(ctx, listen_get_value, handle_get_value),

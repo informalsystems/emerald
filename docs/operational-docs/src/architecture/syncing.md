@@ -135,7 +135,7 @@ The `newPayload` call is deferred to the `Decided` handler, where it is required
 
 | Parameter | Default | Impact on syncing |
 |-----------|---------|-------------------|
-| `num_certificates_to_retain` | unlimited (`u64::MAX`) | Determines how far back this node can serve sync requests. Once a certificate is pruned, the corresponding height can no longer be served to peers. |
+| `num_certificates_to_retain` | unlimited (`u64::MAX`) | Determines how far back this node can serve sync requests. Once a certificate is pruned, the corresponding height can no longer be served to peers.  This value should follow the pruning related configuration of the EL. |
 | `num_temp_blocks_retained` | 10 | Number of heights for which full block data is kept locally. Below this, block bodies must be reconstructed from stored headers + EL. |
 | `prune_at_block_interval` | 10 | How often (in heights) certificate pruning runs. Does not affect block data pruning, which runs every height. |
 | `retry_config.max_elapsed_time` | 10s | Total timeout for `newPayload` retries when Reth returns `SYNCING` during the `Decided` handler. If exceeded, the node errors. |

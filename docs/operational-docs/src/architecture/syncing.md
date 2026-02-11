@@ -100,7 +100,7 @@ When Emerald receives `AppMsg::GetDecidedValue`, it processes it as follows:
 
 `engine_getPayloadBodiesByRange` returns only transactions and withdrawals — not the header fields (parent_hash, state_root, timestamp, etc.). To reconstruct a full payload, Emerald stores block headers (the payload with transactions and withdrawals stripped) at commit time. This keeps storage lightweight while allowing full payloads to be reconstructed on demand from header + EL body.
 
-`eth_getBlockByNumber` could serve a similar purpose, but `getPayloadBodiesByRange` was chosen because it is purpose-built for sync. Currently it is called with a count of 1 (one block at a time), but it supports range queries for future batching.
+`eth_getBlockByNumber` could serve a similar purpose, but `getPayloadBodiesByRange` was chosen because it is purpose-built for sync. Currently it is called with a count of 1 (one block at a time). Although `getPayloadBodiesByRange` supports range queries, Emerald cannot take advantage of this because Malachite requests only one value at a time from the application via `GetDecidedValue`. At the consensus level, nodes request batches of values from each other, but consensus delivers them to the app one by one, so Emerald has no way of knowing what the remaining values in the batch are.
 
 ### Pruning
 

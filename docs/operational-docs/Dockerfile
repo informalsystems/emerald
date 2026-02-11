@@ -3,12 +3,7 @@ FROM rust:1.90-slim AS builder
 
 # Install mdbook
 RUN cargo install mdbook --version 0.5.1
-
-# Use the same base as the builder for compatibility
-FROM rust:1.90-slim
-
-# Copy mdbook binary from builder
-COPY --from=builder /usr/local/cargo/bin/mdbook /usr/local/bin/mdbook
+RUN cargo install mdbook-mermaid
 
 # Set working directory
 WORKDIR /docs
@@ -17,6 +12,8 @@ WORKDIR /docs
 COPY book.toml .
 COPY src ./src
 COPY theme ./theme
+
+RUN mdbook-mermaid install /docs
 
 # Expose the port mdbook serve uses
 EXPOSE 3000

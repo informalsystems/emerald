@@ -127,7 +127,7 @@ No `newPayload` call is made during this step. Malachite has already verified th
 
 The proposal is thus marked as `valid`. 
 
-The `newPayload` call is deferred to the `Decided` handler, where it is required to import the block into Reth's tree state before `forkchoiceUpdated` can set it as canonical head. If Reth returns `SYNCING` (e.g., because the parent block is not yet available), the retry mechanism re-sends the request until Reth returns `VALID` or `INVALID`.
+The `newPayload` call is deferred to the `Decided` handler, where it is required to import the block into Reth's tree state before `forkchoiceUpdated` can set it as canonical head. If Reth returns `SYNCING` (e.g., because the parent block is not yet available), the retry mechanism re-sends the request until Reth returns `VALID` or  `INVALID`. Note that in order to get to this point, the CL will have to have obtained 2/3+ certificates validating this block, thus the EL should never return `INVALID` at this point. In case it does, the node will not be able to proceed. 
 
 ## Sync Configuration
 

@@ -6,6 +6,7 @@ use std::process::Command;
 
 use clap::Parser;
 use color_eyre::Result;
+use tracing::{debug, info, warn};
 
 #[derive(Parser, Debug, Clone, PartialEq)]
 pub struct TestnetStopCmd {}
@@ -13,13 +14,10 @@ pub struct TestnetStopCmd {}
 impl TestnetStopCmd {
     /// Execute the stop command
     pub fn run(&self, home_dir: &Path) -> Result<()> {
-        println!("🛑 Stopping all testnet nodes...\n");
+        info!("Stopping all testnet nodes");
 
         if !home_dir.exists() {
-            println!(
-                "⚠️  Testnet directory does not exist at {}",
-                home_dir.display()
-            );
+            warn!("Testnet directory does not exist at {}", home_dir.display());
             return Ok(());
         }
 
@@ -41,7 +39,7 @@ impl TestnetStopCmd {
 
         // Iterate through all node directories
         for (node_id, path) in node_infos {
-            println!("Stopping node {node_id}...");
+            info!("Stopping node {node_id}");
 
             // Stop Reth process
             let reth_pid_file = path.join("reth.pid");
@@ -49,14 +47,14 @@ impl TestnetStopCmd {
                 if let Ok(pid_str) = fs::read_to_string(&reth_pid_file) {
                     if let Ok(pid) = pid_str.trim().parse::<u32>() {
                         total_processes += 1;
-                        print!("  Stopping Reth (PID: {pid})... ");
+                        debug!("Stopping Reth (PID: {pid})");
                         match Command::new("kill").args(["-9", &pid.to_string()]).output() {
                             Ok(output) if output.status.success() => {
-                                println!("✓");
+                                info!("Stopped Reth (PID: {pid})");
                                 stopped_count += 1;
                             }
                             _ => {
-                                println!("✗ (process may already be stopped)");
+                                debug!("Process may already be stopped (PID: {pid})");
                             }
                         }
                         let _ = fs::remove_file(&reth_pid_file);
@@ -70,14 +68,14 @@ impl TestnetStopCmd {
                 if let Ok(pid_str) = fs::read_to_string(&emerald_pid_file) {
                     if let Ok(pid) = pid_str.trim().parse::<u32>() {
                         total_processes += 1;
-                        print!("  Stopping Emerald (PID: {pid})... ");
+                        debug!("Stopping Emerald (PID: {pid})");
                         match Command::new("kill").args(["-9", &pid.to_string()]).output() {
                             Ok(output) if output.status.success() => {
-                                println!("✓");
+                                info!("Stopped Emerald (PID: {pid})");
                                 stopped_count += 1;
                             }
                             _ => {
-                                println!("✗ (process may already be stopped)");
+                                debug!("Process may already be stopped (PID: {pid})");
                             }
                         }
                         let _ = fs::remove_file(&emerald_pid_file);
@@ -86,11 +84,10 @@ impl TestnetStopCmd {
             }
         }
 
-        println!();
         if total_processes == 0 {
-            println!("⚠️  No running processes found");
+            warn!("No running processes found");
         } else {
-            println!("✅ Stopped {stopped_count}/{total_processes} processes");
+            info!("Stopped {stopped_count}/{total_processes} processes");
         }
 
         Ok(())

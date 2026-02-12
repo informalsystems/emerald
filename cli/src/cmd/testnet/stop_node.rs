@@ -7,6 +7,7 @@ use std::process::Command;
 use clap::Parser;
 use color_eyre::eyre::eyre;
 use color_eyre::Result;
+use tracing::{debug, info, warn};
 
 #[derive(Parser, Debug, Clone, PartialEq)]
 pub struct TestnetStopNodeCmd {
@@ -27,7 +28,7 @@ impl TestnetStopNodeCmd {
             ));
         }
 
-        println!("🛑 Stopping node {}...", self.node_id);
+        info!("Stopping node {}", self.node_id);
 
         let mut stopped_count = 0;
 
@@ -37,24 +38,24 @@ impl TestnetStopNodeCmd {
             match fs::read_to_string(&reth_pid_file) {
                 Ok(pid_str) => {
                     if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                        print!("  Stopping Reth process (PID: {pid})... ");
+                        debug!("Stopping Reth process (PID: {pid})");
                         match Command::new("kill").args(["-9", &pid.to_string()]).output() {
                             Ok(output) if output.status.success() => {
-                                println!("✓");
+                                info!("Stopped Reth process (PID: {pid})");
                                 stopped_count += 1;
                             }
                             _ => {
-                                println!("✗ (failed to stop)");
+                                warn!("Failed to stop Reth process (PID: {pid})");
                             }
                         }
                         // Always remove PID file regardless
                         let _ = fs::remove_file(&reth_pid_file);
                     }
                 }
-                Err(_) => println!("  No Reth PID file found"),
+                Err(_) => debug!("No Reth PID file found"),
             }
         } else {
-            println!("  No Reth PID file found");
+            debug!("No Reth PID file found");
         }
 
         // Stop Emerald process
@@ -63,31 +64,31 @@ impl TestnetStopNodeCmd {
             match fs::read_to_string(&emerald_pid_file) {
                 Ok(pid_str) => {
                     if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                        print!("  Stopping Emerald process (PID: {pid})... ");
+                        debug!("Stopping Emerald process (PID: {pid})");
                         match Command::new("kill").args(["-9", &pid.to_string()]).output() {
                             Ok(output) if output.status.success() => {
-                                println!("✓");
+                                info!("Stopped Emerald process (PID: {pid})");
                                 stopped_count += 1;
                             }
                             _ => {
-                                println!("✗ (failed to stop)");
+                                warn!("Failed to stop Emerald process (PID: {pid})");
                             }
                         }
                         // Always remove PID file regardless
                         let _ = fs::remove_file(&emerald_pid_file);
                     }
                 }
-                Err(_) => println!("  No Emerald PID file found"),
+                Err(_) => debug!("No Emerald PID file found"),
             }
         } else {
-            println!("  No Emerald PID file found");
+            debug!("No Emerald PID file found");
         }
 
         if stopped_count == 0 {
-            println!("\n⚠️  No running processes found for node {}", self.node_id);
+            warn!("No running processes found for node {}", self.node_id);
         } else {
-            println!(
-                "\n✅ Stopped {} process(es) for node {}",
+            info!(
+                "Stopped {} process(es) for node {}",
                 stopped_count, self.node_id
             );
         }

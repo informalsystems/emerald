@@ -4,6 +4,7 @@ use std::path::Path;
 
 use clap::Parser;
 use color_eyre::Result;
+use tracing::info;
 
 use super::rpc::RpcClient;
 use super::types::{ProcessHandle, RethPorts};
@@ -16,8 +17,8 @@ pub struct TestnetStatusCmd {
 impl TestnetStatusCmd {
     /// Execute the testnet status command
     pub fn run(&self, home_dir: &Path) -> Result<()> {
-        println!("📊 Testnet Status");
-        println!("Looking for nodes in: {}\n", home_dir.display());
+        info!("Testnet Status");
+        info!("Looking for nodes in: {}", home_dir.display());
 
         // Find all node directories
         let mut node_count = 0;
@@ -29,14 +30,14 @@ impl TestnetStatusCmd {
             let node_dir = home_dir.join(i.to_string());
             if !node_dir.exists() {
                 if i == 0 {
-                    println!("No testnet found. Run 'emerald testnet start' first.");
+                    info!("No testnet found. Run 'emerald testnet start' first.");
                     return Ok(());
                 }
                 break;
             }
 
             node_count += 1;
-            println!("Node {i}:");
+            info!("Node {i}:");
 
             // Check Emerald status
             let emerald_pid_file = node_dir.join("emerald.pid");
@@ -51,7 +52,7 @@ impl TestnetStatusCmd {
             } else {
                 "Not started".to_string()
             };
-            println!("  Emerald: {emerald_status}");
+            info!("  Emerald: {emerald_status}");
 
             // Check Reth status
             let reth_pid_file = node_dir.join("reth.pid");
@@ -66,28 +67,28 @@ impl TestnetStatusCmd {
             } else {
                 "Not started".to_string()
             };
-            println!("  Reth:    {reth_status}");
+            info!("  Reth:    {reth_status}");
 
             // Get block height if Reth is running
             let ports = RethPorts::for_node(i);
             let rpc = RpcClient::new(ports.http);
 
             if let Ok(height) = rpc.get_block_number() {
-                println!("  Height:  {height}");
+                info!("  Height:  {height}");
             }
 
             // Get peer count if Reth is running
             if let Ok(peers) = rpc.get_peer_count() {
-                println!("  Peers:   {peers}");
+                info!("  Peers:   {peers}");
             }
-
-            println!();
         }
 
-        println!("Summary:");
-        println!("  Total nodes:    {node_count}");
-        println!("  Emerald running: {running_emerald}/{node_count}");
-        println!("  Reth running:    {running_reth}/{node_count}");
+        info!(
+            total_nodes=?node_count,
+            emerald_running=?running_emerald,
+            reth_running=?running_reth,
+            "Status"
+        );
 
         Ok(())
     }

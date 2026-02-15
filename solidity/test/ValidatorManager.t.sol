@@ -3,10 +3,12 @@ pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {ValidatorManager} from "../src/ValidatorManager.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ValidatorManagerProxy} from "../src/ValidatorManagerProxy.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 contract ValidatorManagerTest is Test {
     ValidatorManager internal validatorManager;
+    ValidatorManager internal implementation;
 
     uint64 internal constant INITIAL_POWER = 100;
     uint64 internal constant UPDATED_POWER = 200;
@@ -56,7 +58,12 @@ contract ValidatorManagerTest is Test {
     );
 
     function setUp() public {
-        validatorManager = new ValidatorManager();
+        // Deploy implementation and proxy
+        implementation = new ValidatorManager();
+        bytes memory initData = abi.encodeCall(ValidatorManager.initialize, (address(this)));
+        ValidatorManagerProxy proxy = new ValidatorManagerProxy(address(implementation), initData);
+        validatorManager = ValidatorManager(address(proxy));
+
         ValidatorManager.Secp256k1Key memory aliceKeyMem = validatorManager._secp256k1KeyFromBytes(ALICE_UNCOMPRESSED);
         aliceKey = aliceKeyMem;
         aliceValidatorAddress = validatorManager._validatorAddress(aliceKeyMem);
@@ -151,7 +158,7 @@ contract ValidatorManagerTest is Test {
 
     function testNonOwnerCannotRegisterValidator() public {
         bytes memory alicePublicKey = ALICE_UNCOMPRESSED;
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, NON_OWNER));
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, NON_OWNER));
         vm.prank(NON_OWNER);
         validatorManager.register(alicePublicKey, INITIAL_POWER);
     }
@@ -192,7 +199,7 @@ contract ValidatorManagerTest is Test {
         bytes memory alicePublicKey = ALICE_UNCOMPRESSED;
         validatorManager.register(alicePublicKey, INITIAL_POWER);
 
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, NON_OWNER));
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, NON_OWNER));
         vm.prank(NON_OWNER);
         validatorManager.updatePower(aliceValidatorAddress, UPDATED_POWER);
     }
@@ -252,7 +259,7 @@ contract ValidatorManagerTest is Test {
         bytes memory alicePublicKey = ALICE_UNCOMPRESSED;
         validatorManager.register(alicePublicKey, INITIAL_POWER);
 
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, NON_OWNER));
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, NON_OWNER));
         vm.prank(NON_OWNER);
         validatorManager.unregister(aliceValidatorAddress);
     }
@@ -312,7 +319,7 @@ contract ValidatorManagerTest is Test {
         validatorManager.transferOwnership(NEW_OWNER);
         assertEq(validatorManager.owner(), NEW_OWNER);
 
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, NON_OWNER));
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, NON_OWNER));
         vm.prank(NON_OWNER);
         validatorManager.transferOwnership(address(0xBAD));
 
@@ -323,7 +330,7 @@ contract ValidatorManagerTest is Test {
         validatorManager.register(alicePublicKey, INITIAL_POWER);
 
         bytes memory bobPublicKey = BOB_COMPRESSED;
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(this)));
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
         validatorManager.register(bobPublicKey, SECOND_POWER);
     }
 
@@ -332,10 +339,10 @@ contract ValidatorManagerTest is Test {
         assertEq(validatorManager.owner(), address(0));
 
         bytes memory alicePublicKey = ALICE_UNCOMPRESSED;
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(this)));
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
         validatorManager.register(alicePublicKey, INITIAL_POWER);
 
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, NON_OWNER));
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, NON_OWNER));
         vm.prank(NON_OWNER);
         validatorManager.updatePower(aliceValidatorAddress, UPDATED_POWER);
     }

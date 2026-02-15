@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: Apache 2.0
 pragma solidity ^0.8.28;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title ValidatorManager
- * @dev Manages a set of validators with associated voting power
- * @dev Ownership controls who can register, unregister, and update validator power
+ * @dev Manages a set of validators with associated voting power.
+ *      Deployed behind an ERC1967 proxy (UUPS pattern). Only the owner can
+ *      authorize upgrades via `_authorizeUpgrade`.
  */
-contract ValidatorManager is Ownable, ReentrancyGuard {
+contract ValidatorManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     uint256 internal constant SECP256K1_P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F;
@@ -39,7 +42,33 @@ contract ValidatorManager is Ownable, ReentrancyGuard {
     mapping(address => ValidatorInfo) private _validators;
     uint64 private _totalPower;
 
-    constructor() Ownable(_msgSender()) {}
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    /**
+     * @dev Initializes the contract behind a proxy. Must be called exactly once.
+     * @param initialOwner The address that will own the contract and can authorize upgrades.
+     */
+    function initialize(address initialOwner) public initializer {
+        __Ownable_init(initialOwner);
+        __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
+    }
+
+    /**
+     * @dev Required by UUPSUpgradeable. Restricts upgrades to the owner.
+     */
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    /**
+     * @dev Contract version identifier for upgrade/migration tooling.
+     * @return Current implementation version.
+     */
+    function version() external pure virtual returns (uint256) {
+        return 1;
+    }
 
     // Events
     event ValidatorRegistered(address indexed validatorAddress, Secp256k1Key validatorKey, uint64 power);

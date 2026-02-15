@@ -17,7 +17,9 @@ use malachitebft_eth_types::{
 use tracing::debug;
 
 use crate::validator_manager::{
-    generate_storage_data, Validator, ValidatorManager, GENESIS_VALIDATOR_MANAGER_ACCOUNT,
+    generate_impl_storage, generate_storage_data, patched_impl_bytecode, Validator,
+    ValidatorManagerProxy, GENESIS_VALIDATOR_MANAGER_ACCOUNT,
+    GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT,
 };
 
 /// EIP-4788 Beacon Roots Contract address
@@ -162,12 +164,29 @@ pub(crate) fn generate_evm_genesis(
         unreachable!("unable to determine PoA owner address");
     };
 
-    let storage = generate_storage_data(initial_validators, poa_address_owner)?;
+    // Proxy at 0x2000: ERC1967Proxy runtime code + all contract storage
+    let proxy_storage = generate_storage_data(
+        initial_validators,
+        poa_address_owner,
+        GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT,
+    )?;
     alloc.insert(
         GENESIS_VALIDATOR_MANAGER_ACCOUNT,
         GenesisAccount {
-            code: Some(ValidatorManager::DEPLOYED_BYTECODE.clone()),
-            storage: Some(storage),
+            code: Some(ValidatorManagerProxy::DEPLOYED_BYTECODE.clone()),
+            storage: Some(proxy_storage),
+            ..Default::default()
+        },
+    );
+
+    // Implementation at 0x2001: ValidatorManager logic code + disabled initializer.
+    // The bytecode is patched to set the UUPS `__self` immutable to the impl address,
+    // since genesis alloc bypasses the constructor which normally sets it.
+    alloc.insert(
+        GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT,
+        GenesisAccount {
+            code: Some(patched_impl_bytecode(GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT)),
+            storage: Some(generate_impl_storage()),
             ..Default::default()
         },
     );

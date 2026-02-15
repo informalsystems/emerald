@@ -12,6 +12,9 @@ alloy-sol-types  = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-contract   = { workspace = true }
 
+[build-dependencies]
+serde_json = "1"
+
 [dev-dependencies]
 alloy-network       = "1.4.3"
 alloy-node-bindings = "1.4.3"

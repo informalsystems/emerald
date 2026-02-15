@@ -1,11 +1,68 @@
-//! Storage layout and encoding for ValidatorManager contract
+//! Storage layout and encoding for the upgradeable ValidatorManager contract.
+//!
+//! The proxy (ERC1967) sits at `0x2000`; its storage contains:
+//!   - EIP-1967 implementation slot pointing to the logic contract
+//!   - ERC-7201 namespaced slots for OwnableUpgradeable, ReentrancyGuardUpgradeable,
+//!     and Initializable
+//!   - Sequential slots 0..3 for the contract's own state variables
 
 use std::collections::BTreeMap;
 
-use alloy_primitives::{keccak256, Address, B256, U256};
+use alloy_primitives::{hex, keccak256, Address, B256, U256};
 
 use crate::validator_manager::error::Result;
 use crate::validator_manager::types::{ValidatorKey, ValidatorSet};
+
+// ---------------------------------------------------------------------------
+// ERC-7201 namespace slots (computed & pinned against OZ 5.4.0 source)
+// Formula: keccak256(abi.encode(uint256(keccak256(id)) - 1)) & ~bytes32(uint256(0xff))
+// ---------------------------------------------------------------------------
+
+/// Namespace identifier for OwnableUpgradeable storage.
+pub const OWNABLE_NAMESPACE: &str = "openzeppelin.storage.Ownable";
+
+/// Pre-computed ERC-7201 slot for OwnableUpgradeable (OZ 5.4.0).
+pub const OWNABLE_SLOT: B256 =
+    B256::new(hex!("9016d09d72d40fdae2fd8ceac6b6234c7706214fd39c1cd1e609a0528c199300"));
+
+/// Namespace identifier for ReentrancyGuardUpgradeable storage.
+pub const REENTRANCY_GUARD_NAMESPACE: &str = "openzeppelin.storage.ReentrancyGuard";
+
+/// Pre-computed ERC-7201 slot for ReentrancyGuardUpgradeable (OZ 5.4.0).
+pub const REENTRANCY_GUARD_SLOT: B256 =
+    B256::new(hex!("9b779b17422d0df92223018b32b4d1fa46e071723d6817e2486d003becc55f00"));
+
+/// Namespace identifier for Initializable storage.
+pub const INITIALIZABLE_NAMESPACE: &str = "openzeppelin.storage.Initializable";
+
+/// Pre-computed ERC-7201 slot for Initializable (OZ 5.4.0).
+pub const INITIALIZABLE_SLOT: B256 =
+    B256::new(hex!("f0c57e16840df040f15088dc2f81fe391c3923bec73e23a9662efc9c229c6a00"));
+
+// ---------------------------------------------------------------------------
+// EIP-1967 proxy slots
+// ---------------------------------------------------------------------------
+
+/// EIP-1967 implementation slot: `bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1)`
+pub const EIP1967_IMPL_SLOT: B256 =
+    B256::new(hex!("360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"));
+
+// ---------------------------------------------------------------------------
+// ERC-7201 computation
+// ---------------------------------------------------------------------------
+
+/// Compute the ERC-7201 storage slot for a given namespace id string.
+///
+/// `keccak256(abi.encode(uint256(keccak256(id)) - 1)) & ~bytes32(uint256(0xff))`
+pub fn erc7201_slot(namespace: &str) -> B256 {
+    let inner_hash = keccak256(namespace.as_bytes());
+    let inner_u256 = U256::from_be_bytes(inner_hash.0) - U256::from(1u64);
+    let outer_hash = keccak256(inner_u256.to_be_bytes::<32>());
+    let outer_u256 = U256::from_be_bytes(outer_hash.0);
+    // Mask: clear the lowest byte (& ~0xff)
+    let masked = outer_u256 & !(U256::from(0xffu64));
+    B256::from(masked.to_be_bytes::<32>())
+}
 
 /// Storage slot calculator for Solidity mappings and arrays
 pub struct StorageSlotCalculator;

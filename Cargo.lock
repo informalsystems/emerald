@@ -2627,6 +2627,7 @@ dependencies = [
  "alloy-signer-local",
  "alloy-sol-types",
  "color-eyre",
+ "serde_json",
  "tokio",
 ]
 

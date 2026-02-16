@@ -61,10 +61,10 @@ View consensus logs for each validator:
 
 ```bash
 # View logs from validator 0
-tail -f nodes/0/emerald.log
+tail -f nodes/0/logs/node.log
 
 # View logs from all validators simultaneously
-tail -f nodes/{0,1,2,3}/emerald.log
+tail -f nodes/{0,1,2,3}/logs/node.log
 ```
 
 **What to look for:**

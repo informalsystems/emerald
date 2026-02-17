@@ -89,7 +89,7 @@ clap               = "4.5"
 color-eyre         = "0.6"
 config             = { version = "0.15", features = [ "toml" ], default-features = false }
 derive-where       = "1.2.7"
-directories        = "5.0.1"
+directories        = "6.0.0"
 hex                = { version = "0.4.3", features = [ "serde" ] }
 itertools          = "0.14"
 itf                = "0.2.3"

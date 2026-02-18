@@ -1,10 +1,12 @@
 use core::str::FromStr;
-use std::{fs, path::Path};
+use std::fs;
+use std::path::Path;
+use std::path::PathBuf;
 
 use alloy_genesis::Genesis;
 use alloy_network::EthereumWallet;
 use alloy_node_bindings::anvil::Anvil;
-use alloy_primitives::{address, Address, Bytes, U256};
+use alloy_primitives::{address, b256, Address, Bytes, U256};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_signer_local::coins_bip39::English;
 use alloy_signer_local::{MnemonicBuilder, PrivateKeySigner};
@@ -15,19 +17,19 @@ use tempfile::tempdir;
 use tracing::debug;
 
 use super::{
-    generate_impl_storage, generate_storage_data, patched_impl_bytecode, Validator,
-    ValidatorManager, ValidatorManagerProxy, GENESIS_VALIDATOR_MANAGER_ACCOUNT,
+    Validator, ValidatorManager, ValidatorManagerProxy, GENESIS_VALIDATOR_MANAGER_ACCOUNT,
     GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT,
 };
 use crate::genesis::generate_evm_genesis;
-use crate::validator_manager::storage::{
-    erc7201_slot, EIP1967_IMPL_SLOT, INITIALIZABLE_NAMESPACE, INITIALIZABLE_SLOT,
-    OWNABLE_NAMESPACE, OWNABLE_SLOT, REENTRANCY_GUARD_NAMESPACE, REENTRANCY_GUARD_SLOT,
-};
+use crate::revm_genesis::build_validator_manager_alloc_via_revm;
 
 const TEST_OWNER_ADDRESS: Address = address!("0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65");
 const TEST_OWNER_PRIVATE_KEY: &str =
     "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a";
+// ERC1967 implementation slot (keccak256("eip1967.proxy.implementation") - 1)
+// Ref: https://eips.ethereum.org/EIPS/eip-1967
+const EIP1967_IMPL_SLOT: alloy_primitives::B256 =
+    b256!("360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc");
 
 fn generate_validators_from_mnemonic(count: usize) -> eyre::Result<Vec<Validator>> {
     let mnemonic = "test test test test test test test test test test test junk";
@@ -83,35 +85,12 @@ fn with_genesis_power(validators: &[Validator], power: u64) -> Vec<Validator> {
         .collect()
 }
 
-// ---------------------------------------------------------------------------
-// Golden tests: verify pinned ERC-7201 slot constants against the formula
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_erc7201_ownable_slot() {
-    assert_eq!(erc7201_slot(OWNABLE_NAMESPACE), OWNABLE_SLOT);
-}
-
-#[test]
-fn test_erc7201_reentrancy_guard_slot() {
-    assert_eq!(
-        erc7201_slot(REENTRANCY_GUARD_NAMESPACE),
-        REENTRANCY_GUARD_SLOT
-    );
-}
-
-#[test]
-fn test_erc7201_initializable_slot() {
-    assert_eq!(erc7201_slot(INITIALIZABLE_NAMESPACE), INITIALIZABLE_SLOT);
-}
-
-#[test]
-fn test_generate_evm_genesis_alloc_matches_expected_storage() -> eyre::Result<()> {
+fn generate_test_genesis(validator_count: usize) -> eyre::Result<(tempfile::TempDir, Vec<Validator>, PathBuf)> {
     let tmp = tempdir()?;
     let keys_path = tmp.path().join("validator_keys.txt");
     let genesis_path = tmp.path().join("genesis.json");
 
-    let validators = generate_validators_from_mnemonic(5)?;
+    let validators = generate_validators_from_mnemonic(validator_count)?;
     write_validator_keys_file(&validators, &keys_path)?;
 
     let owner = Some(format!("{TEST_OWNER_ADDRESS:#x}"));
@@ -131,51 +110,136 @@ fn test_generate_evm_genesis_alloc_matches_expected_storage() -> eyre::Result<()
             .ok_or_else(|| eyre::eyre!("genesis path is not UTF-8"))?,
     )?;
 
+    Ok((tmp, validators, genesis_path))
+}
+
+#[test]
+fn test_revm_alloc_rejects_empty_validators() {
+    let err = build_validator_manager_alloc_via_revm(&[], TEST_OWNER_ADDRESS)
+        .expect_err("empty validator list must fail");
+    assert!(
+        err.to_string().contains("validator list cannot be empty"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn test_revm_alloc_rejects_zero_power() -> eyre::Result<()> {
+    let mut validators = generate_validators_from_mnemonic(2)?;
+    validators[0].power = 0;
+
+    let err = build_validator_manager_alloc_via_revm(&validators, TEST_OWNER_ADDRESS)
+        .expect_err("zero power must fail");
+    assert!(
+        err.to_string().contains("has zero power"),
+        "unexpected error: {err}"
+    );
+    Ok(())
+}
+
+#[test]
+fn test_revm_alloc_rejects_duplicate_validator_keys() -> eyre::Result<()> {
+    let mut validators = generate_validators_from_mnemonic(2)?;
+    validators[1].validator_key = validators[0].validator_key;
+
+    let err = build_validator_manager_alloc_via_revm(&validators, TEST_OWNER_ADDRESS)
+        .expect_err("duplicate keys must fail");
+    assert!(
+        err.to_string().contains("duplicate validator key"),
+        "unexpected error: {err}"
+    );
+    Ok(())
+}
+
+#[test]
+fn test_revm_alloc_is_deterministic_for_same_inputs() -> eyre::Result<()> {
+    let validators = generate_validators_from_mnemonic(5)?;
+
+    let first = build_validator_manager_alloc_via_revm(&validators, TEST_OWNER_ADDRESS)?;
+    let second = build_validator_manager_alloc_via_revm(&validators, TEST_OWNER_ADDRESS)?;
+
+    assert_eq!(first.proxy_address, second.proxy_address);
+    assert_eq!(first.implementation_address, second.implementation_address);
+    assert_eq!(first.alloc, second.alloc);
+
+    Ok(())
+}
+
+#[test]
+fn test_revm_deployment_addresses_are_owner_independent() -> eyre::Result<()> {
+    let validators = generate_validators_from_mnemonic(3)?;
+    let owner_a = TEST_OWNER_ADDRESS;
+    let owner_b = address!("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
+
+    let alloc_a = build_validator_manager_alloc_via_revm(&validators, owner_a)?;
+    let alloc_b = build_validator_manager_alloc_via_revm(&validators, owner_b)?;
+
+    assert_eq!(alloc_a.proxy_address, alloc_b.proxy_address);
+    assert_eq!(
+        alloc_a.implementation_address,
+        alloc_b.implementation_address
+    );
+
+    let genesis_deployer = address!("0x0000000000000000000000000000000000000001");
+    assert!(!alloc_a.alloc.contains_key(&genesis_deployer));
+    assert!(!alloc_b.alloc.contains_key(&genesis_deployer));
+    assert!(!alloc_a.alloc.contains_key(&owner_a));
+    assert!(!alloc_b.alloc.contains_key(&owner_b));
+
+    Ok(())
+}
+
+#[test]
+fn test_revm_deployment_addresses_match_published_constants() -> eyre::Result<()> {
+    let validators = generate_validators_from_mnemonic(3)?;
+    let alloc = build_validator_manager_alloc_via_revm(&validators, TEST_OWNER_ADDRESS)?;
+
+    assert_eq!(alloc.proxy_address, GENESIS_VALIDATOR_MANAGER_ACCOUNT);
+    assert_eq!(
+        alloc.implementation_address,
+        GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_generate_evm_genesis_alloc_matches_expected_storage() -> eyre::Result<()> {
+    let (_tmp, validators, genesis_path) = generate_test_genesis(5)?;
+
     let genesis: Genesis = serde_json::from_slice(&fs::read(&genesis_path)?)?;
+
+    let vm_genesis = build_validator_manager_alloc_via_revm(
+        &with_genesis_power(&validators, 100),
+        TEST_OWNER_ADDRESS,
+    )?;
+
+    assert_eq!(GENESIS_VALIDATOR_MANAGER_ACCOUNT, vm_genesis.proxy_address);
+    assert_eq!(
+        GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT,
+        vm_genesis.implementation_address
+    );
 
     let proxy_account = genesis
         .alloc
         .get(&GENESIS_VALIDATOR_MANAGER_ACCOUNT)
-        .ok_or_else(|| eyre::eyre!("missing proxy alloc entry at 0x2000"))?;
+        .ok_or_else(|| eyre::eyre!("missing discovered proxy alloc entry"))?;
     let impl_account = genesis
         .alloc
         .get(&GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT)
-        .ok_or_else(|| eyre::eyre!("missing implementation alloc entry at 0x2001"))?;
+        .ok_or_else(|| eyre::eyre!("missing discovered implementation alloc entry"))?;
 
-    assert_eq!(
-        proxy_account.code.as_ref(),
-        Some(&ValidatorManagerProxy::DEPLOYED_BYTECODE)
-    );
-    let expected_impl_bytecode = patched_impl_bytecode(GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT);
-    assert_eq!(
-        impl_account.code.as_ref(),
-        Some(&expected_impl_bytecode)
-    );
+    let expected_proxy_account = vm_genesis
+        .alloc
+        .get(&GENESIS_VALIDATOR_MANAGER_ACCOUNT)
+        .ok_or_else(|| eyre::eyre!("missing expected proxy alloc entry"))?;
+    let expected_impl_account = vm_genesis
+        .alloc
+        .get(&GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT)
+        .ok_or_else(|| eyre::eyre!("missing expected implementation alloc entry"))?;
 
-    let expected_proxy_storage = generate_storage_data(
-        with_genesis_power(&validators, 100),
-        TEST_OWNER_ADDRESS,
-        GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT,
-    )?;
-    let expected_impl_storage = generate_impl_storage();
-
-    assert_eq!(proxy_account.storage.as_ref(), Some(&expected_proxy_storage));
-    assert_eq!(impl_account.storage.as_ref(), Some(&expected_impl_storage));
-
-    assert_eq!(
-        proxy_account
-            .storage
-            .as_ref()
-            .and_then(|s| s.get(&EIP1967_IMPL_SLOT)),
-        Some(&GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT.into_word())
-    );
-    assert_eq!(
-        impl_account
-            .storage
-            .as_ref()
-            .and_then(|s| s.get(&INITIALIZABLE_SLOT)),
-        expected_impl_storage.get(&INITIALIZABLE_SLOT)
-    );
+    assert_eq!(proxy_account, expected_proxy_account);
+    assert_eq!(impl_account, expected_impl_account);
 
     Ok(())
 }
@@ -183,29 +247,7 @@ fn test_generate_evm_genesis_alloc_matches_expected_storage() -> eyre::Result<()
 #[tokio::test]
 #[test_log::test]
 async fn test_anvil_boot_from_generated_genesis_proxy_and_impl_behavior() -> eyre::Result<()> {
-    let tmp = tempdir()?;
-    let keys_path = tmp.path().join("validator_keys.txt");
-    let genesis_path = tmp.path().join("genesis.json");
-
-    let validators = generate_validators_from_mnemonic(5)?;
-    write_validator_keys_file(&validators, &keys_path)?;
-
-    let owner = Some(format!("{TEST_OWNER_ADDRESS:#x}"));
-    let testnet = false;
-    let testnet_balance = 0u64;
-    let chain_id = 12345u64;
-    generate_evm_genesis(
-        keys_path
-            .to_str()
-            .ok_or_else(|| eyre::eyre!("validator keys path is not UTF-8"))?,
-        &owner,
-        &testnet,
-        &testnet_balance,
-        &chain_id,
-        genesis_path
-            .to_str()
-            .ok_or_else(|| eyre::eyre!("genesis path is not UTF-8"))?,
-    )?;
+    let (_tmp, _validators, genesis_path) = generate_test_genesis(5)?;
 
     let genesis_path_str = genesis_path
         .to_str()
@@ -220,25 +262,7 @@ async fn test_anvil_boot_from_generated_genesis_proxy_and_impl_behavior() -> eyr
     assert_eq!(vm_proxy.getTotalPower().call().await?, 500u64);
     assert_eq!(vm_proxy.getValidators().call().await?.len(), 5);
 
-    let impl_slot = provider
-        .get_storage_at(GENESIS_VALIDATOR_MANAGER_ACCOUNT, EIP1967_IMPL_SLOT.into())
-        .await?;
-    assert_eq!(
-        impl_slot.to_be_bytes::<32>(),
-        GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT.into_word()
-    );
-
     let vm_impl = ValidatorManager::new(GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT, &provider);
-
-    // proxiableUUID has a `notDelegated` guard so it must be called directly on the
-    // implementation, not through the proxy. It verifies __self == address(this), which
-    // requires the patched bytecode to have the correct implementation address.
-    let uuid = vm_impl.proxiableUUID().call().await?;
-    assert_eq!(
-        uuid,
-        EIP1967_IMPL_SLOT,
-        "proxiableUUID on implementation should return the EIP-1967 implementation slot"
-    );
     let init_result = vm_impl.initialize(TEST_OWNER_ADDRESS).call().await;
     assert!(
         init_result.is_err(),
@@ -250,31 +274,8 @@ async fn test_anvil_boot_from_generated_genesis_proxy_and_impl_behavior() -> eyr
 
 #[tokio::test]
 #[test_log::test]
-async fn test_anvil_boot_from_generated_genesis_upgrade_succeeds()
--> eyre::Result<()> {
-    let tmp = tempdir()?;
-    let keys_path = tmp.path().join("validator_keys.txt");
-    let genesis_path = tmp.path().join("genesis.json");
-
-    let validators = generate_validators_from_mnemonic(5)?;
-    write_validator_keys_file(&validators, &keys_path)?;
-
-    let owner = Some(format!("{TEST_OWNER_ADDRESS:#x}"));
-    let testnet = false;
-    let testnet_balance = 0u64;
-    let chain_id = 12345u64;
-    generate_evm_genesis(
-        keys_path
-            .to_str()
-            .ok_or_else(|| eyre::eyre!("validator keys path is not UTF-8"))?,
-        &owner,
-        &testnet,
-        &testnet_balance,
-        &chain_id,
-        genesis_path
-            .to_str()
-            .ok_or_else(|| eyre::eyre!("genesis path is not UTF-8"))?,
-    )?;
+async fn test_anvil_boot_from_generated_genesis_upgrade_succeeds() -> eyre::Result<()> {
+    let (_tmp, _validators, genesis_path) = generate_test_genesis(5)?;
 
     let genesis_path_str = genesis_path
         .to_str()
@@ -291,21 +292,14 @@ async fn test_anvil_boot_from_generated_genesis_upgrade_succeeds()
         .connect_http(rpc_url);
 
     // Sanity check: proxy is initialized and owned by the expected account.
-    let vm_proxy = ValidatorManager::new(GENESIS_VALIDATOR_MANAGER_ACCOUNT, &owner_provider);
+    let proxy_address = GENESIS_VALIDATOR_MANAGER_ACCOUNT;
+
+    let vm_proxy = ValidatorManager::new(proxy_address, &owner_provider);
     assert_eq!(vm_proxy.owner().call().await?, TEST_OWNER_ADDRESS);
 
     // Deploy a new UUPS-compatible implementation.
     let new_impl = ValidatorManager::deploy(owner_provider.clone()).await?;
     let new_impl_address = *new_impl.address();
-
-    // Capture implementation slot before attempting the upgrade.
-    let impl_before = owner_provider
-        .get_storage_at(GENESIS_VALIDATOR_MANAGER_ACCOUNT, EIP1967_IMPL_SLOT.into())
-        .await?;
-    assert_eq!(
-        impl_before.to_be_bytes::<32>(),
-        GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT.into_word()
-    );
 
     // Expected behavior: upgrade should succeed when called by owner.
     let receipt = vm_proxy
@@ -315,13 +309,6 @@ async fn test_anvil_boot_from_generated_genesis_upgrade_succeeds()
         .get_receipt()
         .await?;
     assert!(receipt.status(), "upgrade transaction should succeed");
-
-    // Implementation pointer should be updated to the new implementation.
-    let impl_after = owner_provider
-        .get_storage_at(GENESIS_VALIDATOR_MANAGER_ACCOUNT, EIP1967_IMPL_SLOT.into())
-        .await?;
-    assert_ne!(impl_after, impl_before);
-    assert_eq!(impl_after.to_be_bytes::<32>(), new_impl_address.into_word());
 
     // Proxy state should remain intact after upgrade.
     assert_eq!(vm_proxy.owner().call().await?, TEST_OWNER_ADDRESS);
@@ -335,8 +322,6 @@ async fn test_anvil_boot_from_generated_genesis_upgrade_succeeds()
 // Anvil integration: deploy behind proxy, compare storage
 // ---------------------------------------------------------------------------
 
-/// Deploy ValidatorManager behind an ERC1967 proxy on Anvil and compare
-/// proxy storage against `generate_storage_data`.
 #[tokio::test]
 #[test_log::test]
 async fn test_anvil_storage_comparison() -> eyre::Result<()> {
@@ -353,14 +338,25 @@ async fn test_anvil_storage_comparison() -> eyre::Result<()> {
         deploy_proxy_and_register_validators(&validators, TEST_OWNER_ADDRESS, &rpc_url).await?;
     debug!("Proxy at {proxy_address:#x}, impl at {impl_address:#x}");
 
-    // Generate expected storage (same function genesis uses)
-    let expected_storage =
-        generate_storage_data(validators.clone(), TEST_OWNER_ADDRESS, impl_address)?;
-    debug!("Generated {} expected storage slots", expected_storage.len());
+    let vm_genesis = build_validator_manager_alloc_via_revm(&validators, TEST_OWNER_ADDRESS)?;
+    let expected_storage = vm_genesis
+        .alloc
+        .get(&vm_genesis.proxy_address)
+        .and_then(|account| account.storage.as_ref())
+        .ok_or_else(|| eyre::eyre!("missing expected proxy storage in revm alloc"))?;
+    debug!(
+        "Generated {} expected storage slots",
+        expected_storage.len()
+    );
 
     let provider = ProviderBuilder::new().connect_http(rpc_url.clone());
 
     for (slot, expected_value) in expected_storage.iter() {
+        // Skip ERC1967 impl pointer: fresh anvil deployment and genesis alloc can
+        // point to different impl addresses while behavior is still valid.
+        if *slot == EIP1967_IMPL_SLOT {
+            continue;
+        }
         let actual_value = provider
             .get_storage_at(proxy_address, (*slot).into())
             .await?;

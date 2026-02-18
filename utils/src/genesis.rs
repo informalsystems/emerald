@@ -16,11 +16,8 @@ use malachitebft_eth_types::{
 };
 use tracing::debug;
 
-use crate::validator_manager::{
-    generate_impl_storage, generate_storage_data, patched_impl_bytecode, Validator,
-    ValidatorManagerProxy, GENESIS_VALIDATOR_MANAGER_ACCOUNT,
-    GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT,
-};
+use crate::revm_genesis::build_validator_manager_alloc_via_revm;
+use crate::validator_manager::Validator;
 
 /// EIP-4788 Beacon Roots Contract address
 const BEACON_ROOTS_ADDRESS: Address = address!("0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02");
@@ -164,32 +161,14 @@ pub(crate) fn generate_evm_genesis(
         unreachable!("unable to determine PoA owner address");
     };
 
-    // Proxy at 0x2000: ERC1967Proxy runtime code + all contract storage
-    let proxy_storage = generate_storage_data(
-        initial_validators,
-        poa_address_owner,
-        GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT,
-    )?;
-    alloc.insert(
-        GENESIS_VALIDATOR_MANAGER_ACCOUNT,
-        GenesisAccount {
-            code: Some(ValidatorManagerProxy::DEPLOYED_BYTECODE.clone()),
-            storage: Some(proxy_storage),
-            ..Default::default()
-        },
+    let vm_genesis =
+        build_validator_manager_alloc_via_revm(&initial_validators, poa_address_owner)?;
+    debug!(
+        proxy = %vm_genesis.proxy_address,
+        implementation = %vm_genesis.implementation_address,
+        "validator manager genesis addresses"
     );
-
-    // Implementation at 0x2001: ValidatorManager logic code + disabled initializer.
-    // The bytecode is patched to set the UUPS `__self` immutable to the impl address,
-    // since genesis alloc bypasses the constructor which normally sets it.
-    alloc.insert(
-        GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT,
-        GenesisAccount {
-            code: Some(patched_impl_bytecode(GENESIS_VALIDATOR_MANAGER_IMPL_ACCOUNT)),
-            storage: Some(generate_impl_storage()),
-            ..Default::default()
-        },
-    );
+    alloc.extend(vm_genesis.alloc);
 
     // Deploy EIP-4788 Beacon Roots Contract
     // Required for Engine API V3 compliance when parent_beacon_block_root is set

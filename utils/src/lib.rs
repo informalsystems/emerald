@@ -8,6 +8,7 @@ use spammer::Spammer;
 pub mod genesis;
 pub mod modify_config;
 pub mod poa;
+pub mod revm_genesis;
 pub mod spammer;
 pub mod tx;
 pub mod validator_manager;

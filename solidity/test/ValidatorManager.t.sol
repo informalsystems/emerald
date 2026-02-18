@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {ValidatorManager} from "../src/ValidatorManager.sol";
-import {ValidatorManagerProxy} from "../src/ValidatorManagerProxy.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 contract ValidatorManagerTest is Test {
@@ -61,7 +61,7 @@ contract ValidatorManagerTest is Test {
         // Deploy implementation and proxy
         implementation = new ValidatorManager();
         bytes memory initData = abi.encodeCall(ValidatorManager.initialize, (address(this)));
-        ValidatorManagerProxy proxy = new ValidatorManagerProxy(address(implementation), initData);
+        ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
         validatorManager = ValidatorManager(address(proxy));
 
         ValidatorManager.Secp256k1Key memory aliceKeyMem = validatorManager._secp256k1KeyFromBytes(ALICE_UNCOMPRESSED);

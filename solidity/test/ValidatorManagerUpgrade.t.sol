@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {ValidatorManager} from "../src/ValidatorManager.sol";
-import {ValidatorManagerProxy} from "../src/ValidatorManagerProxy.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {ValidatorManagerV2} from "./ValidatorManagerV2.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -11,7 +11,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 contract ValidatorManagerUpgradeTest is Test {
     ValidatorManager internal implementation;
     ValidatorManager internal validatorManager; // proxy cast
-    ValidatorManagerProxy internal proxy;
+    ERC1967Proxy internal proxy;
 
     address internal constant NON_OWNER = address(0xBEEF);
     address internal constant NEW_OWNER = address(0xCAFE);
@@ -23,7 +23,7 @@ contract ValidatorManagerUpgradeTest is Test {
     function setUp() public {
         implementation = new ValidatorManager();
         bytes memory initData = abi.encodeCall(ValidatorManager.initialize, (address(this)));
-        proxy = new ValidatorManagerProxy(address(implementation), initData);
+        proxy = new ERC1967Proxy(address(implementation), initData);
         validatorManager = ValidatorManager(address(proxy));
     }
 
@@ -48,9 +48,7 @@ contract ValidatorManagerUpgradeTest is Test {
     function testUpgradeRevertsForNonOwner() public {
         ValidatorManagerV2 v2Impl = new ValidatorManagerV2();
 
-        vm.expectRevert(
-            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, NON_OWNER)
-        );
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, NON_OWNER));
         vm.prank(NON_OWNER);
         validatorManager.upgradeToAndCall(address(v2Impl), "");
     }
@@ -61,8 +59,7 @@ contract ValidatorManagerUpgradeTest is Test {
         // Register two validators
         validatorManager.register(ALICE_UNCOMPRESSED, ALICE_POWER);
 
-        ValidatorManager.Secp256k1Key memory aliceKey =
-            validatorManager._secp256k1KeyFromBytes(ALICE_UNCOMPRESSED);
+        ValidatorManager.Secp256k1Key memory aliceKey = validatorManager._secp256k1KeyFromBytes(ALICE_UNCOMPRESSED);
         address aliceAddr = validatorManager._validatorAddress(aliceKey);
 
         // Upgrade
@@ -100,9 +97,7 @@ contract ValidatorManagerUpgradeTest is Test {
 
         // Old owner can no longer upgrade
         ValidatorManagerV2 v2Impl = new ValidatorManagerV2();
-        vm.expectRevert(
-            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this))
-        );
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
         validatorManager.upgradeToAndCall(address(v2Impl), "");
 
         // New owner can upgrade
@@ -116,9 +111,7 @@ contract ValidatorManagerUpgradeTest is Test {
         assertEq(validatorManager.owner(), address(0));
 
         ValidatorManagerV2 v2Impl = new ValidatorManagerV2();
-        vm.expectRevert(
-            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this))
-        );
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
         validatorManager.upgradeToAndCall(address(v2Impl), "");
     }
 

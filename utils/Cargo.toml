@@ -52,11 +52,11 @@ jsonrpsee-core        = { version = "0.26.0" }
 jsonrpsee-http-client = { version = "0.26.0" }
 
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+revm            = "34"
 url             = { workspace = true }
 toml            = "0.8"
 
 [dev-dependencies]
-reth-transaction-pool = { git = "https://github.com/paradigmxyz/reth", tag = "v1.10.2" }
 alloy-eips            = { workspace = true }
 alloy-provider        = "1.4.3"
 alloy-signer-local    = "1.4.3"

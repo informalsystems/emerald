@@ -83,7 +83,10 @@ clean-prometheus: testnet-stop
 # Spammer
 
 spam:
-	cargo run --bin emerald-utils spam --time=60 --rate=1000 --rpc-url=http://127.0.0.1:8645 --chain-id 12345
+	cargo run --bin emerald-utils spam --time=120 --rate=5000 --rpc-url=http://127.0.0.1:8645 --chain-id 12345 --signer-index 2 &
+	cargo run --bin emerald-utils spam --time=120 --rate=5000 --rpc-url=http://127.0.0.1:8745 --chain-id 12345 --signer-index 3 &
+	cargo run --bin emerald-utils spam --time=120 --rate=5000 --rpc-url=http://127.0.0.1:8845 --chain-id 12345 --signer-index 4 &
+	cargo run --bin emerald-utils spam --time=120 --rate=5000 --rpc-url=http://127.0.0.1:8945 --chain-id 12345 --signer-index 1 &
 
 spam-contract:
 	@if [ -z "$(CONTRACT)" ]; then \

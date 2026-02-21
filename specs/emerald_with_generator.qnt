@@ -26,9 +26,15 @@ module emerald_with_generator {
   import basicSpells.* from "spells/basicSpells"
   import rareSpells.* from "spells/rareSpells"
   import channel_api_contract.* from "channel_api_contract"
-  import channel_api_generator(NODES = NODES) as gen from "channel_api_generator"
 
   const NODES: List[Node]
+
+  // Proposer selection — application-defined, passed to the generator.
+  // Rotating proposer based on (height, round).
+  pure def proposer_for(height: Height, round: Round): Node =
+    NODES[(height - 1 + round) % NODES.length()]
+
+  import channel_api_generator(NODES = NODES, proposer_for = proposer_for) as gen from "channel_api_generator"
 
   // ===========================================================================
   // EMERALD-SPECIFIC TYPES (disk/mem split)

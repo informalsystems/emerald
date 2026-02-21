@@ -20,8 +20,7 @@
 //   - Actions correspond to Channel API messages from Malachite to the app
 //   - Ordering is enforced by the state machine structure (phase transitions)
 //   - Safety is enforced by global state constraints
-//   - All 11 contract properties (2 safety + 9 ordering) are checked via
-//     contractInv at every step
+//   - All contract properties are checked via contractInv at every step
 //   - Fault injection: nodeCrash (lose all state) and nodeRestart (preserve
 //     disk state) clear the node's event history and reset to Unstarted
 //
@@ -42,9 +41,11 @@ module channel_api_generator {
 
   const NODES: List[Node]
 
-  // Proposer selection (matches Emerald's rotating proposer)
-  pure def proposer_for(height: Height, round: Round): Node =
-    NODES[(height - 1 + round) % NODES.length()]
+  // Proposer selection — provided by the application (e.g., Emerald).
+  // In the real system, the application defines this via the Malachite
+  // Context trait. The generator (modeling Malachite) is parameterized
+  // over it rather than defining it.
+  const proposer_for: (Height, Round) => Node
 
   // Max height the generator will explore (bounds the trace length)
   pure val MAX_HEIGHT = 4
@@ -174,6 +175,8 @@ module channel_api_generator {
     val ns = nodeStates.get(node)
     all {
       ns.mem.phase == Unstarted,
+      // Contract: heightsPositive requires all event heights >= 1.
+      // This guard ensures the starting height satisfies that property.
       replyStartHeight >= 1,
       val evt = EvConsensusReady
       all {
@@ -237,8 +240,9 @@ module channel_api_generator {
       ns.mem.phase == InRound,
       node == proposer_for(ns.mem.height, ns.mem.round),
       not(ns.mem.getValueSent.contains((ns.mem.height, ns.mem.round))),
-      // Validate the reply proposal matches the current (height, round, proposer).
-      // The payload is the application's choice — not constrained here.
+      // Assumption (not a Malachite guarantee): the application's reply matches
+      // the current (height, round, proposer). Documented as assumption #3 in the
+      // contract. The payload is the application's choice — not constrained here.
       replyProposal.height == ns.mem.height,
       replyProposal.round == ns.mem.round,
       replyProposal.proposer == node,
@@ -278,7 +282,9 @@ module channel_api_generator {
       ns.mem.phase != Unstarted,
       proposal.in(proposals),
       proposal.proposer != node,  // Nodes don't receive their own proposals
-      proposal.height >= ns.mem.height,  // Can arrive for future heights (buffered as pending)
+      // Optimization: real network can deliver stale proposals (Emerald drops them).
+      // Not enforced by the contract — restricts traces to reduce state space.
+      proposal.height >= ns.mem.height,
       val evt = EvReceivedProposal({ proposal: proposal })
       all {
         nodeStates' = nodeStates.set(node, {
@@ -315,8 +321,10 @@ module channel_api_generator {
       proposal.in(proposals),
       // Malachite must have delivered the proposal to this node
       ns.mem.deliveredProposals.contains(proposal),
-      // Node must have reached the proposal's round (no round skips:
-      // if ns.round >= p.round, all rounds up to ns.round were entered)
+      // Optimization: in the normal (non-sync) path, the contract's
+      // decidedRequiresDeliveredProposal + roundsConsecutiveWithinHeight
+      // already constrain this. This guard further restricts the generator
+      // to avoid producing traces where a decision references a future round.
       proposal.round <= ns.mem.round,
       // Agreement: if already decided for this height, must be the same
       not(decisions.has(ns.mem.height)) or decisions.get(ns.mem.height) == proposal,
@@ -411,6 +419,9 @@ module channel_api_generator {
   action sendGetDecidedValue(node: Node, height: Height): bool = {
     val ns = nodeStates.get(node)
     all {
+      // Optimization: real Malachite can query any height — the app returns
+      // None for unavailable heights. These guards restrict traces to reduce
+      // state space; not enforced by the contract.
       height >= 1,
       height < ns.mem.height,
       val evt = EvGetDecidedValue({ height: height })
@@ -537,17 +548,4 @@ module channel_api_generator {
   // Full contract (safety + ordering)
   val contractInv = contract(channelState)
 
-  // ===========================================================================
-  // GENERATOR-SPECIFIC INVARIANTS (ordering, enforced by state machine)
-  // ===========================================================================
-
-  // Height is always positive for started nodes
-  val heightPositive = NODES.toSet().forall(n =>
-    nodeStates.get(n).mem.phase != Unstarted implies nodeStates.get(n).mem.height > 0
-  )
-
-  // Decided heights are contiguous (no gaps)
-  val decisionsContiguous = decisions.keys().forall(h =>
-    h == 1 or decisions.has(h - 1)
-  )
 }

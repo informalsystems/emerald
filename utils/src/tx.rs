@@ -94,7 +94,7 @@ pub(crate) async fn make_contract_call_tx(
         nonce,
         max_priority_fee_per_gas: 1_000_000_000, // 1 gwei
         max_fee_per_gas: 2_000_000_000,          // 2 gwei
-        gas_limit: 100_000,                      // Higher gas limit for contract calls
+        gas_limit: 500_000,                      // Higher gas limit for contract calls
         to: contract_address.into(),
         value: U256::ZERO, // No ETH transfer
         input: call_data.into(),

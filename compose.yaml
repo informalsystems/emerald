@@ -55,7 +55,7 @@ services:
       - "--max-tx-reqs=10000"
       - "--max-tx-reqs-peer=255"
       - "--max-pending-imports=10000"
-      - "--builder.gaslimit=200000000"
+      - "--builder.gaslimit=4I00000000"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -107,7 +107,7 @@ services:
       - "--max-tx-reqs=10000"
       - "--max-tx-reqs-peer=255"
       - "--max-pending-imports=10000"
-      - "--builder.gaslimit=200000000"
+      - "--builder.gaslimit=400000000"
       # If node pruning is to be enabled - uncomment this
       # - "--prune.receipts.distance=10064"
       # - "--prune.account-history.distance=10064"
@@ -175,7 +175,7 @@ services:
       - "--max-tx-reqs=10000"
       - "--max-tx-reqs-peer=255"
       - "--max-pending-imports=10000"
-      - "--builder.gaslimit=200000000"
+      - "--builder.gaslimit=400000000"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve
@@ -231,7 +231,7 @@ services:
       - "--max-tx-reqs=10000"
       - "--max-tx-reqs-peer=255"
       - "--max-pending-imports=10000"
-      - "--builder.gaslimit=200000000"
+      - "--builder.gaslimit=400000000"
       # - "--builder.gaslimit=3600000000" # default * 100
       # - "--builder.interval=10ms"
       # - "--builder.deadline=1" # The deadline in seconds for when the payload builder job should resolve

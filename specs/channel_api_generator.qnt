@@ -5,7 +5,7 @@
 // =============================================================================
 //
 // A minimal state machine that produces valid Channel API message sequences.
-// Written by the Malachite team. Verified against channel_api_contract.qnt.
+// Verified against channel_api_contract.qnt.
 //
 // This is NOT the full Malachite consensus spec. It models only the observable
 // behavior at the Channel API boundary — just enough state to produce messages
@@ -158,6 +158,23 @@ module channel_api_generator {
   // Cleared on fault — contains only current-session events.
   var eventHistory: Node -> List[ChannelEvent]
 
+  // Per-proposal: which nodes have been delivered this specific proposal
+  // and are in a position to vote on it. Keyed by Proposal (not Height)
+  // because different rounds at the same height can have different
+  // proposals from different proposers.
+  // Disk state — a vote is cast when a proposal is received; this doesn't
+  // un-happen on restart or crash (the network saw it).
+  // Updated by:
+  //   - sendGetValue: proposer participates at their height
+  //   - sendReceivedProposal: at current height only (future-height
+  //     proposals are pending — not voted on yet)
+  //   - sendStartedRound: retroactive — if a node already has proposals
+  //     for this height (received at a prior height as pending), count
+  //     the node as support now that it has reached this height
+  // NOT updated by sendProcessSyncedValue — already decided, quorum was met.
+  // Guards sendDecided: requires > 2/3 support before any node can decide.
+  var proposalSupport: Proposal -> Set[Node]
+
   // Last event emitted (for trace observation / MBT integration).
   // None in the initial state (no event sent yet).
   var lastEvent: Option[{ node: Node, event: TraceEvent }]
@@ -190,6 +207,7 @@ module channel_api_generator {
         ),
         proposals' = proposals,
         decisions' = decisions,
+        proposalSupport' = proposalSupport,
       }
     }
   }
@@ -202,6 +220,15 @@ module channel_api_generator {
   // Source: AppMsg::StartedRound in msgs.rs
   action sendStartedRound(node: Node): bool = {
     val ns = nodeStates.get(node)
+    val h = ns.mem.height
+    // If the node already has proposals for this height (received at a
+    // prior height and buffered as pending), count it as support for
+    // each such proposal now that the node is at this height.
+    val pendingAtHeight = ns.mem.deliveredProposals.filter(p => p.height == h)
+    val updatedSupport = pendingAtHeight.fold(proposalSupport, (acc, p) =>
+      val existing = if (acc.has(p)) acc.get(p) else Set()
+      acc.put(p, existing.union(Set(node)))
+    )
     all {
       ns.mem.phase == Started,
       ns.mem.height <= MAX_HEIGHT,
@@ -222,6 +249,7 @@ module channel_api_generator {
         ),
         proposals' = proposals,
         decisions' = decisions,
+        proposalSupport' = updatedSupport,
       }
     }
   }
@@ -250,6 +278,7 @@ module channel_api_generator {
         height: ns.mem.height,
         round: ns.mem.round,
       })
+      val existing = if (proposalSupport.has(replyProposal)) proposalSupport.get(replyProposal) else Set()
       all {
         proposals' = proposals.union(Set(replyProposal)),
         nodeStates' = nodeStates.set(node, {
@@ -265,6 +294,8 @@ module channel_api_generator {
           eventHistory.get(node).append(evt)
         ),
         decisions' = decisions,
+        // Proposer supports their specific proposal
+        proposalSupport' = proposalSupport.put(replyProposal, existing.union(Set(node))),
       }
     }
   }
@@ -286,6 +317,11 @@ module channel_api_generator {
       // Not enforced by the contract — restricts traces to reduce state space.
       proposal.height >= ns.mem.height,
       val evt = EvReceivedProposal({ proposal: proposal })
+      // Only count support when the node is at the proposal's height.
+      // Future-height proposals are buffered as pending — the node hasn't
+      // participated in consensus at that height yet.
+      val atCurrentHeight = proposal.height == ns.mem.height
+      val existing = if (proposalSupport.has(proposal)) proposalSupport.get(proposal) else Set()
       all {
         nodeStates' = nodeStates.set(node, {
           ...ns,
@@ -300,6 +336,10 @@ module channel_api_generator {
         ),
         proposals' = proposals,
         decisions' = decisions,
+        proposalSupport' = if (atCurrentHeight)
+          proposalSupport.put(proposal, existing.union(Set(node)))
+        else
+          proposalSupport,
       }
     }
   }
@@ -330,6 +370,11 @@ module channel_api_generator {
       not(decisions.has(ns.mem.height)) or decisions.get(ns.mem.height) == proposal,
       // Not already decided at this node for this height
       ns.disk.maxDecided < ns.mem.height,
+      // Quorum: strictly more than 2/3 of nodes must have received
+      // this specific proposal before any node can decide on it.
+      // Assumes equal voting power — uses node count as threshold.
+      proposalSupport.has(proposal),
+      proposalSupport.get(proposal).size() * 3 > NODES.length() * 2,
       // Record the decision
       decisions' = decisions.put(ns.mem.height, proposal),
       // Move to next height
@@ -344,6 +389,7 @@ module channel_api_generator {
           eventHistory.get(node).append(evt)
         ),
         proposals' = proposals,
+        proposalSupport' = proposalSupport,
       }
     }
   }
@@ -376,6 +422,7 @@ module channel_api_generator {
         ),
         proposals' = proposals,
         decisions' = decisions,
+        proposalSupport' = proposalSupport,
       }
     }
   }
@@ -408,6 +455,8 @@ module channel_api_generator {
         ),
         proposals' = proposals,
         decisions' = decisions,
+        // No support update — proposal is already decided, quorum was already met.
+        proposalSupport' = proposalSupport,
       }
     }
   }
@@ -433,6 +482,7 @@ module channel_api_generator {
         nodeStates' = nodeStates,
         proposals' = proposals,
         decisions' = decisions,
+        proposalSupport' = proposalSupport,
       }
     }
   }
@@ -456,6 +506,8 @@ module channel_api_generator {
       lastEvent' = Some({ node: node, event: FaultMsg(Crash) }),
       proposals' = proposals,
       decisions' = decisions,
+      // Disk state — votes already cast don't un-happen
+      proposalSupport' = proposalSupport,
     }
   }
 
@@ -472,6 +524,8 @@ module channel_api_generator {
       lastEvent' = Some({ node: node, event: FaultMsg(Restart) }),
       proposals' = proposals,
       decisions' = decisions,
+      // Disk state — votes already cast don't un-happen
+      proposalSupport' = proposalSupport,
     }
   }
 
@@ -486,6 +540,7 @@ module channel_api_generator {
       proposals' = Set(),
       decisions' = Map(),
       eventHistory' = nodes.mapBy(n => []),
+      proposalSupport' = Map(),
       lastEvent' = None,
     }
   }
@@ -531,6 +586,7 @@ module channel_api_generator {
     disk: {
       all_proposals: proposals,
       decisions: decisions,
+      proposal_support: proposalSupport,
     },
     mem: {
       event_history: eventHistory,
@@ -540,12 +596,12 @@ module channel_api_generator {
   // Safety invariants from the contract
   val agreementInv = agreement(channelState)
   val validityInv = validity(channelState)
-  val safetyInv = safety(channelState)
+  val safetyInv = safety(channelState, NODES.length())
 
   // Ordering invariants from the contract
   val orderingInv = ordering(channelState)
 
   // Full contract (safety + ordering)
-  val contractInv = contract(channelState)
+  val contractInv = contract(channelState, NODES.length())
 
 }

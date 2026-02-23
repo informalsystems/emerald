@@ -5,7 +5,8 @@
 // =============================================================================
 //
 // Behavioral contract for Malachite's Channel API.
-// Published by the Malachite team. Consumed by applications (e.g., Emerald).
+// Written by the Emerald team as a proof of concept for the contract pattern.
+// Models what the Malachite team would publish for applications to consume.
 //
 // This contract defines:
 //   1. The message types exchanged through the Channel API
@@ -120,6 +121,18 @@ module channel_api_contract {
     all_proposals: Set[Proposal],
     // Decided proposals per height (at most one per height)
     decisions: Height -> Proposal,
+    // Per-proposal: which nodes have been delivered this specific proposal
+    // and are in a position to vote on it. Keyed by Proposal (not Height)
+    // because different rounds at the same height can have different
+    // proposals from different proposers.
+    // Updated by GetValue (proposer), ReceivedProposal at current height
+    // (non-proposer), and StartedRound (retroactive — if a node had the
+    // proposal from a prior height as pending, counted when it reaches
+    // this height). NOT updated by ProcessSyncedValue — synced values
+    // are already decided, so the quorum was already met.
+    // Disk state: a vote is cast when the proposal is received — this
+    // doesn't un-happen on restart or crash. The network saw it.
+    proposal_support: Proposal -> Set[Node],
   }
 
   type ChannelStateMem = {
@@ -193,11 +206,44 @@ module channel_api_contract {
       h == 1 or s.disk.decisions.has(h - 1)
     )
 
+  // quorumDecision: Every decided height has proposal support from strictly
+  // more than 2/3 of the network.
+  //
+  // In BFT consensus, a decision requires 2f+1 precommits (where n >= 3f+1),
+  // which is strictly more than 2/3 of voting power. A node can only
+  // precommit a proposal it has seen. At the Channel API boundary, proposal
+  // delivery is observable via GetValue (proposer), ReceivedProposal at
+  // current height (non-proposer), and retroactively at StartedRound
+  // (for proposals received at a prior height as pending).
+  // ProcessSyncedValue is NOT counted — synced proposals are already
+  // decided, so the quorum was already met.
+  //
+  // Keyed by Proposal (not Height) because different rounds at the same
+  // height can have different proposals from different proposers. The
+  // quorum must hold for the specific proposal that was decided.
+  //
+  // This property ensures a minority partition cannot unilaterally decide.
+  // The generator enforces this as a guard on sendDecided.
+  //
+  // Assumption: all validators have equal voting power. The quorum
+  // threshold is computed as strictly more than 2/3 of node count.
+  // With non-uniform voting power, this would use the validator set's
+  // total voting power instead of node count.
+  //
+  // Source: Tendermint BFT — decision requires 2f+1 precommits where n≥3f+1.
+  pure def quorumDecision(s: ChannelState, nNodes: int): bool =
+    s.disk.decisions.keys().forall(h =>
+      val proposal = s.disk.decisions.get(h)
+      s.disk.proposal_support.has(proposal) and
+      s.disk.proposal_support.get(proposal).size() * 3 > nNodes * 2
+    )
+
   // Combined safety properties
-  pure def safety(s: ChannelState): bool = and {
+  pure def safety(s: ChannelState, nNodes: int): bool = and {
     agreement(s),
     validity(s),
     decisionsContiguous(s),
+    quorumDecision(s, nNodes),
   }
 
   // ===========================================================================
@@ -692,8 +738,8 @@ module channel_api_contract {
   // ===========================================================================
 
   // All properties a conforming generator must satisfy.
-  pure def contract(s: ChannelState): bool = and {
-    safety(s),
+  pure def contract(s: ChannelState, nNodes: int): bool = and {
+    safety(s, nNodes),
     ordering(s),
   }
 
@@ -727,6 +773,11 @@ module channel_api_contract {
   //
   // 8. Environment: the network eventually delivers messages between
   //    correct validators.
+  //
+  // 9. Voting power: all validators have equal voting power. The quorum
+  //    threshold (strictly more than 2/3 of node count) assumes this.
+  //    With non-uniform voting power, quorumDecision would need the
+  //    validator set's total voting power instead of nNodes.
 
   // ===========================================================================
   // LIVENESS GUARANTEES (semi-formal)

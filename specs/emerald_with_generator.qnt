@@ -17,8 +17,13 @@
 // state variables.
 //
 // State follows the disk/mem convention from faults.qnt:
-//   - Disk: proposals, last_decided_height, last_decided_payload (survive restart)
-//   - Mem: phase, consensus_height, consensus_round (reset on fault)
+//   - Disk: decided_proposals, last_decided_height, last_decided_payload (survive restart)
+//   - Mem: phase, consensus_height, consensus_round, pending_proposals, undecided_proposals (reset on fault)
+//
+// Proposal lifecycle (pending → undecided → decided):
+//   - pending (mem): received at height > consensus_height, can't validate yet
+//   - undecided (mem): received at height == consensus_height, actionable
+//   - decided (disk): committed decisions, survive restart
 //
 // Scope: Normal lifecycle + timeouts + sync + crash/restart.
 
@@ -48,7 +53,7 @@ module emerald_with_generator {
 
   // Disk state: survives restart, lost on crash
   type EmeraldDiskState = {
-    proposals: Set[Proposal],
+    decided_proposals: Set[Proposal],  // committed decisions
     last_decided_height: Height,
     last_decided_payload: Option[Payload],
   }
@@ -58,6 +63,8 @@ module emerald_with_generator {
     phase: AppPhase,
     consensus_height: Height,
     consensus_round: Round,
+    pending_proposals: Set[Proposal],    // height > consensus_height, can't validate
+    undecided_proposals: Set[Proposal],  // height == consensus_height, actionable
   }
 
   type EmeraldNodeState = {
@@ -76,7 +83,7 @@ module emerald_with_generator {
   // ===========================================================================
 
   pure val initEmeraldDisk: EmeraldDiskState = {
-    proposals: Set(),
+    decided_proposals: Set(),
     last_decided_height: 0,
     last_decided_payload: None,
   }
@@ -85,6 +92,8 @@ module emerald_with_generator {
     phase: Uninitialized,
     consensus_height: 0,
     consensus_round: 0,
+    pending_proposals: Set(),
+    undecided_proposals: Set(),
   }
 
   pure val initEmeraldNode: EmeraldNodeState = {
@@ -116,65 +125,88 @@ module emerald_with_generator {
 
   // StartedRound: Enter new consensus round.
   // Height and round come from the StartedRound message payload.
-  action handleStartedRound(node: Node, height: Height, round: Round): bool =
+  // When entering a new height, promote matching pending proposals to undecided.
+  action handleStartedRound(node: Node, height: Height, round: Round): bool = {
+    val s = emeraldState.get(node)
+    val promoted = s.mem.pending_proposals.filter(p => p.height == height)
+    val remaining = s.mem.pending_proposals.exclude(promoted)
     emeraldState' = emeraldState.set(node, {
-      ...emeraldState.get(node),
-      mem: { phase: Working, consensus_height: height, consensus_round: round },
+      ...s,
+      mem: {
+        phase: Working,
+        consensus_height: height,
+        consensus_round: round,
+        pending_proposals: remaining,
+        undecided_proposals: s.mem.undecided_proposals.union(promoted),
+      },
     })
+  }
 
   // GetValue: Proposer builds or returns a value.
   // The proposal is computed in the composed step and passed to both the
   // generator (which records it) and this handler (which stores it locally).
+  // Proposer is at consensus_height, so proposal goes to undecided (mem).
   action handleGetValue(node: Node, proposal: Proposal): bool = {
     val s = emeraldState.get(node)
     emeraldState' = emeraldState.set(node, {
       ...s,
-      disk: { ...s.disk, proposals: s.disk.proposals.union(Set(proposal)) },
+      mem: { ...s.mem, undecided_proposals: s.mem.undecided_proposals.union(Set(proposal)) },
     })
   }
 
-  // ReceivedProposal: Non-proposer learns about a proposal
+  // ReceivedProposal: Non-proposer learns about a proposal.
+  // Categorize by height: stale proposals dropped, current → undecided, future → pending.
   action handleReceivedProposal(node: Node, proposal: Proposal): bool = {
     val s = emeraldState.get(node)
-    emeraldState' = emeraldState.set(node, {
-      ...s,
-      disk: { ...s.disk, proposals: s.disk.proposals.union(Set(proposal)) },
-    })
+    if (proposal.height < s.mem.consensus_height) {
+      // Stale proposal — drop it
+      emeraldState' = emeraldState
+    } else if (proposal.height == s.mem.consensus_height) {
+      // Current height — actionable
+      emeraldState' = emeraldState.set(node, {
+        ...s,
+        mem: { ...s.mem, undecided_proposals: s.mem.undecided_proposals.union(Set(proposal)) },
+      })
+    } else {
+      // Future height — can't validate yet
+      emeraldState' = emeraldState.set(node, {
+        ...s,
+        mem: { ...s.mem, pending_proposals: s.mem.pending_proposals.union(Set(proposal)) },
+      })
+    }
   }
 
   // Decided: Consensus decided on a value, advance to next height.
-  // TODO: Model the proposal lifecycle (pending -> undecided -> decided).
-  // In the implementation, Decided carries only a certificate — the node
-  // must already have the proposal stored as undecided. The generator's
-  // decidedRequiresDeliveredProposal contract property enforces this
-  // ordering from Malachite's perspective, but Emerald should track
-  // pending/undecided proposals in its own state to match the
-  // implementation more closely.
+  // Move proposal to decided (disk), clear undecided at this height (stale for next).
+  // Pending proposals for future heights are kept.
   action handleDecided(node: Node, proposal: Proposal): bool = {
     val s = emeraldState.get(node)
+    val nextHeight = proposal.height + 1
     emeraldState' = emeraldState.set(node, {
       disk: {
         ...s.disk,
         last_decided_height: proposal.height,
         last_decided_payload: Some(proposal.payload),
-        proposals: s.disk.proposals.union(Set(proposal)),
+        decided_proposals: s.disk.decided_proposals.union(Set(proposal)),
       },
       mem: {
         phase: Ready,
-        consensus_height: proposal.height + 1,
+        consensus_height: nextHeight,
         consensus_round: 0,
+        pending_proposals: s.mem.pending_proposals,
+        undecided_proposals: Set(),
       },
     })
   }
 
   // ProcessSyncedValue: Catch-up with a synced decided value.
   // The proposal comes from the ProcessSyncedValue message payload.
+  // Goes to undecided (mem) — subsequent Decided will promote to decided (disk).
   action handleProcessSyncedValue(node: Node, proposal: Proposal): bool = {
     val s = emeraldState.get(node)
     emeraldState' = emeraldState.set(node, {
       ...s,
-      mem: { ...s.mem, phase: Syncing },
-      disk: { ...s.disk, proposals: s.disk.proposals.union(Set(proposal)) },
+      mem: { ...s.mem, phase: Syncing, undecided_proposals: s.mem.undecided_proposals.union(Set(proposal)) },
     })
   }
 
@@ -198,9 +230,9 @@ module emerald_with_generator {
   // PROPOSAL CONSTRUCTION
   // ===========================================================================
 
-  // Build a proposal for GetValue: return existing proposal for (h, r) or create new.
+  // Build a proposal for GetValue: return existing undecided proposal for (h, r) or create new.
   pure def buildProposal(s: EmeraldNodeState, node: Node, numProposals: int): Proposal = {
-    val existing = s.disk.proposals.find(p =>
+    val existing = s.mem.undecided_proposals.find(p =>
       p.height == s.mem.consensus_height and p.round == s.mem.consensus_round
     )
     match existing {
@@ -315,8 +347,17 @@ module emerald_with_generator {
     NODES.toSet().forall(n =>
       val st = emeraldState.get(n)
       1.to(st.disk.last_decided_height).forall(height =>
-        gen::decisions.has(height) and gen::decisions.get(height).in(st.disk.proposals)
+        gen::decisions.has(height) and gen::decisions.get(height).in(st.disk.decided_proposals)
       )
+    )
+
+  // Lifecycle: After StartedRound(h), no proposals at height h remain pending —
+  // they should all have been promoted to undecided.
+  val no_pending_at_current_height =
+    NODES.toSet().forall(n =>
+      val st = emeraldState.get(n)
+      st.mem.consensus_height > 0 implies
+        st.mem.pending_proposals.forall(p => p.height > st.mem.consensus_height)
     )
 
   // Contract: The generator's Channel API contract is verified separately

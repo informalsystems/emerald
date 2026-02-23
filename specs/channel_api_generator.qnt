@@ -22,12 +22,12 @@
 //   - Safety is enforced by global state constraints
 //   - All contract properties are checked via contractInv at every step
 //   - Fault injection: nodeCrash (lose all state) and nodeRestart (preserve
-//     disk state) clear the node's event history and reset to Unstarted
+//     disk state) clear the node's request history and reset to Unstarted
 //
 // State follows the disk/mem convention from faults.qnt:
 //   - Disk: maxDecided (survives restart)
 //   - Mem: phase, height, round, deliveredProposals, getValueSent (reset on fault)
-//   - Event histories are mem state (cleared on fault, current session only)
+//   - Request histories are mem state (cleared on fault, current session only)
 
 module channel_api_generator {
   import basicSpells.* from "spells/basicSpells"
@@ -127,14 +127,14 @@ module channel_api_generator {
   }
 
   // ===========================================================================
-  // TRACE EVENT (for lastEvent observation / MBT integration)
+  // TRACE ENTRY (for lastEntry observation / MBT integration)
   // ===========================================================================
   //
-  // Since faults are no longer part of ChannelEvent, we need a separate
+  // Since faults are no longer part of ChannelRequest, we need a separate
   // type to represent what happened in the last step (channel message or fault).
 
-  type TraceEvent =
-    | ChannelMsg(ChannelEvent)
+  type TraceEntry =
+    | ChannelMsg(ChannelRequest)
     | FaultMsg(FaultEvent)
 
   // ===========================================================================
@@ -150,13 +150,13 @@ module channel_api_generator {
   // Authoritative decisions: at most one per height.
   // Used as a guard in sendDecided (ensuring the same proposal is decided
   // across nodes) and by the contract's validity and syncedValueIsDecided
-  // properties. The contract's agreement property checks event histories
+  // properties. The contract's agreement property checks request histories
   // directly, so it catches disagreement even if this map were buggy.
   var decisions: Height -> Proposal
 
-  // Per-node event history for the current session (mem state).
-  // Cleared on fault — contains only current-session events.
-  var eventHistory: Node -> List[ChannelEvent]
+  // Per-node request history for the current session (mem state).
+  // Cleared on fault — contains only current-session requests.
+  var requestHistory: Node -> List[ChannelRequest]
 
   // Per-proposal: which nodes have been delivered this specific proposal
   // and are in a position to vote on it. Keyed by Proposal (not Height)
@@ -175,9 +175,9 @@ module channel_api_generator {
   // Guards sendDecided: requires > 2/3 support before any node can decide.
   var proposalSupport: Proposal -> Set[Node]
 
-  // Last event emitted (for trace observation / MBT integration).
-  // None in the initial state (no event sent yet).
-  var lastEvent: Option[{ node: Node, event: TraceEvent }]
+  // Last trace entry emitted (for trace observation / MBT integration).
+  // None in the initial state (no entry yet).
+  var lastEntry: Option[{ node: Node, entry: TraceEntry }]
 
   // ===========================================================================
   // ACTIONS: Channel API messages from Malachite to the application
@@ -192,18 +192,18 @@ module channel_api_generator {
     val ns = nodeStates.get(node)
     all {
       ns.mem.phase == Unstarted,
-      // Contract: heightsPositive requires all event heights >= 1.
+      // Contract: heightsPositive requires all request heights >= 1.
       // This guard ensures the starting height satisfies that property.
       replyStartHeight >= 1,
-      val evt = EvConsensusReady
+      val req = ReqConsensusReady
       all {
         nodeStates' = nodeStates.set(node, {
           ...ns,
           mem: { ...ns.mem, phase: Started, height: replyStartHeight, round: 0 },
         }),
-        lastEvent' = Some({ node: node, event: ChannelMsg(evt) }),
-        eventHistory' = eventHistory.set(node,
-          eventHistory.get(node).append(evt)
+        lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
+        requestHistory' = requestHistory.set(node,
+          requestHistory.get(node).append(req)
         ),
         proposals' = proposals,
         decisions' = decisions,
@@ -233,7 +233,7 @@ module channel_api_generator {
       ns.mem.phase == Started,
       ns.mem.height <= MAX_HEIGHT,
       val proposer = proposer_for(ns.mem.height, ns.mem.round)
-      val evt = EvStartedRound({
+      val req = ReqStartedRound({
         height: ns.mem.height,
         round: ns.mem.round,
         proposer: proposer,
@@ -243,9 +243,9 @@ module channel_api_generator {
           ...ns,
           mem: { ...ns.mem, phase: InRound },
         }),
-        lastEvent' = Some({ node: node, event: ChannelMsg(evt) }),
-        eventHistory' = eventHistory.set(node,
-          eventHistory.get(node).append(evt)
+        lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
+        requestHistory' = requestHistory.set(node,
+          requestHistory.get(node).append(req)
         ),
         proposals' = proposals,
         decisions' = decisions,
@@ -274,7 +274,7 @@ module channel_api_generator {
       replyProposal.height == ns.mem.height,
       replyProposal.round == ns.mem.round,
       replyProposal.proposer == node,
-      val evt = EvGetValue({
+      val req = ReqGetValue({
         height: ns.mem.height,
         round: ns.mem.round,
       })
@@ -289,9 +289,9 @@ module channel_api_generator {
             deliveredProposals: ns.mem.deliveredProposals.union(Set(replyProposal)),
           },
         }),
-        lastEvent' = Some({ node: node, event: ChannelMsg(evt) }),
-        eventHistory' = eventHistory.set(node,
-          eventHistory.get(node).append(evt)
+        lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
+        requestHistory' = requestHistory.set(node,
+          requestHistory.get(node).append(req)
         ),
         decisions' = decisions,
         // Proposer supports their specific proposal
@@ -316,7 +316,7 @@ module channel_api_generator {
       // Optimization: real network can deliver stale proposals (Emerald drops them).
       // Not enforced by the contract — restricts traces to reduce state space.
       proposal.height >= ns.mem.height,
-      val evt = EvReceivedProposal({ proposal: proposal })
+      val req = ReqReceivedProposal({ proposal: proposal })
       // Only count support when the node is at the proposal's height.
       // Future-height proposals are buffered as pending — the node hasn't
       // participated in consensus at that height yet.
@@ -330,9 +330,9 @@ module channel_api_generator {
             deliveredProposals: ns.mem.deliveredProposals.union(Set(proposal)),
           },
         }),
-        lastEvent' = Some({ node: node, event: ChannelMsg(evt) }),
-        eventHistory' = eventHistory.set(node,
-          eventHistory.get(node).append(evt)
+        lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
+        requestHistory' = requestHistory.set(node,
+          requestHistory.get(node).append(req)
         ),
         proposals' = proposals,
         decisions' = decisions,
@@ -378,15 +378,15 @@ module channel_api_generator {
       // Record the decision
       decisions' = decisions.put(ns.mem.height, proposal),
       // Move to next height
-      val evt = EvDecided({ proposal: proposal })
+      val req = ReqDecided({ proposal: proposal })
       all {
         nodeStates' = nodeStates.set(node, {
           disk: { ...ns.disk, maxDecided: ns.mem.height },
           mem: { ...ns.mem, phase: Started, height: ns.mem.height + 1, round: 0 },
         }),
-        lastEvent' = Some({ node: node, event: ChannelMsg(evt) }),
-        eventHistory' = eventHistory.set(node,
-          eventHistory.get(node).append(evt)
+        lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
+        requestHistory' = requestHistory.set(node,
+          requestHistory.get(node).append(req)
         ),
         proposals' = proposals,
         proposalSupport' = proposalSupport,
@@ -406,7 +406,7 @@ module channel_api_generator {
       ns.mem.height <= MAX_HEIGHT,
       val newRound = ns.mem.round + 1
       val proposer = proposer_for(ns.mem.height, newRound)
-      val evt = EvStartedRound({
+      val req = ReqStartedRound({
         height: ns.mem.height,
         round: newRound,
         proposer: proposer,
@@ -416,9 +416,9 @@ module channel_api_generator {
           ...ns,
           mem: { ...ns.mem, phase: InRound, round: newRound },
         }),
-        lastEvent' = Some({ node: node, event: ChannelMsg(evt) }),
-        eventHistory' = eventHistory.set(node,
-          eventHistory.get(node).append(evt)
+        lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
+        requestHistory' = requestHistory.set(node,
+          requestHistory.get(node).append(req)
         ),
         proposals' = proposals,
         decisions' = decisions,
@@ -439,7 +439,7 @@ module channel_api_generator {
       decisions.has(ns.mem.height),
       ns.disk.maxDecided < ns.mem.height,
       val proposal = decisions.get(ns.mem.height)
-      val evt = EvProcessSyncedValue({ proposal: proposal })
+      val req = ReqProcessSyncedValue({ proposal: proposal })
       all {
         nodeStates' = nodeStates.set(node, {
           ...ns,
@@ -449,9 +449,9 @@ module channel_api_generator {
             deliveredProposals: ns.mem.deliveredProposals.union(Set(proposal)),
           },
         }),
-        lastEvent' = Some({ node: node, event: ChannelMsg(evt) }),
-        eventHistory' = eventHistory.set(node,
-          eventHistory.get(node).append(evt)
+        lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
+        requestHistory' = requestHistory.set(node,
+          requestHistory.get(node).append(req)
         ),
         proposals' = proposals,
         decisions' = decisions,
@@ -473,11 +473,11 @@ module channel_api_generator {
       // state space; not enforced by the contract.
       height >= 1,
       height < ns.mem.height,
-      val evt = EvGetDecidedValue({ height: height })
+      val req = ReqGetDecidedValue({ height: height })
       all {
-        lastEvent' = Some({ node: node, event: ChannelMsg(evt) }),
-        eventHistory' = eventHistory.set(node,
-          eventHistory.get(node).append(evt)
+        lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
+        requestHistory' = requestHistory.set(node,
+          requestHistory.get(node).append(req)
         ),
         nodeStates' = nodeStates,
         proposals' = proposals,
@@ -491,19 +491,19 @@ module channel_api_generator {
   // FAULT ACTIONS: crash and restart
   // ===========================================================================
   //
-  // Faults clear the node's event history (mem state) instead of appending
-  // EvFault. This keeps histories short (bounded by session length) and
+  // Faults clear the node's request history (mem state) instead of appending
+  // ReqFault. This keeps histories short (bounded by session length) and
   // eliminates session-boundary logic from all contract properties.
 
   // --- Node Crash ---
-  // Node lost all state: reset disk + mem, clear event history.
+  // Node lost all state: reset disk + mem, clear request history.
   action nodeCrash(node: Node): bool = {
     val ns = nodeStates.get(node)
     all {
       ns.mem.phase != Unstarted,
       nodeStates' = nodeStates.set(node, initGenNode),
-      eventHistory' = eventHistory.set(node, []),
-      lastEvent' = Some({ node: node, event: FaultMsg(Crash) }),
+      requestHistory' = requestHistory.set(node, []),
+      lastEntry' = Some({ node: node, entry: FaultMsg(Crash) }),
       proposals' = proposals,
       decisions' = decisions,
       // Disk state — votes already cast don't un-happen
@@ -512,7 +512,7 @@ module channel_api_generator {
   }
 
   // --- Node Restart ---
-  // Node restarted: preserve disk state, reset mem, clear event history.
+  // Node restarted: preserve disk state, reset mem, clear request history.
   // Decisions survive on disk (maxDecided preserved). Malachite re-initializes
   // and will re-deliver proposals and ConsensusReady.
   action nodeRestart(node: Node): bool = {
@@ -520,8 +520,8 @@ module channel_api_generator {
     all {
       ns.mem.phase != Unstarted,
       nodeStates' = nodeStates.set(node, { disk: ns.disk, mem: initGenMem }),
-      eventHistory' = eventHistory.set(node, []),
-      lastEvent' = Some({ node: node, event: FaultMsg(Restart) }),
+      requestHistory' = requestHistory.set(node, []),
+      lastEntry' = Some({ node: node, entry: FaultMsg(Restart) }),
       proposals' = proposals,
       decisions' = decisions,
       // Disk state — votes already cast don't un-happen
@@ -539,9 +539,9 @@ module channel_api_generator {
       nodeStates' = nodes.mapBy(n => initGenNode),
       proposals' = Set(),
       decisions' = Map(),
-      eventHistory' = nodes.mapBy(n => []),
+      requestHistory' = nodes.mapBy(n => []),
       proposalSupport' = Map(),
-      lastEvent' = None,
+      lastEntry' = None,
     }
   }
 
@@ -589,7 +589,7 @@ module channel_api_generator {
       proposal_support: proposalSupport,
     },
     mem: {
-      event_history: eventHistory,
+      request_history: requestHistory,
     },
   }
 

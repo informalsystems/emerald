@@ -11,7 +11,7 @@
 // This contract defines:
 //   1. The message types exchanged through the Channel API
 //   2. Safety guarantees (agreement, validity)
-//   3. Ordering guarantees (declarative properties over event histories)
+//   3. Ordering guarantees (declarative properties over request histories)
 //   4. Assumptions (what the application must do for guarantees to hold)
 //
 // Both safety and ordering properties are checked as invariants on any
@@ -20,14 +20,14 @@
 // properties make the ordering auditable and verifiable independently.
 //
 // Fault handling: Faults (crash/restart) are node-level, not API-specific.
-// After a fault, the node's event history is cleared (it's ephemeral/mem
+// After a fault, the node's request history is cleared (it's ephemeral/mem
 // state), while proposals and decisions survive on disk. This means contract
-// properties only need to reason about the current session's events — no
-// EvFault variant or session-reset logic needed.
+// properties only need to reason about the current session's requests — no
+// ReqFault variant or session-reset logic needed.
 //
 // State follows the disk/mem convention from faults.qnt:
 //   - Disk: all_proposals, decisions (survive crash/restart)
-//   - Mem: event_history (cleared on fault, contains only current session)
+//   - Mem: request_history (cleared on fault, contains only current session)
 //
 // Source: Malachite's app-channel crate (crates/app-channel/src/msgs.rs)
 // and the consensus Quint spec (specs/consensus/quint/).
@@ -60,44 +60,44 @@ module channel_api_contract {
   //   - GetHistoryMinHeight (sync protocol detail)
   //   - ReceivedProposalPart (modeled as ReceivedProposal for simplicity)
   //
-  // Faults (crash/restart) are NOT part of the Channel API event type.
-  // They are node-level events handled by clearing event histories.
+  // Faults (crash/restart) are NOT part of the Channel API request type.
+  // They are node-level events handled by clearing request histories.
   // See faults.qnt for the FaultEvent type.
-  type ChannelEvent =
-    | EvConsensusReady
-    | EvStartedRound({ height: Height, round: Round, proposer: Node })
-    | EvGetValue({ height: Height, round: Round })
-    | EvReceivedProposal({ proposal: Proposal })
-    | EvDecided({ proposal: Proposal })
-    | EvProcessSyncedValue({ proposal: Proposal })
-    | EvGetDecidedValue({ height: Height })
+  type ChannelRequest =
+    | ReqConsensusReady
+    | ReqStartedRound({ height: Height, round: Round, proposer: Node })
+    | ReqGetValue({ height: Height, round: Round })
+    | ReqReceivedProposal({ proposal: Proposal })
+    | ReqDecided({ proposal: Proposal })
+    | ReqProcessSyncedValue({ proposal: Proposal })
+    | ReqGetDecidedValue({ height: Height })
 
   // ===========================================================================
-  // EVENT HELPERS
+  // REQUEST HELPERS
   // ===========================================================================
 
-  /// Extract the height from an event, if it has one.
-  pure def eventHeight(e: ChannelEvent): Option[Height] = match e {
-    | EvConsensusReady => None
-    | EvStartedRound(r) => Some(r.height)
-    | EvGetValue(r) => Some(r.height)
-    | EvReceivedProposal(r) => Some(r.proposal.height)
-    | EvDecided(r) => Some(r.proposal.height)
-    | EvProcessSyncedValue(r) => Some(r.proposal.height)
-    | EvGetDecidedValue(r) => Some(r.height)
+  /// Extract the height from a request, if it has one.
+  pure def requestHeight(e: ChannelRequest): Option[Height] = match e {
+    | ReqConsensusReady => None
+    | ReqStartedRound(r) => Some(r.height)
+    | ReqGetValue(r) => Some(r.height)
+    | ReqReceivedProposal(r) => Some(r.proposal.height)
+    | ReqDecided(r) => Some(r.proposal.height)
+    | ReqProcessSyncedValue(r) => Some(r.proposal.height)
+    | ReqGetDecidedValue(r) => Some(r.height)
   }
 
-  /// Whether an event is a consensus progress event (vs. a query/delivery event).
-  /// Progress events follow monotonic height ordering and are subject to
+  /// Whether a request is a consensus progress request (vs. a query/delivery request).
+  /// Progress requests follow monotonic height ordering and are subject to
   /// heightMonotonic and decidedIsFinal.
-  /// Excluded events:
-  ///   - EvConsensusReady: one-time initialization, not height progress
-  ///   - EvGetDecidedValue: intentionally queries past heights
-  ///   - EvReceivedProposal: can arrive for future heights (buffered as pending)
-  pure def isProgressEvent(e: ChannelEvent): bool = match e {
-    | EvConsensusReady => false
-    | EvGetDecidedValue(_) => false
-    | EvReceivedProposal(_) => false
+  /// Excluded requests:
+  ///   - ReqConsensusReady: one-time initialization, not height progress
+  ///   - ReqGetDecidedValue: intentionally queries past heights
+  ///   - ReqReceivedProposal: can arrive for future heights (buffered as pending)
+  pure def isProgressRequest(e: ChannelRequest): bool = match e {
+    | ReqConsensusReady => false
+    | ReqGetDecidedValue(_) => false
+    | ReqReceivedProposal(_) => false
     | _ => true
   }
 
@@ -110,9 +110,9 @@ module channel_api_contract {
   //
   // Follows the disk/mem convention from faults.qnt:
   //   - Disk state survives restarts (proposals, decisions)
-  //   - Mem state is cleared on fault (event histories — current session only)
+  //   - Mem state is cleared on fault (request histories — current session only)
   //
-  // Design: event_history is the primary observable — most properties are
+  // Design: request_history is the primary observable — most properties are
   // checked over it. decisions and all_proposals are kept as separate fields
   // for efficient lookup by validity and syncedValueIsDecided.
 
@@ -136,10 +136,10 @@ module channel_api_contract {
   }
 
   type ChannelStateMem = {
-    // Per-node: event history for the current session.
+    // Per-node: request history for the current session.
     // Cleared on fault (crash/restart). Properties fold over only
-    // current-session events — no cross-session reasoning needed.
-    event_history: Node -> List[ChannelEvent],
+    // current-session requests — no cross-session reasoning needed.
+    request_history: Node -> List[ChannelRequest],
   }
 
   type ChannelState = {
@@ -151,14 +151,14 @@ module channel_api_contract {
   // SAFETY PROPERTIES
   // ===========================================================================
 
-  // Agreement: For any two Decided events across all nodes, if they are for
+  // Agreement: For any two Decided requests across all nodes, if they are for
   // the same height, the decided proposals must be identical.
   //
   // This corresponds to AgreementInv in statemachineAsync.qnt:
   //   "Any two correct processes agree in the consensus instances in which
   //    they both have already decided"
   //
-  // Checked directly over event histories so it catches disagreement even
+  // Checked directly over request histories so it catches disagreement even
   // if a buggy generator records inconsistent decisions. After a fault,
   // histories are cleared — cross-session agreement is enforced by the
   // generator's sendDecided guard checking against the decisions map (disk).
@@ -166,10 +166,10 @@ module channel_api_contract {
     // Collect all decided proposals across all nodes, grouped by height.
     // Cost: O(nodes × history_length).
     val decidedByHeight: Height -> Set[Proposal] =
-      s.mem.event_history.keys().fold(Map(), (acc, node) =>
-        s.mem.event_history.get(node).foldl(acc, (m, e) =>
+      s.mem.request_history.keys().fold(Map(), (acc, node) =>
+        s.mem.request_history.get(node).foldl(acc, (m, e) =>
           match e {
-            | EvDecided(d) =>
+            | ReqDecided(d) =>
                 val h = d.proposal.height
                 val existing = if (m.has(h)) m.get(h) else Set()
                 m.put(h, existing.union(Set(d.proposal)))
@@ -250,12 +250,12 @@ module channel_api_contract {
   // ORDERING PROPERTIES
   // ===========================================================================
   //
-  // These properties constrain the order in which Channel API events are
+  // These properties constrain the order in which Channel API requests are
   // delivered to each node. They are expressed declaratively over per-node
-  // event histories, making them readable and auditable without understanding
+  // request histories, making them readable and auditable without understanding
   // any generator's internal state machine.
   //
-  // Event histories contain only current-session events (cleared on fault).
+  // Request histories contain only current-session requests (cleared on fault).
   // This simplifies all fold-based properties — no session boundary logic
   // needed.
   //
@@ -265,25 +265,25 @@ module channel_api_contract {
   //
   // Source: derived from driver.qnt, consensus.qnt, and msgs.rs documentation.
 
-  // heightsPositive: All event heights are >= 1.
+  // heightsPositive: All request heights are >= 1.
   //
   // Consensus starts at height 1 (or higher after restart). Height 0 is
   // never a valid consensus height. This is a basic structural constraint
-  // that applies to all events carrying a height.
+  // that applies to all requests carrying a height.
   //
   // Source: consensus.qnt — heights start at 1. The application replies to
   // ConsensusReady with a starting height >= 1.
   pure def heightsPositive(s: ChannelState): bool =
-    s.mem.event_history.keys().forall(node =>
-      s.mem.event_history.get(node).foldl(true, (ok, e) =>
-        ok and match eventHeight(e) {
+    s.mem.request_history.keys().forall(node =>
+      s.mem.request_history.get(node).foldl(true, (ok, e) =>
+        ok and match requestHeight(e) {
           | Some(h) => h >= 1
           | None => true
         }
       )
     )
 
-  // consensusReadyFirst: ConsensusReady is the first event in the history,
+  // consensusReadyFirst: ConsensusReady is the first request in the history,
   // and it appears at most once per session.
   //
   // Before any other Channel API interaction, Malachite sends ConsensusReady
@@ -293,12 +293,12 @@ module channel_api_contract {
   // Source: msgs.rs — ConsensusReady is sent when the consensus engine
   // has been initialized and is ready to start.
   pure def consensusReadyFirst(s: ChannelState): bool =
-    s.mem.event_history.keys().forall(node =>
-      val hist = s.mem.event_history.get(node)
+    s.mem.request_history.keys().forall(node =>
+      val hist = s.mem.request_history.get(node)
       hist.foldl({ isFirst: true, ok: true }, (acc, e) =>
         if (not(acc.ok)) acc
         else match e {
-          | EvConsensusReady =>
+          | ReqConsensusReady =>
               if (not(acc.isFirst)) { isFirst: false, ok: false }
               else { isFirst: false, ok: true }
           | _ => if (acc.isFirst) { isFirst: false, ok: false } else acc
@@ -317,17 +317,17 @@ module channel_api_contract {
   // Source: driver.qnt — GetValue is produced as part of the proposer logic
   // in applyVotekeeper, after entering a new round.
   pure def getValueAfterStartedRound(s: ChannelState): bool =
-    s.mem.event_history.keys().forall(node =>
+    s.mem.request_history.keys().forall(node =>
       // Scan left to right: track which (h, r) declared this node as proposer.
       // On GetValue(h, r), check (h, r) was started with proposer=self. Cost: O(n).
-      s.mem.event_history.get(node).foldl({ startedAsProposer: Set(), ok: true }, (acc, e) =>
+      s.mem.request_history.get(node).foldl({ startedAsProposer: Set(), ok: true }, (acc, e) =>
         if (not(acc.ok)) acc
         else match e {
-          | EvStartedRound(sr) =>
+          | ReqStartedRound(sr) =>
               if (sr.proposer == node)
                 { ...acc, startedAsProposer: acc.startedAsProposer.union(Set((sr.height, sr.round))) }
               else acc
-          | EvGetValue(gv) =>
+          | ReqGetValue(gv) =>
               { ...acc, ok: acc.startedAsProposer.contains((gv.height, gv.round)) }
           | _ => acc
         }
@@ -339,7 +339,7 @@ module channel_api_contract {
   //
   // Only the proposer for a given (height, round) receives GetValue, and
   // consensus requests a value exactly once per round. Combined, this means
-  // each (h, r) produces at most one GetValue event across all nodes.
+  // each (h, r) produces at most one GetValue request across all nodes.
   //
   // Replaces the previous getValueAtMostOnce (per-node) and getValueToOneNode
   // (cross-node) with a single global uniqueness check via counting.
@@ -347,13 +347,13 @@ module channel_api_contract {
   // Source: driver.qnt — GetValue is produced exactly when entering a round
   // where the node is the proposer, and a round is entered at most once.
   pure def getValueUnique(s: ChannelState): bool = {
-    // Count GetValue events per (h, r) across all nodes.
+    // Count GetValue requests per (h, r) across all nodes.
     // Cost: O(nodes × history_length).
     val counts: (Height, Round) -> int =
-      s.mem.event_history.keys().fold(Map(), (acc, node) =>
-        s.mem.event_history.get(node).foldl(acc, (m, e) =>
+      s.mem.request_history.keys().fold(Map(), (acc, node) =>
+        s.mem.request_history.get(node).foldl(acc, (m, e) =>
           match e {
-            | EvGetValue(gv) =>
+            | ReqGetValue(gv) =>
                 val key = (gv.height, gv.round)
                 val cur = if (m.has(key)) m.get(key) else 0
                 m.put(key, cur + 1)
@@ -365,23 +365,23 @@ module channel_api_contract {
   }
 
   // heightMonotonic: Heights are non-decreasing in a node's consensus progress
-  // events.
+  // requests.
   //
   // Consensus processes heights sequentially. A node never receives progress
-  // events for an earlier height after it has received events for a later
-  // height. Query events (GetDecidedValue) are excluded — they intentionally
+  // requests for an earlier height after it has received requests for a later
+  // height. Query requests (GetDecidedValue) are excluded — they intentionally
   // reference past heights. Histories are per-session (cleared on fault).
   //
   // Source: consensus.qnt — the state machine processes one height at a time,
   // advancing to h+1 only after deciding at h.
   pure def heightMonotonic(s: ChannelState): bool =
-    s.mem.event_history.keys().forall(node =>
-      // Scan left to right: track the max height seen in progress events.
-      // Each new progress event must have height >= max. Cost: O(n).
-      s.mem.event_history.get(node).foldl({ maxHeight: 0, ok: true }, (acc, e) =>
+    s.mem.request_history.keys().forall(node =>
+      // Scan left to right: track the max height seen in progress requests.
+      // Each new progress request must have height >= max. Cost: O(n).
+      s.mem.request_history.get(node).foldl({ maxHeight: 0, ok: true }, (acc, e) =>
         if (not(acc.ok)) acc
-        else if (isProgressEvent(e)) {
-          match eventHeight(e) {
+        else if (isProgressRequest(e)) {
+          match requestHeight(e) {
             | Some(h) =>
                 if (h < acc.maxHeight) { ...acc, ok: false }
                 else { ...acc, maxHeight: h }
@@ -391,12 +391,12 @@ module channel_api_contract {
       ).ok
     )
 
-  // decidedIsFinal: After Decided(h), all subsequent consensus progress events
+  // decidedIsFinal: After Decided(h), all subsequent consensus progress requests
   // for the same node have height exactly h+1.
   //
   // Once consensus decides at height h, it moves on to height h+1. No further
-  // progress events are delivered for the decided height, and no heights are
-  // skipped. Query events (GetDecidedValue) are excluded — they intentionally
+  // progress requests are delivered for the decided height, and no heights are
+  // skipped. Query requests (GetDecidedValue) are excluded — they intentionally
   // reference past heights. Histories are per-session (cleared on fault).
   //
   // Strictly stronger than just "height > maxDecided": prevents height gaps
@@ -406,22 +406,22 @@ module channel_api_contract {
   // to a new height. msgs.rs — Decided triggers the application to call
   // StartHeight(h+1).
   pure def decidedIsFinal(s: ChannelState): bool =
-    s.mem.event_history.keys().forall(node =>
+    s.mem.request_history.keys().forall(node =>
       // Scan left to right: track the max decided height.
-      // Every progress event after a Decided must have height exactly
+      // Every progress request after a Decided must have height exactly
       // maxDecided + 1. Cost: O(n).
-      s.mem.event_history.get(node).foldl({ maxDecided: 0, ok: true }, (acc, e) =>
+      s.mem.request_history.get(node).foldl({ maxDecided: 0, ok: true }, (acc, e) =>
         if (not(acc.ok)) acc
         else
           val check =
-            if (acc.maxDecided > 0 and isProgressEvent(e)) {
-              match eventHeight(e) {
+            if (acc.maxDecided > 0 and isProgressRequest(e)) {
+              match requestHeight(e) {
                 | Some(h) => h == acc.maxDecided + 1
                 | None => true
               }
             } else true
           val newMax = match e {
-            | EvDecided(d) => d.proposal.height
+            | ReqDecided(d) => d.proposal.height
             | _ => acc.maxDecided
           }
           { maxDecided: newMax, ok: check }
@@ -431,7 +431,7 @@ module channel_api_contract {
   // heightAdvanceRequiresDecision: A node's consensus height only advances
   // after a decision at the previous height.
   //
-  // When the height increases between progress events, the earlier height
+  // When the height increases between progress requests, the earlier height
   // must have been decided first. This prevents height jumps without
   // decisions (e.g., StartedRound(1,0) → StartedRound(2,0) with no
   // Decided(1) in between).
@@ -443,29 +443,29 @@ module channel_api_contract {
   // Source: consensus.qnt — the state machine advances to h+1 only after
   // deciding at h. driver.qnt — Decided triggers StartHeight(h+1).
   pure def heightAdvanceRequiresDecision(s: ChannelState): bool =
-    s.mem.event_history.keys().forall(node =>
-      s.mem.event_history.get(node).foldl(
+    s.mem.request_history.keys().forall(node =>
+      s.mem.request_history.get(node).foldl(
         { currentHeight: 0, maxDecided: 0, ok: true }, (acc, e) =>
         if (not(acc.ok)) acc
         else
           val newMaxDecided = match e {
-            | EvDecided(d) =>
+            | ReqDecided(d) =>
                 if (d.proposal.height > acc.maxDecided) d.proposal.height
                 else acc.maxDecided
             | _ => acc.maxDecided
           }
-          // Track current height from progress events.
+          // Track current height from progress requests.
           // After Decided(h), the node advances to h+1.
-          if (isProgressEvent(e)) {
+          if (isProgressRequest(e)) {
             match e {
-              | EvDecided(d) =>
+              | ReqDecided(d) =>
                   val h = d.proposal.height + 1
                   if (acc.currentHeight > 0 and h > acc.currentHeight)
                     { currentHeight: h, maxDecided: newMaxDecided,
                       ok: acc.currentHeight <= newMaxDecided }
                   else
                     { currentHeight: h, maxDecided: newMaxDecided, ok: true }
-              | _ => match eventHeight(e) {
+              | _ => match requestHeight(e) {
                   | Some(h) =>
                       if (acc.currentHeight > 0 and h > acc.currentHeight)
                         { currentHeight: h, maxDecided: newMaxDecided,
@@ -488,11 +488,11 @@ module channel_api_contract {
   //
   // Source: msgs.rs — ReceivedProposalPart is delivered to non-proposer nodes.
   pure def receivedProposalNotToProposer(s: ChannelState): bool =
-    s.mem.event_history.keys().forall(node =>
-      val hist = s.mem.event_history.get(node)
+    s.mem.request_history.keys().forall(node =>
+      val hist = s.mem.request_history.get(node)
       hist.indices().forall(i =>
         match hist[i] {
-          | EvReceivedProposal(rp) => rp.proposal.proposer != node
+          | ReqReceivedProposal(rp) => rp.proposal.proposer != node
           | _ => true
         }
       )
@@ -508,11 +508,11 @@ module channel_api_contract {
   // catch-up. The value comes from the sync protocol which retrieves
   // decided blocks from other nodes.
   pure def syncedValueIsDecided(s: ChannelState): bool =
-    s.mem.event_history.keys().forall(node =>
-      val hist = s.mem.event_history.get(node)
+    s.mem.request_history.keys().forall(node =>
+      val hist = s.mem.request_history.get(node)
       hist.indices().forall(i =>
         match hist[i] {
-          | EvProcessSyncedValue(sv) =>
+          | ReqProcessSyncedValue(sv) =>
               val p = sv.proposal
               s.disk.decisions.has(p.height) and s.disk.decisions.get(p.height) == p
           | _ => true
@@ -527,17 +527,17 @@ module channel_api_contract {
   // started consensus on.
   //
   // Source: Malachite start_height.rs — start_height always emits
-  // StartedRound(h, 0) before any other events at height h.
+  // StartedRound(h, 0) before any other requests at height h.
   pure def syncRequiresStartedRound(s: ChannelState): bool =
-    s.mem.event_history.keys().forall(node =>
+    s.mem.request_history.keys().forall(node =>
       // Scan left to right: track heights where StartedRound has been seen.
       // On ProcessSyncedValue(h), check StartedRound(h, _) preceded it. Cost: O(n).
-      s.mem.event_history.get(node).foldl({ startedHeights: Set(), ok: true }, (acc, e) =>
+      s.mem.request_history.get(node).foldl({ startedHeights: Set(), ok: true }, (acc, e) =>
         if (not(acc.ok)) acc
         else match e {
-          | EvStartedRound(sr) =>
+          | ReqStartedRound(sr) =>
               { ...acc, startedHeights: acc.startedHeights.union(Set(sr.height)) }
-          | EvProcessSyncedValue(sv) =>
+          | ReqProcessSyncedValue(sv) =>
               { ...acc, ok: acc.startedHeights.contains(sv.proposal.height) }
           | _ => acc
         }
@@ -545,7 +545,7 @@ module channel_api_contract {
     )
 
   // syncIsIrrevocable: After ProcessSyncedValue(h), no StartedRound or
-  // GetValue events can occur at the same height h. Once Malachite enters
+  // GetValue requests can occur at the same height h. Once Malachite enters
   // the sync path for a height, it stays in sync until deciding — it does
   // not fall back to normal consensus rounds.
   //
@@ -559,17 +559,17 @@ module channel_api_contract {
   // on height advancement. timeout.rs — stale timeouts are ignored
   // (round mismatch check).
   pure def syncIsIrrevocable(s: ChannelState): bool =
-    s.mem.event_history.keys().forall(node =>
+    s.mem.request_history.keys().forall(node =>
       // Scan left to right: track heights where ProcessSyncedValue has been seen.
       // If StartedRound or GetValue appears at a synced height, fail. Cost: O(n).
-      s.mem.event_history.get(node).foldl({ syncedHeights: Set(), ok: true }, (acc, e) =>
+      s.mem.request_history.get(node).foldl({ syncedHeights: Set(), ok: true }, (acc, e) =>
         if (not(acc.ok)) acc
         else match e {
-          | EvProcessSyncedValue(sv) =>
+          | ReqProcessSyncedValue(sv) =>
               { ...acc, syncedHeights: acc.syncedHeights.union(Set(sv.proposal.height)) }
-          | EvStartedRound(sr) =>
+          | ReqStartedRound(sr) =>
               { ...acc, ok: not(acc.syncedHeights.contains(sr.height)) }
-          | EvGetValue(gv) =>
+          | ReqGetValue(gv) =>
               { ...acc, ok: not(acc.syncedHeights.contains(gv.height)) }
           | _ => acc
         }
@@ -577,7 +577,7 @@ module channel_api_contract {
     )
 
   // roundsConsecutiveWithinHeight: Within the same height, StartedRound
-  // events have consecutive rounds (exactly +1), and the first round at
+  // requests have consecutive rounds (exactly +1), and the first round at
   // each height is 0.
   //
   // Consensus starts each height at round 0. Rounds advance by exactly 1
@@ -591,14 +591,14 @@ module channel_api_contract {
   // Source: consensus.qnt — timeout increments round by 1. driver.qnt —
   // each height starts at round 0.
   pure def roundsConsecutiveWithinHeight(s: ChannelState): bool =
-    s.mem.event_history.keys().forall(node =>
+    s.mem.request_history.keys().forall(node =>
       // Scan left to right: track the last round seen per height.
       // First StartedRound at a height must be round 0. Each subsequent
       // one must be exactly previous + 1. Cost: O(n).
-      s.mem.event_history.get(node).foldl({ lastRound: Map(), ok: true }, (acc, e) =>
+      s.mem.request_history.get(node).foldl({ lastRound: Map(), ok: true }, (acc, e) =>
         if (not(acc.ok)) acc
         else match e {
-          | EvStartedRound(sr) =>
+          | ReqStartedRound(sr) =>
               if (acc.lastRound.has(sr.height)) {
                 val prev = acc.lastRound.get(sr.height)
                 { ok: sr.round == prev + 1,
@@ -633,8 +633,8 @@ module channel_api_contract {
   // Source: Malachite driver — proposals are gossiped to all nodes, and the
   // proposer builds its value via GetValue.
   pure def decidedRequiresDeliveredProposal(s: ChannelState): bool =
-    s.mem.event_history.keys().forall(node =>
-      s.mem.event_history.get(node).foldl({
+    s.mem.request_history.keys().forall(node =>
+      s.mem.request_history.get(node).foldl({
         // Proposals delivered via ProcessSyncedValue (sync path)
         syncDelivered: Set(),
         // Proposals delivered via ReceivedProposal (normal path)
@@ -647,15 +647,15 @@ module channel_api_contract {
       }, (acc, e) =>
         if (not(acc.ok)) acc
         else match e {
-          | EvStartedRound(sr) =>
+          | ReqStartedRound(sr) =>
               { ...acc, startedRounds: acc.startedRounds.union(Set((sr.height, sr.round))) }
-          | EvGetValue(gv) =>
+          | ReqGetValue(gv) =>
               { ...acc, proposedRounds: acc.proposedRounds.union(Set((gv.height, gv.round))) }
-          | EvReceivedProposal(rp) =>
+          | ReqReceivedProposal(rp) =>
               { ...acc, receivedProposals: acc.receivedProposals.union(Set(rp.proposal)) }
-          | EvProcessSyncedValue(sv) =>
+          | ReqProcessSyncedValue(sv) =>
               { ...acc, syncDelivered: acc.syncDelivered.union(Set(sv.proposal)) }
-          | EvDecided(d) =>
+          | ReqDecided(d) =>
               val p = d.proposal
               // Sync path: no StartedRound required
               val viaSynced = acc.syncDelivered.contains(p)
@@ -671,7 +671,7 @@ module channel_api_contract {
       ).ok
     )
 
-  // receivedProposalExists: Every ReceivedProposal event references a
+  // receivedProposalExists: Every ReceivedProposal request references a
   // proposal that was previously created via GetValue.
   //
   // Malachite gossips proposals between nodes, but only proposals that
@@ -681,16 +681,16 @@ module channel_api_contract {
   // Source: Malachite driver — proposals are gossiped after being built
   // by the proposer via GetValue. Only existing proposals are forwarded.
   pure def receivedProposalExists(s: ChannelState): bool =
-    s.mem.event_history.keys().forall(node =>
-      s.mem.event_history.get(node).foldl(true, (ok, e) =>
+    s.mem.request_history.keys().forall(node =>
+      s.mem.request_history.get(node).foldl(true, (ok, e) =>
         ok and match e {
-          | EvReceivedProposal(rp) => rp.proposal.in(s.disk.all_proposals)
+          | ReqReceivedProposal(rp) => rp.proposal.in(s.disk.all_proposals)
           | _ => true
         }
       )
     )
 
-  // proposerConsistency: For each (height, round), all StartedRound events
+  // proposerConsistency: For each (height, round), all StartedRound requests
   // across all nodes declare the same proposer.
   //
   // Proposer selection is deterministic — every node in the network is told
@@ -700,10 +700,10 @@ module channel_api_contract {
   // Cost: O(nodes × history_length).
   pure def proposerConsistency(s: ChannelState): bool = {
     val proposersByRound: (Height, Round) -> Set[Node] =
-      s.mem.event_history.keys().fold(Map(), (acc, node) =>
-        s.mem.event_history.get(node).foldl(acc, (m, e) =>
+      s.mem.request_history.keys().fold(Map(), (acc, node) =>
+        s.mem.request_history.get(node).foldl(acc, (m, e) =>
           match e {
-            | EvStartedRound(sr) =>
+            | ReqStartedRound(sr) =>
                 val key = (sr.height, sr.round)
                 val existing = if (m.has(key)) m.get(key) else Set()
                 m.put(key, existing.union(Set(sr.proposer)))

@@ -474,6 +474,30 @@ module channel_api_contract {
       )
     )
 
+  // syncRequiresStartedRound: ProcessSyncedValue(h) requires a prior
+  // StartedRound(h, _) at the same height. Malachite always enters a round
+  // (via start_height → StartedRound) before sync can deliver values for
+  // that height. A node cannot receive a synced value for a height it hasn't
+  // started consensus on.
+  //
+  // Source: Malachite start_height.rs — start_height always emits
+  // StartedRound(h, 0) before any other events at height h.
+  pure def syncRequiresStartedRound(s: ChannelState): bool =
+    s.mem.event_history.keys().forall(node =>
+      // Scan left to right: track heights where StartedRound has been seen.
+      // On ProcessSyncedValue(h), check StartedRound(h, _) preceded it. Cost: O(n).
+      s.mem.event_history.get(node).foldl({ startedHeights: Set(), ok: true }, (acc, e) =>
+        if (not(acc.ok)) acc
+        else match e {
+          | EvStartedRound(sr) =>
+              { ...acc, startedHeights: acc.startedHeights.union(Set(sr.height)) }
+          | EvProcessSyncedValue(sv) =>
+              { ...acc, ok: acc.startedHeights.contains(sv.proposal.height) }
+          | _ => acc
+        }
+      ).ok
+    )
+
   // syncIsIrrevocable: After ProcessSyncedValue(h), no StartedRound or
   // GetValue events can occur at the same height h. Once Malachite enters
   // the sync path for a height, it stays in sync until deciding — it does
@@ -657,6 +681,7 @@ module channel_api_contract {
     receivedProposalNotToProposer(s),
     receivedProposalExists(s),
     syncedValueIsDecided(s),
+    syncRequiresStartedRound(s),
     syncIsIrrevocable(s),
     roundsConsecutiveWithinHeight(s),
     decidedRequiresDeliveredProposal(s),

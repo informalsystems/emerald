@@ -4,9 +4,9 @@
 // Fault Events (reusable)
 // =============================================================================
 //
-// General infrastructure fault types. Not Channel API-specific.
+// General infrastructure fault types.
 // A node crash/restart affects all APIs simultaneously — faults are
-// node-level events, not embedded in individual API event types.
+// node-level events, not embedded in individual API request types.
 //
 // Disk/mem convention:
 //   Modules using faults should split state into { disk: D, mem: M }.
@@ -21,8 +21,8 @@
 //     pure def crashReset(initDisk, initMem) = { disk: initDisk, mem: initMem }
 //     pure def restartReset(current, initMem) = { ...current, mem: initMem }
 //
-//   Event histories are mem state — cleared on fault, containing only the
-//   current session's events. This means contract properties over event
+//   Request histories are mem state — cleared on fault, containing only the
+//   current session's requests. This means contract properties over request
 //   histories automatically scope to the current session with no
 //   session-boundary logic needed.
 

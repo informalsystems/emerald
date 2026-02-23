@@ -16,6 +16,11 @@
 // Generator and Emerald actions fire atomically, each assigning their own
 // state variables.
 //
+// Remaining dependencies on generator state:
+//   - gen::proposals: nondeterministic proposal selection in step (trace exploration)
+//   - gen::decisions: synced value lookup + completion invariant (network truth)
+//   - gen::MAX_HEIGHT: bounds nondeterministic height selection in step
+//
 // State follows the disk/mem convention from faults.qnt:
 //   - Disk: decided_proposals, last_decided_height, last_decided_payload (survive restart)
 //   - Mem: phase, consensus_height, consensus_round, pending_proposals, undecided_proposals (reset on fault)
@@ -231,7 +236,8 @@ module emerald_with_generator {
   // ===========================================================================
 
   // Build a proposal for GetValue: return existing undecided proposal for (h, r) or create new.
-  pure def buildProposal(s: EmeraldNodeState, node: Node, numProposals: int): Proposal = {
+  // Payload derived from (height, round) — unique per proposal slot. Safe for MAX_ROUND=3, MAX_HEIGHT=4.
+  pure def buildProposal(s: EmeraldNodeState, node: Node): Proposal = {
     val existing = s.mem.undecided_proposals.find(p =>
       p.height == s.mem.consensus_height and p.round == s.mem.consensus_round
     )
@@ -241,7 +247,7 @@ module emerald_with_generator {
           height: s.mem.consensus_height,
           round: s.mem.consensus_round,
           proposer: node,
-          payload: numProposals,
+          payload: s.mem.consensus_height * 100 + s.mem.consensus_round,
         }
     }
   }
@@ -256,23 +262,23 @@ module emerald_with_generator {
   }
 
   action stepStartedRound(node: Node): bool = {
-    val ns = gen::nodeStates.get(node).mem
+    val s = emeraldState.get(node).mem
     any {
       // Normal: after ConsensusReady or Decided
       all {
         gen::sendStartedRound(node),
-        handleStartedRound(node, ns.height, ns.round),
+        handleStartedRound(node, s.consensus_height, s.consensus_round),
       },
       // After timeout: Malachite internally timed out, app sees StartedRound at next round
       all {
         gen::sendStartedRoundAfterTimeout(node),
-        handleStartedRound(node, ns.height, ns.round + 1),
+        handleStartedRound(node, s.consensus_height, s.consensus_round + 1),
       },
     }
   }
 
   action stepGetValue(node: Node): bool = {
-    val proposal = buildProposal(emeraldState.get(node), node, gen::proposals.size())
+    val proposal = buildProposal(emeraldState.get(node), node)
     all { gen::sendGetValue(node, proposal), handleGetValue(node, proposal) }
   }
 
@@ -283,8 +289,8 @@ module emerald_with_generator {
     all { gen::sendDecided(node, proposal), handleDecided(node, proposal) }
 
   action stepProcessSyncedValue(node: Node): bool = {
-    val ns = gen::nodeStates.get(node).mem
-    val proposal = gen::decisions.get(ns.height)
+    val h = emeraldState.get(node).mem.consensus_height
+    val proposal = gen::decisions.get(h)
     all { gen::sendProcessSyncedValue(node), handleProcessSyncedValue(node, proposal) }
   }
 

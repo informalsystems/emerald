@@ -90,6 +90,35 @@ impl Spammer {
         })
     }
 
+    pub fn new_dex_contracts(
+        url: Url,
+        signer_index: usize,
+        signer_priv_key: &str,
+        config: SpammerConfig,
+        contract: &Address,
+        function: &str,
+        args: &[String],
+    ) -> Result<Self> {
+        let signer: PrivateKeySigner = signer_priv_key.parse()?;
+        let contract_payload = ContractPayload {
+            address: *contract,
+            function_sig: function.to_string(),
+            args: args.to_vec(),
+        };
+        Ok(Self {
+            id: signer_index.to_string(),
+            client: RpcClient::new(url)?,
+            signer,
+            max_num_txs: config.max_num_txs,
+            max_time: config.max_time,
+            max_rate: config.max_rate,
+            batch_interval: config.batch_interval,
+            blobs: false, // Contract calls don't use blobs
+            contract_payload: Some(contract_payload),
+            chain_id: config.chain_id,
+        })
+    }
+
     pub fn new_contract(
         url: Url,
         signer_index: usize,

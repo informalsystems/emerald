@@ -42,6 +42,7 @@ impl Cli {
             Commands::Spam(spam_cmd) => spam_cmd.run().await,
             Commands::Poa(poa_cmd) => poa_cmd.run().await,
             Commands::SpamContract(spam_contract_cmd) => spam_contract_cmd.run().await,
+            Commands::SpamDex(spam_dex_cmd) => spam_dex_cmd.run().await,
             Commands::ModifyConfig(modify_config_cmd) => modify_config_cmd.run(),
         }
     }
@@ -119,6 +120,10 @@ pub enum Commands {
     /// Spam contract transactions
     #[command(arg_required_else_help = true)]
     SpamContract(SpamContractCmd),
+
+    /// Spam DEX contract transactions
+    #[command(arg_required_else_help = true)]
+    SpamDex(SpamDexCmd),
 
     /// Apply custom node configurations from a TOML file
     #[command(arg_required_else_help = true)]
@@ -343,6 +348,80 @@ impl SpamContractCmd {
         Spammer::new_contract(url, *signer_index, config, contract, function, args)?
             .run()
             .await
+    }
+}
+
+#[derive(Parser, Debug, Clone, Default, PartialEq)]
+pub struct SpamDexCmd {
+    /// Contract address to spam
+    #[clap(long)]
+    contract: Address,
+    /// Function signature (e.g., "swap(uint256,uint256)")
+    #[clap(long)]
+    function: String,
+    /// Function arguments (supply multiple `--args` or a comma-separated list)
+    #[clap(long, value_delimiter = ',', num_args = 0..)]
+    args: Vec<String>,
+    /// URL of the execution client's RPC endpoint
+    #[clap(long, default_value = "http://127.0.0.1:8545")]
+    rpc_url: String,
+    /// Number of transactions to send
+    #[clap(short, long, default_value_t = 0)]
+    num_txs: u64,
+    /// Rate of transactions per second
+    #[clap(short, long, default_value_t = 1000)]
+    rate: u64,
+    /// Interval in ms for sending batches of transactions
+    #[clap(short, long, default_value = "200")]
+    interval: u64,
+    /// Time to run the spammer for in seconds
+    #[clap(short, long, default_value_t = 0)]
+    time: u64,
+    /// Signer index (used as spammer ID)
+    #[clap(long, default_value_t = 0)]
+    signer_index: usize,
+    /// Private key of the transaction signer (hex-encoded)
+    #[clap(long)]
+    signer_priv_key: String,
+    #[clap(long, short)]
+    chain_id: u64,
+}
+
+impl SpamDexCmd {
+    pub(crate) async fn run(&self) -> Result<()> {
+        let Self {
+            contract,
+            function,
+            args,
+            rpc_url,
+            num_txs,
+            rate,
+            interval,
+            time,
+            signer_index,
+            signer_priv_key,
+            chain_id,
+        } = self;
+        let url = rpc_url.parse()?;
+        let config = spammer::SpammerConfig {
+            max_num_txs: *num_txs,
+            max_time: *time,
+            max_rate: *rate,
+            batch_interval: *interval,
+            blobs: false,
+            chain_id: *chain_id,
+        };
+        Spammer::new_dex_contracts(
+            url,
+            *signer_index,
+            signer_priv_key,
+            config,
+            contract,
+            function,
+            args,
+        )?
+        .run()
+        .await
     }
 }
 

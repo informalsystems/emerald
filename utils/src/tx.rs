@@ -34,7 +34,7 @@ pub(crate) async fn make_signed_eip4844_tx(
     nonce: u64,
     chain_id: u64,
 ) -> Result<TransactionSigned> {
-    let tx = make_eip4844_tx(nonce, chain_id);
+    let tx: alloy_consensus::EthereumTypedTransaction<TxEip4844> = make_eip4844_tx(nonce, chain_id);
     sign_transaction(signer, tx).await
 }
 

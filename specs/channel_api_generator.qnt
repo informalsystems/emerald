@@ -213,9 +213,9 @@ module channel_api_generator {
   }
 
   // --- StartedRound ---
-  // A new consensus round has begun. Sent after ConsensusReady (for the first
-  // round), after Decided (for the first round of a new height), or after a
-  // timeout (for subsequent rounds at the same height).
+  // The first round at a new height. Sent after ConsensusReady (height 1) or
+  // after Decided (next height). Guard: phase == Started.
+  // For timeout-driven round bumps at the same height, see sendStartedRoundAfterTimeout.
   //
   // Source: AppMsg::StartedRound in msgs.rs
   action sendStartedRound(node: Node): bool = {
@@ -527,6 +527,21 @@ module channel_api_generator {
       // Disk state — votes already cast don't un-happen
       proposalSupport' = proposalSupport,
     }
+  }
+
+  // ===========================================================================
+  // PASSTHROUGH ACTION (for composition)
+  // ===========================================================================
+
+  // Stutter action: no Channel API activity this step.
+  // Exported for composition steps that only interact with Engine API.
+  action genUnchanged: bool = all {
+    nodeStates' = nodeStates,
+    proposals' = proposals,
+    decisions' = decisions,
+    requestHistory' = requestHistory,
+    proposalSupport' = proposalSupport,
+    lastEntry' = lastEntry,
   }
 
   // ===========================================================================

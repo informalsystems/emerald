@@ -9,7 +9,7 @@
 // Models what the Malachite team would publish for applications to consume.
 //
 // This contract defines:
-//   1. The message types exchanged through the Channel API
+//   1. The request types for the Channel API
 //   2. Safety guarantees (agreement, validity)
 //   3. Ordering guarantees (declarative properties over request histories)
 //   4. Assumptions (what the application must do for guarantees to hold)

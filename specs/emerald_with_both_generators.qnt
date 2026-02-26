@@ -560,23 +560,32 @@ module emerald_with_both_generators {
 
   // NodeCrash: Both generators + Emerald state reset.
   // No idle guard — faults can occur mid-processing (clears pendingWork).
-  // TODO: Model independent process crashes
-  // Currently crashes BOTH Emerald and Reth together, but they run in separate
-  // processes and can crash independently. Should add:
-  //   - stepEmeraldCrash: crash Emerald only (Reth keeps running)
-  //   - stepRethCrash: crash Reth only (Emerald keeps running)
-  //   - stepBothCrash: crash both (current behavior)
   //
-  // Independent crashes test more realistic failure scenarios:
-  //   - Emerald crashes: loses mem state (pending, undecided, validated_cache),
-  //     but Reth continues validating; when Emerald restarts, must resync
-  //   - Reth crashes: loses mem state (validatedBlocks, pendingBuild), but
-  //     Emerald continues; subsequent Engine API calls may fail or require retry
-  //   - Both crash: current model (coordinated failure)
+  // TODO: Model independent process crashes.
+  // Malachite+Emerald run in one process, Reth in another. Should replace
+  // stepNodeCrash/stepNodeRestart with 4 independent actions:
   //
-  // Impact on invariants:
-  //   - validated_before_decided: must check Reth DISK chain (mem cleared on Reth crash)
-  //   - head_tracks_consensus: Emerald may be ahead if Reth crashed and restarted
+  //   - stepEmeraldCrash/Restart: gen::nodeCrash/Restart + handleNodeCrash/Restart,
+  //     reth::rethUnchanged. Emerald+Malachite fail, Reth keeps running.
+  //
+  //   - stepRethCrash: reth::rethCrash, gen::genUnchanged. Must also clear
+  //     Emerald's pendingWork (engine calls can't execute against Offline Reth,
+  //     and rethStart requires empty queue — deadlock otherwise) and
+  //     validated_cache (references blocks no longer in Reth's chain).
+  //
+  //   - stepRethRestart: reth::rethRestart, gen::genUnchanged. Must clear
+  //     Emerald's pendingWork (pendingBuild is gone, queued CallGetPayload
+  //     would fail). validated_cache can stay (disk chain preserved).
+  //
+  // Invariant impact:
+  //   - head_tracks_consensus: after Reth crash, headHeight resets to 0 while
+  //     last_decided_height stays. Must gate on reth phase != Offline.
+  //   - validated_before_decided: after Reth crash, all evidence (mem + disk)
+  //     is gone. Must gate on reth phase != Offline.
+  //   - chainContinuity (reth contract): uses disk state only, robust to all crash types.
+  //
+  // No "both crash" convenience action needed — stepEmeraldCrash followed by
+  // stepRethCrash in consecutive steps achieves the same result.
   action stepNodeCrash(node: Node): bool = all {
     gen::nodeCrash(node),
     reth::rethCrash(node),
@@ -585,7 +594,7 @@ module emerald_with_both_generators {
 
   // NodeRestart: Both generators + Emerald state reset (disk preserved).
   // No idle guard — faults can occur mid-processing (clears pendingWork).
-  // TODO: Same as stepNodeCrash - should model independent restarts
+  // TODO: See stepNodeCrash TODO — same independent crash split applies.
   action stepNodeRestart(node: Node): bool = all {
     gen::nodeRestart(node),
     reth::rethRestart(node),
@@ -615,9 +624,15 @@ module emerald_with_both_generators {
   // INVARIANTS
   // ===========================================================================
 
-  // TODO This should be Emerald specific invariants, with an option to run this spec against both contracts
+  // Invariants are organized by scope:
+  //   - Emerald-only: properties of Emerald's own state
+  //   - Emerald ↔ Malachite: properties relating Emerald state to Channel API generator state
+  //   - Emerald ↔ Reth: properties relating Emerald state to Engine API generator state
+  // The generators also expose contractInv (gen::contractInv, reth::contractInv)
+  // which check the full contract properties. These can be uncommented below
+  // to verify the composition doesn't violate either contract.
 
-  // --- Channel API invariants ---
+  // --- Emerald-only invariants ---
 
   // Safety: All nodes agree on decided blocks.
   val emerald_agreement =
@@ -638,6 +653,16 @@ module emerald_with_both_generators {
         st.mem.consensus_height > st.disk.last_decided_height
     )
 
+  // Lifecycle: No pending proposals at current height.
+  val no_pending_at_current_height =
+    NODES.toSet().forall(n =>
+      val st = emeraldState.get(n)
+      st.mem.consensus_height > 0 implies
+        st.mem.pending_proposals.forall(p => p.height > st.mem.consensus_height)
+    )
+
+  // --- Cross-boundary invariants (Emerald ↔ Malachite) ---
+
   // Completeness: All nodes know all decided proposals.
   val completion =
     NODES.toSet().forall(n =>
@@ -647,15 +672,7 @@ module emerald_with_both_generators {
       )
     )
 
-  // Lifecycle: No pending proposals at current height.
-  val no_pending_at_current_height =
-    NODES.toSet().forall(n =>
-      val st = emeraldState.get(n)
-      st.mem.consensus_height > 0 implies
-        st.mem.pending_proposals.forall(p => p.height > st.mem.consensus_height)
-    )
-
-  // --- Engine API invariants ---
+  // --- Cross-boundary invariants (Emerald ↔ Reth) ---
 
   // head_tracks_consensus: After Decided(h), Reth's head height >= h.
   val head_tracks_consensus =
@@ -684,15 +701,10 @@ module emerald_with_both_generators {
       }
     )
 
-  // chain_continuity: Reth's canonical chain forms a linked list.
-  val chain_continuity_inv =
-    NODES.toSet().forall(n =>
-      val rns = reth::rethStates.get(n)
-      rns.disk.chain.keys().forall(h =>
-        h == 0 or {
-          rns.disk.chain.has(h - 1) and
-          rns.disk.chain.get(h).parentHash == rns.disk.chain.get(h - 1).hash
-        }
-      )
-    )
+  // --- Generator contract invariants ---
+  // Expensive: full contract property scans per step. Uncomment for
+  // full verification that the composition doesn't violate either contract.
+  // val channelContractInv = gen::contractInv
+  // val engineContractInv = reth::contractInv
+
 }

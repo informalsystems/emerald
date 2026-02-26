@@ -33,7 +33,6 @@
 // State follows the disk/mem convention from faults.qnt.
 // Extends emerald_with_generator.qnt with Engine API tracking state.
 
-// TODO create README file with description of the composition approach, conventions, future work
 module emerald_with_both_generators {
   import basicSpells.* from "spells/basicSpells"
   import rareSpells.* from "spells/rareSpells"
@@ -524,7 +523,7 @@ module emerald_with_both_generators {
     val block: eac::Block = validationBlock(proposal, parentHash)
     all {
       s.mem.pendingWork.length() == 0,
-      // Guard: block must be valid (same as atomic respondValidateAndFinalize's guard)
+      // Guard: block must be valid (parent chain linkage)
       reth::computePayloadStatus(rns, block) == eac::Valid,
       gen::sendDecided(node, proposal),
       reth::rethUnchanged,

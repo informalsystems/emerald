@@ -33,6 +33,7 @@
 // State follows the disk/mem convention from faults.qnt.
 // Extends emerald_with_generator.qnt with Engine API tracking state.
 
+// TODO create README file with description of the composition approach, conventions, future work
 module emerald_with_both_generators {
   import basicSpells.* from "spells/basicSpells"
   import rareSpells.* from "spells/rareSpells"
@@ -64,7 +65,12 @@ module emerald_with_both_generators {
 
   // Specifies which Engine API primitive action to call.
   // One variant per primitive action, carrying required parameters.
-  // TODO: why is this not part of the engine generator?
+  //
+  // TODO: EngineCallSpec and dispatchEngineCall are boilerplate — mechanically
+  // derivable from the generator's action signatures. They belong in (or next
+  // to) the engine generator as reusable consumer infrastructure, and are
+  // candidates for language-level automation (Quint could auto-generate a call
+  // enum + dispatcher when a spec imports a generator).
   type EngineCallSpec =
     | CallBuildRequest                                            // respondBuildRequest(node)
     | CallGetPayload                                              // respondGetPayload(node)
@@ -72,19 +78,33 @@ module emerald_with_both_generators {
     | CallHeadUpdate({ headHash: eac::BlockHash,
                        headHeight: eac::Height })                 // respondHeadUpdate(node, headHash, headHeight)
 
-  // Handler-specific context carried through the queue for finalization.
-  // Each variant holds exactly the data the corresponding handler needs.
-  type ProcessingContext =
-    | ProcGetValue({ proposal: Proposal })
-    | ProcReceivedProposal({ proposal: Proposal, block: eac::Block })
-    | ProcDecided({ proposal: Proposal, block: eac::Block })
-
-  // Pending Engine API work: a list of remaining calls + context for finalization.
-  // When remainingCalls is empty, finalize using context.
-  type PendingWork = {
-    remainingCalls: List[EngineCallSpec],
-    context: ProcessingContext,
-  }
+  // A single unit of work in the node's processing queue.
+  // EngineCall: external calls to Reth (generic, any consumer would have the same).
+  // FinalizeX: local Emerald state updates after engine work completes (app-specific).
+  // Generalizes naturally: an app talking to multiple external components would
+  // add variants for each (e.g., MempoolCall, OracleCall) interleaved with local logic.
+  //
+  // TODO: Cleaner state separation between Emerald and generators.
+  // Currently Emerald reads reth::rethStates directly in several places:
+  //   (a) Block construction: reads reth.disk.chain for parentHash at enqueue time
+  //       (stepReceivedProposal, stepDecided)
+  //   (b) Validity pre-check: computePayloadStatus guard at enqueue time (stepDecided)
+  //   (c) Cross-component data flow: FinalizeReceivedProposal reads reth state to get
+  //       validation result from preceding CallNewPayload
+  //   (d) Phase check: stepConsensusReady checks reth phase to decide rethStart
+  // To eliminate this coupling:
+  //   - EngineCall dispatch could write responses into Emerald's own state (e.g.,
+  //     lastResponse: Option[EngineResponse]), so handlers read local state not
+  //     generator state. This fixes (c).
+  //   - Block construction could become a work item itself (e.g.,
+  //     BuildValidationBlock) that reads Reth state and enqueues CallNewPayload.
+  //     This fixes (a) and (b).
+  //   - Phase check could use an observable flag published by the generator. Fixes (d).
+  type WorkItem =
+    | EngineCall(EngineCallSpec)
+    | FinalizeGetValue({ proposal: Proposal })
+    | FinalizeReceivedProposal({ proposal: Proposal, block: eac::Block })
+    | FinalizeDecided({ proposal: Proposal, block: eac::Block })
 
   // ---------------------------------------------------------------------------
   // Emerald node state
@@ -109,8 +129,8 @@ module emerald_with_both_generators {
     // Engine API tracking (ephemeral)
     head_block_hash: eac::BlockHash,     // Current execution head
     validated_cache: Set[eac::BlockHash], // Cached validation results
-    // Non-atomic Engine API processing queue
-    pendingWork: Option[PendingWork],
+    // Sequential work queue: engine API calls + local handlers
+    pendingWork: List[WorkItem],
   }
 
   type EmeraldNodeState = {
@@ -143,7 +163,7 @@ module emerald_with_both_generators {
     undecided_proposals: Set(),
     head_block_hash: 0,
     validated_cache: Set(),
-    pendingWork: None,
+    pendingWork: [],
   }
 
   pure val initEmeraldNode: EmeraldNodeState = {
@@ -191,50 +211,40 @@ module emerald_with_both_generators {
     })
   }
 
-  // GetValue: Proposer builds a value using Engine API.
-  // Called during finalization (after respondBuildRequest + respondGetPayload).
-  action handleGetValue(node: Node, proposal: Proposal): bool = {
+  // Update Emerald state after Engine API build (respondBuildRequest + respondGetPayload).
+  // Adds the proposer's proposal to undecided_proposals.
+  action finalizeGetValue(node: Node, proposal: Proposal, remaining: List[WorkItem]): bool = {
     val s = emeraldState.get(node)
     emeraldState' = emeraldState.set(node, {
       ...s,
       mem: {
         ...s.mem,
         undecided_proposals: s.mem.undecided_proposals.union(Set(proposal)),
-        pendingWork: None,
+        pendingWork: remaining,
       },
     })
   }
 
-  // ReceivedProposal: Non-proposer learns about a proposal.
-  // Validates via Engine API (newPayload). Block tracking updated.
-  action handleReceivedProposal(node: Node, proposal: Proposal, blockHash: eac::BlockHash, valid: bool): bool = {
+  // Update Emerald state after Engine API validation (respondNewPayload).
+  // Adds proposal to undecided_proposals and caches validation result.
+  // Only called for current-height proposals — stale and future proposals
+  // are filtered at enqueue time in stepReceivedProposal.
+  action finalizeReceivedProposal(node: Node, proposal: Proposal, blockHash: eac::BlockHash, valid: bool, remaining: List[WorkItem]): bool = {
     val s = emeraldState.get(node)
-    if (proposal.height < s.mem.consensus_height) {
-      // Stale proposal — drop it
-      emeraldState' = emeraldState
-    } else if (proposal.height == s.mem.consensus_height) {
-      // Current height — actionable (called from finalization)
-      emeraldState' = emeraldState.set(node, {
-        ...s,
-        mem: {
-          ...s.mem,
-          undecided_proposals: s.mem.undecided_proposals.union(Set(proposal)),
-          validated_cache: if (valid) s.mem.validated_cache.union(Set(blockHash)) else s.mem.validated_cache,
-          pendingWork: None,
-        },
-      })
-    } else {
-      // Future height — can't validate yet
-      emeraldState' = emeraldState.set(node, {
-        ...s,
-        mem: { ...s.mem, pending_proposals: s.mem.pending_proposals.union(Set(proposal)) },
-      })
-    }
+    emeraldState' = emeraldState.set(node, {
+      ...s,
+      mem: {
+        ...s.mem,
+        undecided_proposals: s.mem.undecided_proposals.union(Set(proposal)),
+        validated_cache: if (valid) s.mem.validated_cache.union(Set(blockHash)) else s.mem.validated_cache,
+        pendingWork: remaining,
+      },
+    })
   }
 
-  // Decided: Consensus decided on a value.
-  // Called during finalization (after respondNewPayload + respondHeadUpdate).
-  action handleDecided(node: Node, proposal: Proposal, decidedBlock: eac::Block): bool = {
+  // Update Emerald state after Engine API finalization (respondNewPayload + respondHeadUpdate).
+  // Commits decided proposal to disk, advances to next height, updates head.
+  action finalizeDecided(node: Node, proposal: Proposal, decidedBlock: eac::Block, remaining: List[WorkItem]): bool = {
     val s = emeraldState.get(node)
     val nextHeight = proposal.height + 1
     emeraldState' = emeraldState.set(node, {
@@ -253,7 +263,7 @@ module emerald_with_both_generators {
         undecided_proposals: Set(),
         head_block_hash: decidedBlock.hash,
         validated_cache: s.mem.validated_cache.union(Set(decidedBlock.hash)),
-        pendingWork: None,
+        pendingWork: remaining,
       },
     })
   }
@@ -313,19 +323,11 @@ module emerald_with_both_generators {
   }
 
   // ===========================================================================
-  // RETH STATE PASSTHROUGH (for steps with no Engine API calls)
-  // ===========================================================================
-
-  // Delegate to generator's published action (no need to know internal state vars)
-  // TODO: why is this needed and we cannot use directly reth::rethUnchanged? 
-  action rethUnchanged: bool = reth::rethUnchanged
-
-  // ===========================================================================
-  // NON-ATOMIC ENGINE API PROCESSING
+  // WORK QUEUE PROCESSING
   // ===========================================================================
 
   // Dispatch a single Engine API call to the appropriate Reth primitive action.
-  // TODO: should this be part of the engine generator? 
+  // TODO: boilerplate — see EngineCallSpec TODO above.
   action dispatchEngineCall(node: Node, call: EngineCallSpec): bool =
     match call {
       | CallBuildRequest => reth::respondBuildRequest(node)
@@ -334,47 +336,46 @@ module emerald_with_both_generators {
       | CallHeadUpdate(hu) => reth::respondHeadUpdate(node, hu.headHash, hu.headHeight)
     }
 
-  // Finalize processing by calling the appropriate Emerald handler.
-  // Called when all Engine API calls in the queue have been executed.
-  action finalizeProcessing(node: Node, pw: PendingWork): bool =
-    match pw.context {
-      | ProcGetValue(gv) => handleGetValue(node, gv.proposal)
-      | ProcReceivedProposal(rp) =>
-          val rns = reth::rethStates.get(node)
-          val valid = reth::computePayloadStatus(rns, rp.block) == eac::Valid
-          handleReceivedProposal(node, rp.proposal, rp.block.hash, valid)
-      | ProcDecided(d) => handleDecided(node, d.proposal, d.block)
-    }
-
-  // Process one Engine API call from the queue, or finalize if queue is empty.
-  // TODO: why is not finalizeProcessing one of the pending work items? 
-  action stepAdvanceEngine(node: Node): bool = {
+  // Process the next work item from the queue.
+  // Pops the head, dispatches it, and advances the queue in one step.
+  action stepAdvanceWork(node: Node): bool = {
     val s = emeraldState.get(node)
-    // Extract with defaults — guard below ensures pendingWork is Some
-    val pw: PendingWork = match s.mem.pendingWork {
-      | Some(pw) => pw
-      | None => {
-          remainingCalls: [],
-          context: ProcGetValue({ proposal: { height: 0, round: 0, proposer: "", payload: 0 } }),
-        }
-    }
+    val remaining = s.mem.pendingWork.tail()
     all {
-      s.mem.pendingWork != None,
-      if (pw.remainingCalls.length() > 0)
-        all {
-          dispatchEngineCall(node, pw.remainingCalls.head()),
-          gen::genUnchanged,
-          emeraldState' = emeraldState.set(node, {
-            ...s,
-            mem: { ...s.mem, pendingWork: Some({ ...pw, remainingCalls: pw.remainingCalls.tail() }) },
-          }),
-        }
-      else
-        all {
-          finalizeProcessing(node, pw),
-          gen::genUnchanged,
-          rethUnchanged,
-        }
+      s.mem.pendingWork.length() > 0,
+      match s.mem.pendingWork.head() {
+        | EngineCall(call) =>
+            all {
+              dispatchEngineCall(node, call),
+              gen::genUnchanged,
+              emeraldState' = emeraldState.set(node, {
+                ...s,
+                mem: { ...s.mem, pendingWork: remaining },
+              }),
+            }
+        | FinalizeGetValue(gv) =>
+            all {
+              reth::rethUnchanged,
+              gen::genUnchanged,
+              finalizeGetValue(node, gv.proposal, remaining),
+            }
+        | FinalizeReceivedProposal(rp) =>
+            // Cross-component data flow: read Reth state to get the validation
+            // result from the preceding CallNewPayload (which wrote to rethStates).
+            val rns = reth::rethStates.get(node)
+            val valid = reth::computePayloadStatus(rns, rp.block) == eac::Valid
+            all {
+              reth::rethUnchanged,
+              gen::genUnchanged,
+              finalizeReceivedProposal(node, rp.proposal, rp.block.hash, valid, remaining),
+            }
+        | FinalizeDecided(d) =>
+            all {
+              reth::rethUnchanged,
+              gen::genUnchanged,
+              finalizeDecided(node, d.proposal, d.block, remaining),
+            }
+      }
     }
   }
 
@@ -404,13 +405,13 @@ module emerald_with_both_generators {
     val startHeight = emeraldState.get(node).disk.last_decided_height + 1
     val rns = reth::rethStates.get(node)
     all {
-      emeraldState.get(node).mem.pendingWork == None,
+      emeraldState.get(node).mem.pendingWork.length() == 0,
       gen::sendConsensusReady(node, startHeight),
       handleConsensusReady(node, startHeight),
       // Start Reth if not already running
-      // TODO (low priority) avoid accessing rns state 
+  
       if (rns.mem.phase == reth::Offline) reth::rethStart(node)
-      else rethUnchanged,
+      else reth::rethUnchanged,
     }
   }
 
@@ -429,7 +430,7 @@ module emerald_with_both_generators {
   action stepStartedRound(node: Node): bool = {
     val s = emeraldState.get(node).mem
     all {
-      emeraldState.get(node).mem.pendingWork == None,
+      emeraldState.get(node).mem.pendingWork.length() == 0,
       any {
         all {
           gen::sendStartedRound(node),
@@ -440,7 +441,7 @@ module emerald_with_both_generators {
           handleStartedRound(node, s.consensus_height, s.consensus_round + 1),
         },
       },
-      rethUnchanged,
+      reth::rethUnchanged,
     }
   }
 
@@ -450,17 +451,23 @@ module emerald_with_both_generators {
     val s = emeraldState.get(node)
     val proposal = buildProposal(s, node)
     all {
-      s.mem.pendingWork == None,
+      s.mem.pendingWork.length() == 0,
       gen::sendGetValue(node, proposal),
-      rethUnchanged,
+      reth::rethUnchanged,
       emeraldState' = emeraldState.set(node, {
         ...s,
         mem: { ...s.mem,
-          // TODO does this pattern work also if CallGetPayload depends on the response of CallBuildRequest? Or is this response stored in the engine generator?
-          pendingWork: Some({
-            remainingCalls: [CallBuildRequest, CallGetPayload],
-            context: ProcGetValue({ proposal: proposal }),
-          }),
+          // Work items don't pass data to each other directly — they communicate
+          // through observable component state. The queue guarantees ordering so
+          // reads see prior writes. E.g., CallGetPayload reads the pendingBuild
+          // that CallBuildRequest wrote to rethStates; FinalizeGetValue could read
+          // the built block from reth::rethStates.get(node).disk.chain if needed
+          // (as FinalizeReceivedProposal already does for validation).
+          pendingWork: [
+            EngineCall(CallBuildRequest),
+            EngineCall(CallGetPayload),
+            FinalizeGetValue({ proposal: proposal }),
+          ],
         },
       }),
     }
@@ -471,7 +478,7 @@ module emerald_with_both_generators {
   // handle immediately (buffer as pending, no Engine API needed).
   action stepReceivedProposal(node: Node, proposal: Proposal): bool = {
     val s = emeraldState.get(node)
-    // TODO (low priority) avoid accessing rns state 
+
     val rns = reth::rethStates.get(node)
     val parentHash = if (rns.disk.chain.has(proposal.height - 1))
       rns.disk.chain.get(proposal.height - 1).hash
@@ -479,20 +486,24 @@ module emerald_with_both_generators {
       -1
     val block: eac::Block = validationBlock(proposal, parentHash)
     all {
-      s.mem.pendingWork == None,
+      s.mem.pendingWork.length() == 0,
       gen::sendReceivedProposal(node, proposal),
-      rethUnchanged,
-      // TODO what if the proposal is for an old height; the channel API generator drops them, but we should still cover that edge case here
-      emeraldState' = if (proposal.height == s.mem.consensus_height)
-        // Current height — enqueue Engine API validation
+      reth::rethUnchanged,
+      emeraldState' = if (proposal.height < s.mem.consensus_height)
+        // Stale proposal — drop it, no Engine API call.
+        // Currently unreachable (generator guards height >= node.height),
+        // but defensive for when independent crashes are modeled.
+        emeraldState
+      else if (proposal.height == s.mem.consensus_height)
+        // Current height — enqueue Engine API validation + local handler
         emeraldState.set(node, { ...s, mem: { ...s.mem,
-          pendingWork: Some({
-            remainingCalls: [CallNewPayload({ block: block })],
-            context: ProcReceivedProposal({ proposal: proposal, block: block }),
-          }),
+          pendingWork: [
+            EngineCall(CallNewPayload({ block: block })),
+            FinalizeReceivedProposal({ proposal: proposal, block: block }),
+          ],
         }})
       else
-        // Future height — handle immediately, no Engine API needed
+        // Future height — buffer as pending, no Engine API needed
         emeraldState.set(node, { ...s, mem: { ...s.mem,
           pending_proposals: s.mem.pending_proposals.union(Set(proposal)),
         }}),
@@ -504,7 +515,7 @@ module emerald_with_both_generators {
   // Guard: block must be valid (prevents enqueueing uncompleable work).
   action stepDecided(node: Node, proposal: Proposal): bool = {
     val s = emeraldState.get(node)
-    // TODO (low priority) avoid accessing rns state 
+
     val rns = reth::rethStates.get(node)
     val parentHash = if (rns.disk.chain.has(proposal.height - 1))
       rns.disk.chain.get(proposal.height - 1).hash
@@ -512,19 +523,17 @@ module emerald_with_both_generators {
       -1
     val block: eac::Block = validationBlock(proposal, parentHash)
     all {
-      s.mem.pendingWork == None,
+      s.mem.pendingWork.length() == 0,
       // Guard: block must be valid (same as atomic respondValidateAndFinalize's guard)
       reth::computePayloadStatus(rns, block) == eac::Valid,
       gen::sendDecided(node, proposal),
-      rethUnchanged,
+      reth::rethUnchanged,
       emeraldState' = emeraldState.set(node, { ...s, mem: { ...s.mem,
-        pendingWork: Some({
-          remainingCalls: [
-            CallNewPayload({ block: block }),
-            CallHeadUpdate({ headHash: block.hash, headHeight: block.height }),
-          ],
-          context: ProcDecided({ proposal: proposal, block: block }),
-        }),
+        pendingWork: [
+          EngineCall(CallNewPayload({ block: block })),
+          EngineCall(CallHeadUpdate({ headHash: block.hash, headHeight: block.height })),
+          FinalizeDecided({ proposal: proposal, block: block }),
+        ],
       }}),
     }
   }
@@ -534,19 +543,19 @@ module emerald_with_both_generators {
     val h = emeraldState.get(node).mem.consensus_height
     val proposal = gen::decisions.get(h)
     all {
-      emeraldState.get(node).mem.pendingWork == None,
+      emeraldState.get(node).mem.pendingWork.length() == 0,
       gen::sendProcessSyncedValue(node),
       handleProcessSyncedValue(node, proposal),
-      rethUnchanged,
+      reth::rethUnchanged,
     }
   }
 
   // GetDecidedValue: Channel API only, no Engine API calls.
   action stepGetDecidedValue(node: Node, height: Height): bool = all {
-    emeraldState.get(node).mem.pendingWork == None,
+    emeraldState.get(node).mem.pendingWork.length() == 0,
     gen::sendGetDecidedValue(node, height),
     handleGetDecidedValue(node, height),
-    rethUnchanged,
+    reth::rethUnchanged,
   }
 
   // NodeCrash: Both generators + Emerald state reset.
@@ -596,7 +605,7 @@ module emerald_with_both_generators {
       stepProcessSyncedValue(node),
       nondet height = 1.to(gen::MAX_HEIGHT).oneOf()
       stepGetDecidedValue(node, height),
-      stepAdvanceEngine(node),
+      stepAdvanceWork(node),
       stepNodeCrash(node),
       stepNodeRestart(node),
     }

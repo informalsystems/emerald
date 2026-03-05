@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use crate::evm::zero_basefee_chain_spec;
 use reth_engine_primitives::{EngineApiValidator, PayloadValidator};
 use reth_ethereum::chainspec::{ChainSpec, EthChainSpec, EthereumHardforks};
 use reth_ethereum::consensus::{
@@ -11,6 +12,7 @@ use reth_ethereum::consensus::{
 use reth_ethereum::engine::EthereumEngineValidator;
 use reth_ethereum::provider::BlockExecutionResult;
 use reth_ethereum::EthPrimitives;
+
 use reth_node_api::node::FullNodeComponents;
 use reth_node_api::{AddOnsContext, FullNodeTypes, NodeTypes, PayloadTypes};
 use reth_node_builder::components::ConsensusBuilder;
@@ -23,7 +25,7 @@ use reth_payload_primitives::{
 use reth_primitives_traits::{
     Block, BlockHeader, NodePrimitives, RecoveredBlock, SealedBlock, SealedHeader,
 };
-
+use tracing::info;
 // Custom consensus implementation that allows same-second timestamps for Malachite's sub-second block production.
 #[derive(Debug, Clone)]
 pub struct EmeraldConsensus {
@@ -150,7 +152,12 @@ where
     type Consensus = Arc<EmeraldConsensus>;
 
     async fn build_consensus(self, ctx: &BuilderContext<Node>) -> eyre::Result<Self::Consensus> {
-        Ok(Arc::new(EmeraldConsensus::new(ctx.chain_spec())))
+        let new_spec = zero_basefee_chain_spec(ctx.chain_spec());
+        info!(
+            "XX Using custom chain spec with zero base fee: {:?} , {:?}",
+            new_spec.base_fee_params, new_spec.genesis.base_fee_per_gas
+        );
+        Ok(Arc::new(EmeraldConsensus::new(new_spec)))
     }
 }
 
@@ -250,6 +257,8 @@ where
     type Validator = EmeraldEngineValidator;
 
     async fn build(self, ctx: &AddOnsContext<'_, Node>) -> eyre::Result<Self::Validator> {
-        Ok(EmeraldEngineValidator::new(ctx.config.chain.clone()))
+        Ok(EmeraldEngineValidator::new(zero_basefee_chain_spec(
+            ctx.config.chain.clone(),
+        )))
     }
 }

@@ -622,6 +622,7 @@ impl State {
         );
 
         if elapsed_height_time < self.emerald_config.min_block_time {
+            info!("SLEEPING");
             tokio::time::sleep(self.emerald_config.min_block_time - elapsed_height_time).await;
         }
 

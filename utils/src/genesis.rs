@@ -218,8 +218,9 @@ pub(crate) fn generate_evm_genesis(
         alloc,
         ..Default::default()
     }
-    .with_gas_limit(60_000_000) // Fusaka default gas limit
-    .with_timestamp(valid_fusaka_timestamp);
+    .with_gas_limit(150_000_000) // Fusaka default gas limit
+    .with_timestamp(valid_fusaka_timestamp)
+    .with_base_fee(Some(0)); // Fusaka default base fee
 
     // Create data directory if it doesn't exist
     std::fs::create_dir_all("./assets")?;

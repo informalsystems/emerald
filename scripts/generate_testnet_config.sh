@@ -238,6 +238,7 @@ for ((i = 0; i < nodes; i++)); do
     NODE_IP=$(get_node_ip $i "$custom_config_path")
     cat > "$TESTNET_DIR/config/$i/config.toml" <<EOF
 moniker = "test-$i"
+min_block_time = "100ms"
 retry_config.initial_delay = "100ms"
 retry_config.max_delay = "2s"
 retry_config.max_elapsed_time = "20s"

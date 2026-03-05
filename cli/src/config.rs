@@ -81,7 +81,7 @@ pub struct EmeraldConfig {
 }
 
 fn default_min_block_time() -> Duration {
-    Duration::from_millis(500)
+    Duration::from_millis(0)
 }
 
 fn default_num_certificates_to_retain() -> u64 {

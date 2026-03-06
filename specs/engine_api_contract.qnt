@@ -9,9 +9,10 @@
 // Models what the Reth team would publish for Emerald to consume.
 //
 // This contract defines:
-//   1. The request types for the Engine API
-//   2. Response correctness guarantees (what Reth guarantees)
-//   3. Request ordering constraints (what Emerald must do)
+//   1. The request/response types for the Engine API
+//   2. Component guarantees (Reth → responses): response correctness
+//   3. Application guarantees (Emerald → requests): request ordering
+//   4. Phase 1 constraints
 //
 // Key structural difference from Channel API:
 //   - Channel API: Malachite sends requests to Emerald (Emerald responds)
@@ -147,7 +148,7 @@ module engine_api_contract {
   }
 
   // ===========================================================================
-  // RESPONSE CORRECTNESS PROPERTIES (Reth guarantees)
+  // COMPONENT GUARANTEES: RESPONSE CORRECTNESS
   // ===========================================================================
 
   // validationStability: Once newPayload(block) returns Valid, subsequent
@@ -350,7 +351,7 @@ module engine_api_contract {
   }
 
   // ===========================================================================
-  // REQUEST ORDERING PROPERTIES (Emerald obligations)
+  // APPLICATION GUARANTEES: REQUEST ORDERING
   // ===========================================================================
 
   // buildLifecycle: getPayload(id) must follow a forkchoiceUpdated that

@@ -9,10 +9,10 @@
 // Models what the Malachite team would publish for applications to consume.
 //
 // This contract defines:
-//   1. The request types for the Channel API
-//   2. Safety guarantees (agreement, validity)
-//   3. Ordering guarantees (declarative properties over request histories)
-//   4. Assumptions (what the application must do for guarantees to hold)
+//   1. The request/response types for the Channel API
+//   2. Component guarantees (Malachite → requests): safety + ordering
+//   3. Application guarantees (Emerald → responses): informal, to be formalized
+//   4. Environment assumptions
 //
 // Both safety and ordering properties are checked as invariants on any
 // conforming generator (e.g., channel_api_generator.qnt). The generator
@@ -148,8 +148,11 @@ module channel_api_contract {
   }
 
   // ===========================================================================
-  // SAFETY PROPERTIES
+  // COMPONENT GUARANTEES: SAFETY
   // ===========================================================================
+  //
+  // Properties on the requests Malachite sends. These are guarantees that
+  // Malachite provides to any application consuming the Channel API.
 
   // Agreement: For any two Decided requests across all nodes, if they are for
   // the same height, the decided proposals must be identical.
@@ -247,13 +250,14 @@ module channel_api_contract {
   }
 
   // ===========================================================================
-  // ORDERING PROPERTIES
+  // COMPONENT GUARANTEES: ORDERING
   // ===========================================================================
   //
-  // These properties constrain the order in which Channel API requests are
-  // delivered to each node. They are expressed declaratively over per-node
-  // request histories, making them readable and auditable without understanding
-  // any generator's internal state machine.
+  // Properties on the order in which Malachite delivers Channel API requests
+  // to each node. These are guarantees that Malachite provides about request
+  // sequencing. Expressed declaratively over per-node request histories,
+  // making them readable and auditable without understanding any generator's
+  // internal state machine.
   //
   // Request histories contain only current-session requests (cleared on fault).
   // This simplifies all fold-based properties — no session boundary logic
@@ -744,10 +748,14 @@ module channel_api_contract {
   }
 
   // ===========================================================================
-  // ASSUMPTIONS (what the application must do)
+  // APPLICATION GUARANTEES (Emerald → responses)
   // ===========================================================================
   //
-  // Stated informally. These constrain the application's behavior.
+  // Obligations on the responses Emerald sends back to Malachite. These are
+  // predominantly liveness obligations ("the application eventually responds
+  // with a correct value") with some safety mixed in (e.g., #3 requires
+  // response fields match the request). Stated informally — to be formalized
+  // as checkable properties in future work.
   //
   // 1. On ConsensusReady: the application MUST reply with a starting height
   //    and validator set.
@@ -768,22 +776,28 @@ module channel_api_contract {
   //
   // 6. On ProcessSyncedValue: the application MUST reply with the decoded
   //    value, or None.
-  //
-  // 7. Environment: at most f validators are faulty, where n >= 3f+1.
-  //
-  // 8. Environment: the network eventually delivers messages between
-  //    correct validators.
-  //
-  // 9. Voting power: all validators have equal voting power. The quorum
-  //    threshold (strictly more than 2/3 of node count) assumes this.
-  //    With non-uniform voting power, quorumDecision would need the
-  //    validator set's total voting power instead of nNodes.
 
   // ===========================================================================
-  // LIVENESS GUARANTEES (semi-formal)
+  // ENVIRONMENT ASSUMPTIONS
   // ===========================================================================
   //
-  // Under the assumptions above:
+  // External conditions required for both component and application
+  // guarantees to hold. Not obligations of either side.
+  //
+  // 7. At most f validators are faulty, where n >= 3f+1.
+  //
+  // 8. The network eventually delivers messages between correct validators.
+  //
+  // 9. All validators have equal voting power. The quorum threshold
+  //    (strictly more than 2/3 of node count) assumes this. With
+  //    non-uniform voting power, quorumDecision would need the validator
+  //    set's total voting power instead of nNodes.
+
+  // ===========================================================================
+  // COMPONENT GUARANTEES: LIVENESS (semi-formal)
+  // ===========================================================================
+  //
+  // Under the environment assumptions above:
   //
   // - For every height h, eventually Decided(h) is sent to all correct nodes.
   //

@@ -183,6 +183,17 @@ module channel_api_generator {
   // ACTIONS: Channel API messages from Malachite to the application
   // ===========================================================================
 
+  // Implementation details vs contract properties:
+  //   Guards and behaviors in these actions fall into four categories:
+  //
+  //   1. CONTRACT ENFORCEMENT: directly enforces a named contract property
+  //   2. IMPLEMENTATION DETAILS: internal state machine, not observable by contract
+  //   3. OPTIMIZATIONS: search space bounds, not required by contract
+  //   4. ASSUMPTIONS: application guarantee constraints on nondeterministic inputs
+  //
+  //   Inline comments below mark guards with [CONTRACT], [IMPL], [OPT], or
+  //   [ASSUMPTION] to clarify their purpose.
+
   // --- ConsensusReady ---
   // Malachite has initialized and is ready. Sent once per node.
   // The application replies with a starting height (replyStartHeight).
@@ -191,9 +202,9 @@ module channel_api_generator {
   action sendConsensusReady(node: Node, replyStartHeight: Height): bool = {
     val ns = nodeStates.get(node)
     all {
+      // [IMPL] phase progression: must be Unstarted before ConsensusReady
       ns.mem.phase == Unstarted,
-      // Contract: heightsPositive requires all request heights >= 1.
-      // This guard ensures the starting height satisfies that property.
+      // [CONTRACT] heightsPositive + consensusReadyResponse: all request heights >= 1
       replyStartHeight >= 1,
       val req = ReqConsensusReady({ respStartHeight: replyStartHeight })
       all {
@@ -221,16 +232,18 @@ module channel_api_generator {
   action sendStartedRound(node: Node): bool = {
     val ns = nodeStates.get(node)
     val h = ns.mem.height
-    // If the node already has proposals for this height (received at a
-    // prior height and buffered as pending), count it as support for
-    // each such proposal now that the node is at this height.
+    // [CONTRACT] quorumDecision: retroactive support — if the node already has
+    // proposals for this height (received at a prior height as pending), count
+    // it as support now that the node is at this height.
     val pendingAtHeight = ns.mem.deliveredProposals.filter(p => p.height == h)
     val updatedSupport = pendingAtHeight.fold(proposalSupport, (acc, p) =>
       val existing = if (acc.has(p)) acc.get(p) else Set()
       acc.put(p, existing.union(Set(node)))
     )
     all {
+      // [IMPL] phase progression: must be Started (after ConsensusReady or Decided)
       ns.mem.phase == Started,
+      // [OPT] search space bound: limits trace exploration
       ns.mem.height <= MAX_HEIGHT,
       val proposer = proposer_for(ns.mem.height, ns.mem.round)
       val req = ReqStartedRound({
@@ -265,12 +278,14 @@ module channel_api_generator {
   action sendGetValue(node: Node, replyProposal: Proposal): bool = {
     val ns = nodeStates.get(node)
     all {
+      // [IMPL] phase progression: must be InRound (after StartedRound)
       ns.mem.phase == InRound,
+      // [CONTRACT] getValueAfterStartedRound: only the proposer receives GetValue
       node == proposer_for(ns.mem.height, ns.mem.round),
+      // [CONTRACT] getValueUnique: at most once per (height, round)
       not(ns.mem.getValueSent.contains((ns.mem.height, ns.mem.round))),
-      // Assumption (not a Malachite guarantee): the application's reply matches
-      // the current (height, round, proposer). Documented as assumption #3 in the
-      // contract. The payload is the application's choice — not constrained here.
+      // [ASSUMPTION] application guarantee #3: reply matches current (height, round, proposer).
+      // The payload is the application's choice — not constrained here.
       replyProposal.height == ns.mem.height,
       replyProposal.round == ns.mem.round,
       replyProposal.proposer == node,
@@ -278,6 +293,7 @@ module channel_api_generator {
         height: ns.mem.height,
         round: ns.mem.round,
       })
+      // [CONTRACT] quorumDecision: proposer supports their own proposal
       val existing = if (proposalSupport.has(replyProposal)) proposalSupport.get(replyProposal) else Set()
       all {
         proposals' = proposals.union(Set(replyProposal)),
@@ -310,16 +326,18 @@ module channel_api_generator {
   action sendReceivedProposal(node: Node, proposal: Proposal): bool = {
     val ns = nodeStates.get(node)
     all {
+      // [IMPL] phase progression: must have started (after ConsensusReady)
       ns.mem.phase != Unstarted,
+      // [CONTRACT] receivedProposalExists: proposal was created via GetValue
       proposal.in(proposals),
-      proposal.proposer != node,  // Nodes don't receive their own proposals
-      // Optimization: real network can deliver stale proposals (Emerald drops them).
-      // Not enforced by the contract — restricts traces to reduce state space.
+      // [CONTRACT] receivedProposalNotToProposer: nodes don't receive their own proposals
+      proposal.proposer != node,
+      // [OPT] stale proposal filtering: real network can deliver stale proposals
+      // (Emerald drops them). Not enforced by the contract.
       proposal.height >= ns.mem.height,
       val req = ReqReceivedProposal({ proposal: proposal })
-      // Only count support when the node is at the proposal's height.
-      // Future-height proposals are buffered as pending — the node hasn't
-      // participated in consensus at that height yet.
+      // [CONTRACT] quorumDecision: only count support when the node is at the
+      // proposal's height. Future-height proposals are pending — not voted on yet.
       val atCurrentHeight = proposal.height == ns.mem.height
       val existing = if (proposalSupport.has(proposal)) proposalSupport.get(proposal) else Set()
       all {
@@ -356,23 +374,24 @@ module channel_api_generator {
   action sendDecided(node: Node, proposal: Proposal): bool = {
     val ns = nodeStates.get(node)
     all {
+      // [IMPL] phase progression: must be InRound or Syncing
       or { ns.mem.phase == InRound, ns.mem.phase == Syncing },
+      // [IMPL] height match: decision must be for the current height
       proposal.height == ns.mem.height,
+      // [CONTRACT] validity: decided proposal must exist (was created via GetValue)
       proposal.in(proposals),
-      // Malachite must have delivered the proposal to this node
+      // [CONTRACT] decidedRequiresDeliveredProposal: Malachite delivered the proposal
       ns.mem.deliveredProposals.contains(proposal),
-      // Optimization: in the normal (non-sync) path, the contract's
-      // decidedRequiresDeliveredProposal + roundsConsecutiveWithinHeight
-      // already constrain this. This guard further restricts the generator
-      // to avoid producing traces where a decision references a future round.
+      // [OPT] future round filtering: restricts generator to avoid decisions
+      // referencing a future round (contract's roundsConsecutiveWithinHeight
+      // already constrains this in the normal path)
       proposal.round <= ns.mem.round,
-      // Agreement: if already decided for this height, must be the same
+      // [CONTRACT] agreement: if already decided for this height, must be the same
       not(decisions.has(ns.mem.height)) or decisions.get(ns.mem.height) == proposal,
-      // Not already decided at this node for this height
+      // [IMPL] prevent duplicate: not already decided at this node for this height
       ns.disk.maxDecided < ns.mem.height,
-      // Quorum: strictly more than 2/3 of nodes must have received
-      // this specific proposal before any node can decide on it.
-      // Assumes equal voting power — uses node count as threshold.
+      // [CONTRACT] quorumDecision: strictly more than 2/3 of nodes must have
+      // received this specific proposal before any node can decide on it
       proposalSupport.has(proposal),
       proposalSupport.get(proposal).size() * 3 > NODES.length() * 2,
       // Record the decision
@@ -401,8 +420,11 @@ module channel_api_generator {
   action sendStartedRoundAfterTimeout(node: Node): bool = {
     val ns = nodeStates.get(node)
     all {
+      // [IMPL] phase progression: must be InRound (timeout during a round)
       ns.mem.phase == InRound,
+      // [OPT] search space bound: limits round exploration
       ns.mem.round < MAX_ROUND,
+      // [OPT] search space bound: limits height exploration
       ns.mem.height <= MAX_HEIGHT,
       val newRound = ns.mem.round + 1
       val proposer = proposer_for(ns.mem.height, newRound)
@@ -435,8 +457,11 @@ module channel_api_generator {
   action sendProcessSyncedValue(node: Node): bool = {
     val ns = nodeStates.get(node)
     all {
+      // [IMPL] phase progression: must be InRound or Syncing
       or { ns.mem.phase == InRound, ns.mem.phase == Syncing },
+      // [CONTRACT] syncedValueIsDecided: synced value must have been decided
       decisions.has(ns.mem.height),
+      // [IMPL] prevent duplicate: not already decided at this node for this height
       ns.disk.maxDecided < ns.mem.height,
       val proposal = decisions.get(ns.mem.height)
       val req = ReqProcessSyncedValue({ proposal: proposal })
@@ -468,10 +493,9 @@ module channel_api_generator {
   action sendGetDecidedValue(node: Node, height: Height): bool = {
     val ns = nodeStates.get(node)
     all {
-      // Optimization: real Malachite can query any height — the app returns
-      // None for unavailable heights. These guards restrict traces to reduce
-      // state space; not enforced by the contract.
+      // [OPT] heights start at 1: real Malachite can query any height
       height >= 1,
+      // [OPT] only query past heights: restricts traces to reduce state space
       height < ns.mem.height,
       val req = ReqGetDecidedValue({ height: height })
       all {
@@ -500,6 +524,7 @@ module channel_api_generator {
   action nodeCrash(node: Node): bool = {
     val ns = nodeStates.get(node)
     all {
+      // [IMPL] must be running: can't crash a node that hasn't started
       ns.mem.phase != Unstarted,
       nodeStates' = nodeStates.set(node, initGenNode),
       requestHistory' = requestHistory.set(node, []),
@@ -518,6 +543,7 @@ module channel_api_generator {
   action nodeRestart(node: Node): bool = {
     val ns = nodeStates.get(node)
     all {
+      // [IMPL] must be running: can't restart a node that hasn't started
       ns.mem.phase != Unstarted,
       nodeStates' = nodeStates.set(node, { disk: ns.disk, mem: initGenMem }),
       requestHistory' = requestHistory.set(node, []),

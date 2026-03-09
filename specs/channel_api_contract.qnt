@@ -154,6 +154,9 @@ module channel_api_contract {
   // Properties on the requests Malachite sends. These are guarantees that
   // Malachite provides to any application consuming the Channel API.
 
+  /// @guarantor component
+  /// @category safety
+  /// @scope global
   // Agreement: For any two Decided requests across all nodes, if they are for
   // the same height, the decided proposals must be identical.
   //
@@ -184,6 +187,9 @@ module channel_api_contract {
     decidedByHeight.keys().forall(h => decidedByHeight.get(h).size() <= 1)
   }
 
+  /// @guarantor component
+  /// @category safety
+  /// @scope global
   // Validity: Every decided proposal was previously proposed by some node
   // via GetValue.
   //
@@ -194,6 +200,9 @@ module channel_api_contract {
       s.disk.decisions.get(h).in(s.disk.all_proposals)
     )
 
+  /// @guarantor component
+  /// @category safety
+  /// @scope global
   // Decisions contiguous: Decided heights have no gaps. If height h is
   // decided, then all heights 1..h-1 are also decided.
   //
@@ -209,6 +218,9 @@ module channel_api_contract {
       h == 1 or s.disk.decisions.has(h - 1)
     )
 
+  /// @guarantor component
+  /// @category safety
+  /// @scope global
   // quorumDecision: Every decided height has proposal support from strictly
   // more than 2/3 of the network.
   //
@@ -269,6 +281,9 @@ module channel_api_contract {
   //
   // Source: derived from driver.qnt, consensus.qnt, and msgs.rs documentation.
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope per-node
   // heightsPositive: All request heights are >= 1.
   //
   // Consensus starts at height 1 (or higher after restart). Height 0 is
@@ -287,6 +302,9 @@ module channel_api_contract {
       )
     )
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope per-node
   // consensusReadyFirst: ConsensusReady is the first request in the history,
   // and it appears at most once per session.
   //
@@ -310,6 +328,9 @@ module channel_api_contract {
       ).ok
     )
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope per-node
   // getValueAfterStartedRound: GetValue(h, r) on node N is preceded by
   // StartedRound(h, r, proposer=N) for the same node. The node receiving
   // GetValue must have been declared as the proposer for that round.
@@ -338,6 +359,9 @@ module channel_api_contract {
       ).ok
     )
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope global
   // getValueUnique: GetValue(h, r) is sent at most once globally — to at
   // most one node, at most once per node.
   //
@@ -368,6 +392,9 @@ module channel_api_contract {
     counts.keys().forall(k => counts.get(k) <= 1)
   }
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope per-node
   // heightMonotonic: Heights are non-decreasing in a node's consensus progress
   // requests.
   //
@@ -395,6 +422,9 @@ module channel_api_contract {
       ).ok
     )
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope per-node
   // decidedIsFinal: After Decided(h), all subsequent consensus progress requests
   // for the same node have height exactly h+1.
   //
@@ -432,6 +462,9 @@ module channel_api_contract {
       ).ok
     )
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope per-node
   // heightAdvanceRequiresDecision: A node's consensus height only advances
   // after a decision at the previous height.
   //
@@ -483,6 +516,9 @@ module channel_api_contract {
       ).ok
     )
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope per-node
   // receivedProposalNotToProposer: A node does not receive its own proposal
   // via ReceivedProposal.
   //
@@ -502,6 +538,9 @@ module channel_api_contract {
       )
     )
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope global
   // syncedValueIsDecided: ProcessSyncedValue carries a proposal that was
   // decided at that height.
   //
@@ -524,6 +563,9 @@ module channel_api_contract {
       )
     )
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope per-node
   // syncRequiresStartedRound: ProcessSyncedValue(h) requires a prior
   // StartedRound(h, _) at the same height. Malachite always enters a round
   // (via start_height → StartedRound) before sync can deliver values for
@@ -548,6 +590,9 @@ module channel_api_contract {
       ).ok
     )
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope per-node
   // syncIsIrrevocable: After ProcessSyncedValue(h), no StartedRound or
   // GetValue requests can occur at the same height h. Once Malachite enters
   // the sync path for a height, it stays in sync until deciding — it does
@@ -580,6 +625,9 @@ module channel_api_contract {
       ).ok
     )
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope per-node
   // roundsConsecutiveWithinHeight: Within the same height, StartedRound
   // requests have consecutive rounds (exactly +1), and the first round at
   // each height is 0.
@@ -616,6 +664,9 @@ module channel_api_contract {
       ).ok
     )
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope per-node
   // decidedRequiresDeliveredProposal: Before Decided(p), Malachite must
   // have delivered p to the node. The delivery path determines whether
   // StartedRound is also required:
@@ -675,6 +726,9 @@ module channel_api_contract {
       ).ok
     )
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope global
   // receivedProposalExists: Every ReceivedProposal request references a
   // proposal that was previously created via GetValue.
   //
@@ -694,6 +748,9 @@ module channel_api_contract {
       )
     )
 
+  /// @guarantor component
+  /// @category ordering
+  /// @scope global
   // proposerConsistency: For each (height, round), all StartedRound requests
   // across all nodes declare the same proposer.
   //
@@ -779,6 +836,9 @@ module channel_api_contract {
 
   // --- Formal application safety properties ---
 
+  /// @guarantor application
+  /// @category safety
+  /// @scope per-node
   // consensusReadyResponse: The application's reply to ConsensusReady has
   // a starting height >= 1.
   //

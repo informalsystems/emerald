@@ -151,6 +151,9 @@ module engine_api_contract {
   // COMPONENT GUARANTEES: RESPONSE CORRECTNESS
   // ===========================================================================
 
+  /// @guarantor component
+  /// @category safety
+  /// @scope per-node
   // validationStability: Once newPayload(block) returns Valid, subsequent
   // calls for the same block hash never return Invalid.
   //
@@ -178,6 +181,9 @@ module engine_api_contract {
       ).ok
     )
 
+  /// @guarantor component
+  /// @category safety
+  /// @scope per-node
   // buildIntegrity: getPayload(id) returns a block whose parentHash matches
   // the head from the forkchoiceUpdated that produced that payloadId.
   //
@@ -210,6 +216,9 @@ module engine_api_contract {
       ).ok
     )
 
+  /// @guarantor component
+  /// @category safety
+  /// @scope per-node
   // headProgression: After forkchoiceUpdated(hash) returns Valid, the
   // canonical head is updated to that hash.
   //
@@ -243,6 +252,9 @@ module engine_api_contract {
       }
     )
 
+  /// @guarantor component
+  /// @category safety
+  /// @scope per-node
   // validBeforeHead: forkchoiceUpdated(hash) returning Valid requires that
   // the block was previously known — either via newPayload returning Valid,
   // getPayload returning it (built by Reth), or already in the chain.
@@ -277,6 +289,9 @@ module engine_api_contract {
       ).ok
     )
 
+  /// @guarantor component
+  /// @category safety
+  /// @scope per-node
   // chainContinuity: Blocks in the canonical chain form a linked list
   // via parentHash.
   //
@@ -296,6 +311,9 @@ module engine_api_contract {
   // PHASE 1 CONSTRAINTS (to be relaxed in Phase 2)
   // ===========================================================================
 
+  /// @guarantor component
+  /// @category phase1
+  /// @scope per-node
   // headMonotonic: The canonical head height never decreases (no reorgs).
   //
   // Phase 1 constraint: Once the head advances to height h, it never moves
@@ -354,6 +372,9 @@ module engine_api_contract {
   // APPLICATION GUARANTEES: REQUEST ORDERING
   // ===========================================================================
 
+  /// @guarantor application
+  /// @category ordering
+  /// @scope per-node
   // buildLifecycle: getPayload(id) must follow a forkchoiceUpdated that
   // returned that id. Each payloadId is consumed at most once.
   //

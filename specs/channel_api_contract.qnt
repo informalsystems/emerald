@@ -11,7 +11,7 @@
 // This contract defines:
 //   1. The request/response types for the Channel API
 //   2. Component guarantees (Malachite → requests): safety + ordering
-//   3. Application guarantees (Emerald → responses): informal, to be formalized
+//   3. Application guarantees (Emerald → responses): consensusReadyResponse (formal); rest informal
 //   4. Environment assumptions
 //
 // Both safety and ordering properties are checked as invariants on any
@@ -64,7 +64,7 @@ module channel_api_contract {
   // They are node-level events handled by clearing request histories.
   // See faults.qnt for the FaultEvent type.
   type ChannelRequest =
-    | ReqConsensusReady
+    | ReqConsensusReady({ respStartHeight: Height })
     | ReqStartedRound({ height: Height, round: Round, proposer: Node })
     | ReqGetValue({ height: Height, round: Round })
     | ReqReceivedProposal({ proposal: Proposal })
@@ -78,7 +78,7 @@ module channel_api_contract {
 
   /// Extract the height from a request, if it has one.
   pure def requestHeight(e: ChannelRequest): Option[Height] = match e {
-    | ReqConsensusReady => None
+    | ReqConsensusReady(_) => None
     | ReqStartedRound(r) => Some(r.height)
     | ReqGetValue(r) => Some(r.height)
     | ReqReceivedProposal(r) => Some(r.proposal.height)
@@ -95,7 +95,7 @@ module channel_api_contract {
   ///   - ReqGetDecidedValue: intentionally queries past heights
   ///   - ReqReceivedProposal: can arrive for future heights (buffered as pending)
   pure def isProgressRequest(e: ChannelRequest): bool = match e {
-    | ReqConsensusReady => false
+    | ReqConsensusReady(_) => false
     | ReqGetDecidedValue(_) => false
     | ReqReceivedProposal(_) => false
     | _ => true
@@ -302,7 +302,7 @@ module channel_api_contract {
       hist.foldl({ isFirst: true, ok: true }, (acc, e) =>
         if (not(acc.ok)) acc
         else match e {
-          | ReqConsensusReady =>
+          | ReqConsensusReady(_) =>
               if (not(acc.isFirst)) { isFirst: false, ok: false }
               else { isFirst: false, ok: true }
           | _ => if (acc.isFirst) { isFirst: false, ok: false } else acc
@@ -776,6 +776,33 @@ module channel_api_contract {
   //
   // 6. On ProcessSyncedValue: the application MUST reply with the decoded
   //    value, or None.
+
+  // --- Formal application safety properties ---
+
+  // consensusReadyResponse: The application's reply to ConsensusReady has
+  // a starting height >= 1.
+  //
+  // Consensus starts at height 1 or higher. Height 0 is never a valid
+  // starting point. The generator enforces this as a guard on
+  // sendConsensusReady; this property makes it an explicit application
+  // guarantee checkable independently of any generator.
+  //
+  // Source: Malachite start_height.rs — start_height is called with the
+  // height returned by the application. Consensus rejects height 0.
+  pure def consensusReadyResponse(s: ChannelState): bool =
+    s.mem.request_history.keys().forall(node =>
+      s.mem.request_history.get(node).foldl(true, (ok, e) =>
+        ok and match e {
+          | ReqConsensusReady(cr) => cr.respStartHeight >= 1
+          | _ => true
+        }
+      )
+    )
+
+  // Combined application safety properties
+  pure def applicationSafety(s: ChannelState): bool = and {
+    consensusReadyResponse(s),
+  }
 
   // ===========================================================================
   // ENVIRONMENT ASSUMPTIONS

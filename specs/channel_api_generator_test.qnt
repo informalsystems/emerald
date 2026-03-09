@@ -24,4 +24,5 @@ module channel_api_generator_test {
   action init = gen::init
   action step = gen::step
   val contractInv = gen::contractInv
+  val applicationSafetyInv = gen::applicationSafetyInv
 }

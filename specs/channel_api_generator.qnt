@@ -195,7 +195,7 @@ module channel_api_generator {
       // Contract: heightsPositive requires all request heights >= 1.
       // This guard ensures the starting height satisfies that property.
       replyStartHeight >= 1,
-      val req = ReqConsensusReady
+      val req = ReqConsensusReady({ respStartHeight: replyStartHeight })
       all {
         nodeStates' = nodeStates.set(node, {
           ...ns,
@@ -615,6 +615,9 @@ module channel_api_generator {
 
   // Ordering invariants from the contract
   val orderingInv = ordering(channelState)
+
+  // Application safety invariants from the contract
+  val applicationSafetyInv = applicationSafety(channelState)
 
   // Full contract (safety + ordering)
   val contractInv = contract(channelState, NODES.length())

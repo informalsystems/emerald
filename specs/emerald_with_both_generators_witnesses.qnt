@@ -302,6 +302,50 @@ module emerald_with_both_generators_witnesses {
   //   ))
 
   // ===========================================================================
+  // MINIMAL TRACE: canReachDecision
+  // ===========================================================================
+  //
+  // Deterministic 16-step path to a height-1 decision on node1.
+  // node4 is uninvolved. node2 and node3 contribute to quorum but their
+  // Engine API work queues are not drained (not needed for the decision).
+  //
+  // Sequence:
+  //   1–3:   ConsensusReady for node1/2/3 (Reth starts, consensus_height=1)
+  //   4–6:   StartedRound(h=1,r=0,proposer=node1) to node1/2/3 (→ Working)
+  //   7–10:  GetValue + 3×AdvanceWork on node1
+  //            CallBuildRequest: FCU(building=true) → payloadId=1
+  //            CallGetPayload:   getPayload(1) → block{h=1,hash=1001}
+  //            FinalizeGetValue: proposal{h=1,payload=100} → undecided
+  //   11–12: ReceivedProposal to node2, node3 (proposalSupport: node1+2+3 = 3/4 ✓)
+  //   13–16: Decided + 3×AdvanceWork on node1
+  //            CallNewPayload:   newPayload(block{h=1}) → Valid
+  //            CallHeadUpdate:   FCU(headHash=1001) → Valid, head=1001
+  //            FinalizeDecided:  last_decided_height=1, latest_block=Some(...)
+  //
+  // Run: quint test emerald/specs/emerald_with_both_generators_witnesses.qnt \
+  //        --main=emerald_with_both_generators_witnesses
+  // ===========================================================================
+  run minimalCanReachDecision =
+    init
+    .then(stepConsensusReady("node1"))
+    .then(stepConsensusReady("node2"))
+    .then(stepConsensusReady("node3"))
+    .then(stepStartedRound("node1"))
+    .then(stepStartedRound("node2"))
+    .then(stepStartedRound("node3"))
+    .then(stepGetValue("node1"))
+    .then(stepAdvanceWork("node1"))   // CallBuildRequest
+    .then(stepAdvanceWork("node1"))   // CallGetPayload
+    .then(stepAdvanceWork("node1"))   // FinalizeGetValue
+    .then(stepReceivedProposal("node2", { height: 1, payload: 100, proposer: "node1", round: 0 }))
+    .then(stepReceivedProposal("node3", { height: 1, payload: 100, proposer: "node1", round: 0 }))
+    .then(stepDecided("node1", { height: 1, payload: 100, proposer: "node1", round: 0 }))
+    .then(stepAdvanceWork("node1"))   // CallNewPayload
+    .then(stepAdvanceWork("node1"))   // CallHeadUpdate
+    .then(stepAdvanceWork("node1"))   // FinalizeDecided
+    .expect(not(canReachDecision))
+
+  // ===========================================================================
   // BIASED STEP (canDecideTwoHeights)
   // ===========================================================================
   //

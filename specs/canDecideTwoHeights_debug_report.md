@@ -1,8 +1,8 @@
 # Witness Debug Report: `canDecideTwoHeights`
 
 **Spec:** `emerald/specs/emerald_with_both_generators_witnesses.qnt`
-**Date:** 2026-03-10
-**Result:** Witness not violated (scenario not reached by random simulation)
+**Date:** 2026-03-11
+**Result:** Witness not violated by uniform random simulation; violated by biased step (scenario confirmed reachable)
 
 ---
 
@@ -97,18 +97,67 @@ No static impossibility: 4 nodes, quorum = 3 — mathematically satisfiable.
 
 **Category:** PROBABILISTIC_TRAP
 
-Random scheduler converges on one node, starving the required proposer (node2) of height-1 completion.
+Only one node ever completes height-1 under random simulation; the remaining three are stranded at height-1, making the height-2 quorum structurally unachievable.
 
-Once the first node finishes the height-1 Engine API pipeline (~20+ steps), the random simulator preferentially keeps advancing that node's height-2 pipeline. "node2" — the sole valid proposer at h=2, r=0 per `proposer_for` — is perpetually stuck at height-1, so its `sendGetValue(h=2)` never fires, and no height-2 proposal ever enters any node's `undecided_proposals`.
+By the time the first node calls `sendDecided(h=1)`, the quorum guard is already satisfied (3 nodes supported the proposal), so `sendDecided(h=1)` is also enabled for the other three nodes. However, the random simulator picks uniformly across all enabled actions. Completing the remaining three `sendDecided(h=1)` calls — each followed by ~20 Engine API work steps — before making further progress on the height-2 pipeline is a specific ordering that occurs with very low probability. There is no explicit bias toward one node; the three remaining nodes are probabilistically starved in the uniform random walk.
 
-**Key Evidence:** GW1 violated (one node completes h=1), GW2 NOT violated (two nodes never both complete h=1), GW3 violated (Working at h=2 reachable), GW4 NOT violated (no undecided proposal at h=2), relaxed witness also NOT violated — all consistent with proposer starvation, not a spec bug.
+Round timeouts do not rescue the situation. `sendStartedRoundAfterTimeout` is a per-node action: it advances only the firing node's generator from `InRound(h=2, r=0)` to `InRound(h=2, r=1)`, where `proposer_for(2,1) = "node3"`. But node3's generator is still in `InRound(h=1)` — it never completed height-1. The `sendGetValue` guard requires `phase == InRound` at the target height, so node3 cannot act as proposer at height-2 regardless of how many rounds node1 advances through. The other potential proposers at higher rounds face the same constraint.
+
+The height-2 quorum guard (`proposalSupport.size() * 3 > NODES.length() * 2`, i.e. ≥3 nodes) is therefore unreachable: with only one node at height-2, at most one node can ever support a height-2 proposal.
+
+**Key Evidence:** GW1 violated (one node completes h=1 and advances), GW2 NOT violated (only one node ever completes h=1 — not two), GW3 violated (Working at h=2 reachable for that one node), GW4 NOT violated (no height-2 proposal is ever created), relaxed witness also NOT violated — all consistent with probabilistic starvation of height-1 completion for nodes 2–4, not a spec bug.
+
+---
+
+## Biased Step
+
+The diagnosis was confirmed by implementing a biased step action in `emerald_with_both_generators_witnesses.qnt`. The biased step corrects the scheduler distribution by restricting node selection: while any node has `last_decided_height < 1`, only those behind nodes are eligible to act. Once all four nodes complete height-1, the step reverts to uniform random selection across all nodes.
+
+```quint
+action biasedStep = {
+  val behindNodes = NODES.toSet().filter(n =>
+    emeraldState.get(n).disk.last_decided_height < 1
+  )
+  val nodePool = if (behindNodes != Set()) behindNodes else NODES.toSet()
+  nondet node = nodePool.oneOf()
+  any {
+    stepConsensusReady(node),
+    stepStartedRound(node),
+    stepGetValue(node),
+    nondet proposal = allKnownProposals.oneOf()
+    stepReceivedProposal(node, proposal),
+    nondet proposal = allKnownProposals.oneOf()
+    stepDecided(node, proposal),
+    stepProcessSyncedValue(node),
+    stepAdvanceWork(node),
+  }
+}
+```
+
+**Design notes:**
+- `allKnownProposals` aggregates proposals from each node's `undecided_proposals ∪ pending_proposals ∪ decided_proposals`, avoiding the need for `gen::proposals` which is not re-exported from the composition module.
+- `stepGetDecidedValue` is omitted — it requires `gen::MAX_HEIGHT` (also not re-exported) and is not on the critical path to height-2.
+- Fault actions (`stepNodeCrash`, `stepNodeRestart`) are omitted — a crash resets `last_decided_height` to 0, re-adding the node to `behindNodes` and trapping the simulation before the all-complete condition is ever satisfied.
+
+**Result:** Invariant violated in 594ms (~99 traces/second, 200 samples × 500 steps).
+
+```
+quint run emerald/specs/emerald_with_both_generators_witnesses.qnt \
+  --main=emerald_with_both_generators_witnesses \
+  --step=biasedStep \
+  --invariant=canDecideTwoHeights \
+  --max-steps=500 --max-samples=200 --backend=rust
+# [violation] Found an issue (594ms at 99 traces/second).
+```
+
+This confirms `canDecideTwoHeights` is a valid reachability witness. The scenario is reachable; uniform random simulation simply cannot find it because it requires all four nodes to complete the ~20-step height-1 Engine API pipeline in a coordinated order before any node advances to height-2.
 
 ---
 
 ## Where to Investigate
 
-1. **`channel_api_generator.qnt` `sendGetValue` guard** — `proposer_for(2,0)` is hardcoded to "node2"; confirm node2 must complete height-1 before this fires and that no other node can substitute at r=0.
+1. **`channel_api_generator.qnt` `sendDecided` guard** — once the quorum for height-1 is met, `sendDecided(h=1)` is enabled for all four nodes simultaneously; confirm the ~20-step Engine API work chain that must complete per node before any can advance to height-2.
 
-2. **`emerald_with_both_generators.qnt` `stepDecided` / `finalizeDecided`** — verify the full ~20-step Engine API chain for `FinalizeDecided` and that quorum (3/4 nodes) must all complete it before any second `sendDecided` fires.
+2. **`channel_api_generator.qnt` `sendGetValue` / `sendStartedRoundAfterTimeout` guards** — `sendGetValue` requires `phase == InRound` at the target height; nodes still at height-1 cannot act as proposer at height-2 even if another node's timeout advances the round there. Confirm no path exists for a height-1 node to skip ahead.
 
-3. **Use a biased scheduler or manual ITF trace** to confirm reachability: fix scheduling so all 4 nodes complete `last_decided_height >= 1` before any node advances further, then let the simulator proceed to height-2.
+3. ~~**Use a biased scheduler or manual ITF trace** to confirm reachability: force all 4 nodes to complete `sendDecided(h=1)` (and their Engine API chains) before any node's height-2 pipeline begins, then let the simulator proceed to height-2.~~ **Resolved** — see Biased Step below.

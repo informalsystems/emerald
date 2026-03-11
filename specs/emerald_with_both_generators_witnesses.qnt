@@ -301,4 +301,60 @@ module emerald_with_both_generators_witnesses {
   //     emeraldState.get(n).mem.undecided_proposals != Set()
   //   ))
 
+  // ===========================================================================
+  // BIASED STEP (canDecideTwoHeights)
+  // ===========================================================================
+  //
+  // The random simulator cannot find canDecideTwoHeights because it
+  // probabilistically starves nodes 2–4 at height-1, preventing the height-2
+  // quorum from ever forming. This biased step corrects the distribution by
+  // restricting node selection: while any node has last_decided_height < 1,
+  // only behind nodes are eligible. Once all four nodes complete height-1,
+  // the step reverts to uniform random selection.
+  //
+  // Fault actions (stepNodeCrash, stepNodeRestart) are intentionally excluded:
+  // a crash resets last_decided_height to 0, re-adding the node to behindNodes
+  // and preventing the all-complete precondition from ever being satisfied.
+  //
+  // Run:
+  //   quint run emerald/specs/emerald_with_both_generators_witnesses.qnt \
+  //     --main=emerald_with_both_generators_witnesses \
+  //     --step=biasedStep \
+  //     --invariant=canDecideTwoHeights \
+  //     --max-steps=500 --max-samples=1000 --backend=rust
+  //
+  // Expected: Invariant VIOLATION (proves two-height progress is reachable)
+  // ===========================================================================
+  // All proposals that any node has ever seen (undecided, pending, or decided).
+  // These are a subset of gen::proposals — valid inputs to stepReceivedProposal
+  // and stepDecided — but accessible without going through gen::.
+  // stepGetDecidedValue is omitted (needs gen::MAX_HEIGHT; not on the critical
+  // path to height-2).
+  pure def allKnownProposals =
+    NODES.toSet().fold(Set(), (acc, n) =>
+      acc
+        .union(emeraldState.get(n).mem.undecided_proposals)
+        .union(emeraldState.get(n).mem.pending_proposals)
+        .union(emeraldState.get(n).disk.decided_proposals)
+    )
+
+  action biasedStep = {
+    val behindNodes = NODES.toSet().filter(n =>
+      emeraldState.get(n).disk.last_decided_height < 1
+    )
+    val nodePool = if (behindNodes != Set()) behindNodes else NODES.toSet()
+    nondet node = nodePool.oneOf()
+    any {
+      stepConsensusReady(node),
+      stepStartedRound(node),
+      stepGetValue(node),
+      nondet proposal = allKnownProposals.oneOf()
+      stepReceivedProposal(node, proposal),
+      nondet proposal = allKnownProposals.oneOf()
+      stepDecided(node, proposal),
+      stepProcessSyncedValue(node),
+      stepAdvanceWork(node),
+    }
+  }
+
 }

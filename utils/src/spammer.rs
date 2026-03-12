@@ -528,7 +528,7 @@ struct RpcClient {
 impl RpcClient {
     pub fn new(url: Url) -> Result<Self> {
         let client = HttpClientBuilder::default()
-            .request_timeout(Duration::from_secs(1))
+            .request_timeout(Duration::from_secs(10))
             .build(url)?;
         Ok(Self { client })
     }

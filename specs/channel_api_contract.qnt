@@ -148,7 +148,7 @@ module channel_api_contract {
   }
 
   // ===========================================================================
-  // COMPONENT GUARANTEES: SAFETY
+  // CLIENT GUARANTEES: SAFETY
   // ===========================================================================
   //
   // Properties on the requests Malachite sends. These are guarantees that
@@ -262,7 +262,7 @@ module channel_api_contract {
   }
 
   // ===========================================================================
-  // COMPONENT GUARANTEES: ORDERING
+  // CLIENT GUARANTEES: ORDERING
   // ===========================================================================
   //
   // Properties on the order in which Malachite delivers Channel API requests
@@ -798,14 +798,14 @@ module channel_api_contract {
   // FULL CONTRACT
   // ===========================================================================
 
-  // All properties a conforming generator must satisfy.
-  pure def contract(s: ChannelState, nNodes: int): bool = and {
+  // Client (Malachite) guarantees: safety + ordering properties.
+  pure def componentGuarantees(s: ChannelState, nNodes: int): bool = and {
     safety(s, nNodes),
     ordering(s),
   }
 
   // ===========================================================================
-  // APPLICATION GUARANTEES (Emerald → responses)
+  // SERVER GUARANTEES (Emerald → responses)
   // ===========================================================================
   //
   // Obligations on the responses Emerald sends back to Malachite. These are
@@ -859,8 +859,8 @@ module channel_api_contract {
       )
     )
 
-  // Combined application safety properties
-  pure def applicationSafety(s: ChannelState): bool = and {
+  // Server (Emerald) guarantees: safety properties on responses.
+  pure def applicationGuarantees(s: ChannelState): bool = and {
     consensusReadyResponse(s),
   }
 
@@ -881,7 +881,7 @@ module channel_api_contract {
   //    set's total voting power instead of nNodes.
 
   // ===========================================================================
-  // COMPONENT GUARANTEES: LIVENESS (semi-formal)
+  // CLIENT GUARANTEES: LIVENESS (semi-formal)
   // ===========================================================================
   //
   // Under the environment assumptions above:

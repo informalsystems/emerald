@@ -577,8 +577,13 @@ module engine_api_generator {
     },
   }
 
-  // Full contract checked per-node
+  // Server (Reth) guarantees checked per-node
   val contractInv = NODES.toSet().forall(n =>
-    engineContract(engineStateForNode(rethStates.get(n), requestHistory.get(n), n))
+    componentGuarantees(engineStateForNode(rethStates.get(n), requestHistory.get(n), n))
+  )
+
+  // Client (Emerald) guarantees checked per-node — verified by the composition
+  val applicationGuaranteesInv = NODES.toSet().forall(n =>
+    applicationGuarantees(engineStateForNode(rethStates.get(n), requestHistory.get(n), n))
   )
 }

@@ -10,8 +10,8 @@
 //
 // This contract defines:
 //   1. The request/response types for the Engine API
-//   2. Component guarantees (Reth → responses): response correctness
-//   3. Application guarantees (Emerald → requests): request ordering
+//   2. Server guarantees (Reth → responses): response correctness
+//   3. Client guarantees (Emerald → requests): request ordering
 //   4. Phase 1 constraints
 //
 // Key structural difference from Channel API:
@@ -77,9 +77,9 @@
 //     in isolation (useful for Reth developers).
 //
 // Generator checking strategy:
-//   The generator checks: NODES.toSet().forall(n => engineContract(stateForNode(n)))
-//   This means: "Every Reth instance independently satisfies the contract."
-//   Compare to Channel API: contract(globalState) checks cross-node properties
+//   The generator checks: NODES.toSet().forall(n => componentGuarantees(stateForNode(n)))
+//   This means: "Every Reth instance independently satisfies the server-side contract."
+//   Compare to Channel API: componentGuarantees(globalState) checks cross-node properties
 //   like agreement over all nodes simultaneously.
 
 module engine_api_contract {
@@ -148,7 +148,7 @@ module engine_api_contract {
   }
 
   // ===========================================================================
-  // COMPONENT GUARANTEES: RESPONSE CORRECTNESS
+  // SERVER GUARANTEES: RESPONSE CORRECTNESS
   // ===========================================================================
 
   /// @guarantor component
@@ -369,7 +369,7 @@ module engine_api_contract {
   }
 
   // ===========================================================================
-  // APPLICATION GUARANTEES: REQUEST ORDERING
+  // CLIENT GUARANTEES: REQUEST ORDERING
   // ===========================================================================
 
   /// @guarantor application
@@ -409,10 +409,20 @@ module engine_api_contract {
   // FULL CONTRACT
   // ===========================================================================
 
-  // All properties a conforming generator must satisfy.
-  pure def engineContract(s: EngineState): bool = and {
+  // Server (Reth) guarantees: response correctness + phase 1 constraints.
+  pure def componentGuarantees(s: EngineState): bool = and {
     responseCorrectness(s),
-    requestOrdering(s),
     phase1Constraints(s),
+  }
+
+  // Client (Emerald) guarantees: request ordering.
+  pure def applicationGuarantees(s: EngineState): bool = and {
+    requestOrdering(s),
+  }
+
+  // Full contract: both sides.
+  pure def engineContract(s: EngineState): bool = and {
+    componentGuarantees(s),
+    applicationGuarantees(s),
   }
 }

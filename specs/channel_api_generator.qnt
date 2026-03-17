@@ -642,10 +642,10 @@ module channel_api_generator {
   // Ordering invariants from the contract
   val orderingInv = ordering(channelState)
 
-  // Application safety invariants from the contract
-  val applicationSafetyInv = applicationSafety(channelState)
+  // Server (Emerald) guarantees from the contract
+  val applicationGuaranteesInv = applicationGuarantees(channelState)
 
-  // Full contract (safety + ordering)
-  val contractInv = contract(channelState, NODES.length())
+  // Client (Malachite) guarantees: safety + ordering
+  val contractInv = componentGuarantees(channelState, NODES.length())
 
 }

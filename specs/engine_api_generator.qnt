@@ -29,6 +29,14 @@
 //
 // Block hash abstraction: deterministic hash = height * 1000 + index.
 // Genesis block: height 0, hash 0, parentHash 0.
+//
+// Phase transitions:
+//   Offline  ──rethStart──────────────────────────> Ready
+//   Ready    ──respondForkchoiceUpdated (attrs)───> Building
+//   Building ──respondGetPayload───────────────────> Ready
+//   Building ──respondForkchoiceUpdated (no attrs)─> Ready   (head update only)
+//   *        ──rethCrash──────────────────────────> Offline  (all state lost)
+//   *        ──rethRestart────────────────────────> Ready    (disk preserved)
 
 module engine_api_generator {
   import basicSpells.* from "spells/basicSpells"
@@ -209,6 +217,7 @@ module engine_api_generator {
       // [OPT] Height bounds: search space optimization (real Reth handles arbitrary heights)
       block.height >= 1,
       block.height <= MAX_HEIGHT,
+      // state update
       rethStates' = rethStates.set(node, {
         disk: {
           ...ns.disk,
@@ -228,14 +237,15 @@ module engine_api_generator {
             ns.mem.validatedBlocks,
         },
       }),
-      requestHistory' = requestHistory.set(node,
-        requestHistory.get(node).append(request)
-      ),
-      engineLastTraceEntry' = Some({ node: node, entry: EngineMsg(request) }),
       // Increment counter to ensure standalone test driver generates unique
       // block hashes (blockHash uses nextId). Without this, consecutive
       // respondNewPayload calls at the same height produce hash collisions.
       nextId' = nextId + 1,
+      // bookkeeping
+      requestHistory' = requestHistory.set(node,
+        requestHistory.get(node).append(request)
+      ),
+      engineLastTraceEntry' = Some({ node: node, entry: EngineMsg(request) }),
     }
   }
 
@@ -267,6 +277,7 @@ module engine_api_generator {
     all {
       // [IMPL] Phase check: internal state machine, not observable by contract
       or { ns.mem.phase == Ready, ns.mem.phase == Building },
+      // state update
       rethStates' = rethStates.set(node, {
         ...ns,
         mem: {
@@ -275,11 +286,12 @@ module engine_api_generator {
           pendingBuild: Some({ payloadId: nextId, parentHash: headHash, parentHeight: ns.disk.headHeight }),
         },
       }),
+      nextId' = nextId + 1,
+      // bookkeeping
       requestHistory' = requestHistory.set(node,
         requestHistory.get(node).append(request)
       ),
       engineLastTraceEntry' = Some({ node: node, entry: EngineMsg(request) }),
-      nextId' = nextId + 1,
     }
   }
 
@@ -301,9 +313,6 @@ module engine_api_generator {
       respPayloadId: None,
     })
     all {
-      // [IMPL] Phase check: internal state machine, not observable by contract
-      or { ns.mem.phase == Ready, ns.mem.phase == Building },
-
       // [CONTRACT] validBeforeHead: block must already exist in chain before finalization
       ns.disk.chain.has(headHeight) and ns.disk.chain.get(headHeight).hash == headHash,
 
@@ -321,7 +330,10 @@ module engine_api_generator {
       // NOTE: Real Reth supports reorgs — this is a modeling simplification
       or { headHash == ns.disk.head, headHeight > ns.disk.headHeight },
 
-      // State updates: Only disk.head changes, chain itself is unchanged
+      // [IMPL] Phase check: internal state machine, not observable by contract
+      or { ns.mem.phase == Ready, ns.mem.phase == Building },
+
+      // state update (only disk.head changes, chain itself is unchanged)
       rethStates' = rethStates.set(node, {
         disk: {
           chain: ns.disk.chain,  // Chain unchanged (block already added earlier)
@@ -334,11 +346,12 @@ module engine_api_generator {
           pendingBuild: ns.mem.pendingBuild,
         },
       }),
+      nextId' = nextId,
+      // bookkeeping
       requestHistory' = requestHistory.set(node,
         requestHistory.get(node).append(request)
       ),
       engineLastTraceEntry' = Some({ node: node, entry: EngineMsg(request) }),
-      nextId' = nextId,
     }
   }
 
@@ -372,12 +385,13 @@ module engine_api_generator {
     }
     val request =ReqGetPayload({ payloadId: build.payloadId, respBlock: newBlock })
     all {
+      // [CONTRACT] buildLifecycle: payloadId must exist (part of single-use token property)
+      ns.mem.pendingBuild != None,
       // [IMPL] getPayloadRequiresBuilding: stricter than contract requires
       // Contract only requires prior forkchoiceUpdated with this payloadId (buildLifecycle)
       // This guard adds phase ordering: must still be in Building state
       ns.mem.phase == Building,
-      // [CONTRACT] buildLifecycle: payloadId must exist (part of single-use token property)
-      ns.mem.pendingBuild != None,
+      // state update
       rethStates' = rethStates.set(node, {
         disk: {
           ...ns.disk,
@@ -393,11 +407,12 @@ module engine_api_generator {
           pendingBuild: None,
         },
       }),
+      nextId' = nextId,
+      // bookkeeping
       requestHistory' = requestHistory.set(node,
         requestHistory.get(node).append(request)
       ),
       engineLastTraceEntry' = Some({ node: node, entry: EngineMsg(request) }),
-      nextId' = nextId,
     }
   }
 
@@ -425,13 +440,15 @@ module engine_api_generator {
     val ns = rethStates.get(node)
     all {
       ns.mem.phase == Offline,
+      // state update
       rethStates' = rethStates.set(node, {
         ...ns,
         mem: readyRethMem,
       }),
+      nextId' = nextId,
+      // bookkeeping
       requestHistory' = requestHistory,
       engineLastTraceEntry' = engineLastTraceEntry,
-      nextId' = nextId,
     }
   }
 
@@ -445,10 +462,12 @@ module engine_api_generator {
     val ns = rethStates.get(node)
     all {
       ns.mem.phase != Offline,
+      // state update
       rethStates' = rethStates.set(node, initRethNode),
+      nextId' = nextId,
+      // bookkeeping
       requestHistory' = requestHistory.set(node, []),
       engineLastTraceEntry' = Some({ node: node, entry: EngineFaultMsg(Crash) }),
-      nextId' = nextId,
     }
   }
 
@@ -459,10 +478,12 @@ module engine_api_generator {
     val ns = rethStates.get(node)
     all {
       ns.mem.phase != Offline,
+      // state update
       rethStates' = rethStates.set(node, { disk: ns.disk, mem: readyRethMem }),
+      nextId' = nextId,
+      // bookkeeping
       requestHistory' = requestHistory.set(node, []),
       engineLastTraceEntry' = Some({ node: node, entry: EngineFaultMsg(Restart) }),
-      nextId' = nextId,
     }
   }
 

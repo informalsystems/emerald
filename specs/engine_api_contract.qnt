@@ -86,6 +86,27 @@ module engine_api_contract {
   import basicSpells.* from "spells/basicSpells"
 
   // ===========================================================================
+  // CONTRACTS
+  // ===========================================================================
+
+  // Server (Reth) guarantees: response correctness + phase 1 constraints.
+  pure def componentGuarantees(s: EngineState): bool = and {
+    responseCorrectness(s),
+    phase1Constraints(s),
+  }
+
+  // Client (Emerald) guarantees: request ordering.
+  pure def applicationGuarantees(s: EngineState): bool = and {
+    requestOrdering(s),
+  }
+
+  // Full contract: both sides.
+  pure def engineContract(s: EngineState): bool = and {
+    componentGuarantees(s),
+    applicationGuarantees(s),
+  }
+
+  // ===========================================================================
   // TYPES (abstract — no real EVM types, protocol-level structure)
   // ===========================================================================
 
@@ -405,24 +426,4 @@ module engine_api_contract {
     buildLifecycle(s),
   }
 
-  // ===========================================================================
-  // FULL CONTRACT
-  // ===========================================================================
-
-  // Server (Reth) guarantees: response correctness + phase 1 constraints.
-  pure def componentGuarantees(s: EngineState): bool = and {
-    responseCorrectness(s),
-    phase1Constraints(s),
-  }
-
-  // Client (Emerald) guarantees: request ordering.
-  pure def applicationGuarantees(s: EngineState): bool = and {
-    requestOrdering(s),
-  }
-
-  // Full contract: both sides.
-  pure def engineContract(s: EngineState): bool = and {
-    componentGuarantees(s),
-    applicationGuarantees(s),
-  }
 }

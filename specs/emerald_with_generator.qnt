@@ -1,36 +1,23 @@
 // -*- mode: Bluespec; -*-
 
 // =============================================================================
-// Emerald + Channel API Generator Composition
+// Composition: Emerald ↔ Malachite (Channel API)
+//
+// Boundaries:
+//   gen (channel_api_generator)  — Malachite → Emerald   [nondeterministic]
+//
+// Invariants checked here:
+//   emerald_agreement, consensus_height_gt_last_decided_height, completion
+//   no_pending_at_current_height
+//
+// Step mapping:
+//   stepConsensusReady      → gen::sendConsensusReady     + handleConsensusReady
+//   stepStartedRound        → gen::sendStartedRound       + handleStartedRound
+//   stepGetValue            → gen::sendGetValue           + handleGetValue
+//   stepReceivedProposal    → gen::sendReceivedProposal   + handleReceivedProposal
+//   stepDecided             → gen::sendDecided            + handleDecided
+//   stepProcessSyncedValue  → gen::sendProcessSyncedValue + handleProcessSyncedValue
 // =============================================================================
-//
-// Composes the Channel API reference generator with Emerald's handler logic.
-// Replaces the Choreo-based listen_* functions and Extensions oracle from
-// emerald.qnt with the generator's state machine.
-//
-// Architecture:
-//   Generator picks node + action -> Generator updates its own state
-//                                 -> Emerald handler updates emeraldState
-//
-// Each step is: all { gen::sendX(node), handleX(node) }
-// Generator and Emerald actions fire atomically, each assigning their own
-// state variables.
-//
-// Remaining dependencies on generator state:
-//   - gen::proposals: nondeterministic proposal selection in step (trace exploration)
-//   - gen::decisions: synced value lookup + completion invariant (network truth)
-//   - gen::MAX_HEIGHT: bounds nondeterministic height selection in step
-//
-// State follows the disk/mem convention from faults.qnt:
-//   - Disk: decided_proposals, last_decided_height, last_decided_payload (survive restart)
-//   - Mem: phase, consensus_height, consensus_round, pending_proposals, undecided_proposals (reset on fault)
-//
-// Proposal lifecycle (pending → undecided → decided):
-//   - pending (mem): received at height > consensus_height, can't validate yet
-//   - undecided (mem): received at height == consensus_height, actionable
-//   - decided (disk): committed decisions, survive restart
-//
-// Scope: Normal lifecycle + timeouts + sync + crash/restart.
 
 module emerald_with_generator {
   import basicSpells.* from "spells/basicSpells"

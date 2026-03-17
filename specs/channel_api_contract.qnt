@@ -36,6 +36,27 @@ module channel_api_contract {
   import basicSpells.* from "spells/basicSpells"
 
   // ===========================================================================
+  // CONTRACTS
+  // ===========================================================================
+
+  // Client (Malachite) guarantees: safety + ordering properties.
+  pure def componentGuarantees(s: ChannelState, nNodes: int): bool = and {
+    safety(s, nNodes),
+    ordering(s),
+  }
+
+  // Server (Emerald) guarantees: safety properties on responses.
+  pure def applicationGuarantees(s: ChannelState): bool = and {
+    consensusReadyResponse(s),
+  }
+
+  // Full contract: both sides.
+  pure def channelContract(s: ChannelState, nNodes: int): bool = and {
+    componentGuarantees(s, nNodes),
+    applicationGuarantees(s),
+  }
+
+  // ===========================================================================
   // TYPES (derived from AppMsg in msgs.rs)
   // ===========================================================================
 
@@ -795,16 +816,6 @@ module channel_api_contract {
   }
 
   // ===========================================================================
-  // FULL CONTRACT
-  // ===========================================================================
-
-  // Client (Malachite) guarantees: safety + ordering properties.
-  pure def componentGuarantees(s: ChannelState, nNodes: int): bool = and {
-    safety(s, nNodes),
-    ordering(s),
-  }
-
-  // ===========================================================================
   // SERVER GUARANTEES (Emerald → responses)
   // ===========================================================================
   //
@@ -858,11 +869,6 @@ module channel_api_contract {
         }
       )
     )
-
-  // Server (Emerald) guarantees: safety properties on responses.
-  pure def applicationGuarantees(s: ChannelState): bool = and {
-    consensusReadyResponse(s),
-  }
 
   // ===========================================================================
   // ENVIRONMENT ASSUMPTIONS

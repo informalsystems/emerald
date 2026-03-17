@@ -1,37 +1,27 @@
 // -*- mode: Bluespec; -*-
 
 // =============================================================================
-// Emerald + Channel API Generator + Engine API Generator Composition
+// Composition: Emerald ↔ Malachite (Channel API) ↔ Reth (Engine API)
+//
+// Boundaries:
+//   gen  (channel_api_generator) — Malachite → Emerald   [nondeterministic]
+//   reth (engine_api_generator)  — Emerald   → Reth       [reactive]
+//
+// Invariants checked here:
+//   emerald_agreement, consensus_height_gt_last_decided_height, no_pending_at_current_height
+//     (Emerald-only)
+//   completion (Emerald ↔ Malachite)
+//   head_tracks_consensus, validated_before_decided (Emerald ↔ Reth)
+//
+// Step mapping — Channel API request → Engine API work queue:
+//   stepConsensusReady      → gen::sendConsensusReady    → reth::rethStart
+//   stepStartedRound        → gen::sendStartedRound      → reth::rethUnchanged
+//   stepGetValue            → gen::sendGetValue          → [CallBuildRequest, CallGetPayload, FinalizeGetValue]
+//   stepReceivedProposal    → gen::sendReceivedProposal  → [CallNewPayload, FinalizeReceivedProposal]
+//   stepDecided             → gen::sendDecided           → [CallNewPayload, CallHeadUpdate, FinalizeDecided]
+//   stepProcessSyncedValue  → gen::sendProcessSyncedValue → reth::rethUnchanged
+//   stepAdvanceWork         → dispatches head WorkItem from pendingWork queue
 // =============================================================================
-//
-// Three-way composition connecting both boundaries:
-//   Channel API Generator → Emerald handlers → Engine API Generator
-//
-// Architecture:
-//   - Channel API generator models Malachite sending requests to Emerald
-//   - Emerald handlers process requests and make Engine API calls
-//   - Engine API generator models Reth responding to Emerald's calls
-//
-// Mapping from Channel API requests to Engine API requests (from Emerald's app.rs):
-//   | Channel API Request   | Engine API Requests                           |
-//   |-----------------------|-----------------------------------------------|
-//   | ConsensusReady        | (none — Phase 2 adds exchangeCapabilities)    |
-//   | StartedRound          | none                                          |
-//   | GetValue              | forkchoiceUpdated(head, attrs) → getPayload   |
-//   | ReceivedProposal      | newPayload(block)                             |
-//   | Decided               | newPayload(block) → forkchoiceUpdated(hash)   |
-//   | ProcessSyncedValue    | none (validation deferred to Decided)         |
-//
-// Non-atomic Engine API composition:
-//   Channel API events are received in one transition, then Engine API calls
-//   are executed one-per-transition via a queue + continuation pattern.
-//   This exposes intermediate states (e.g., mid-processing crashes) that
-//   the atomic model would hide. Interleaving model: fault-only for the
-//   same node (no new Channel events while processing), full interleaving
-//   for other nodes.
-//
-// State follows the disk/mem convention from faults.qnt.
-// Extends emerald_with_generator.qnt with Engine API tracking state.
 
 module emerald_with_both_generators {
   import basicSpells.* from "spells/basicSpells"

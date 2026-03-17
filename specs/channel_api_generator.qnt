@@ -28,6 +28,17 @@
 //   - Disk: maxDecided (survives restart)
 //   - Mem: phase, height, round, deliveredProposals, getValueSent (reset on fault)
 //   - Request histories are mem state (cleared on fault, current session only)
+//
+// Phase transitions:
+//   Unstarted ──sendConsensusReady──────────────> Started
+//   Started   ──sendStartedRound────────────────> InRound
+//   InRound   ──sendStartedRoundAfterTimeout─────> InRound  (new round, same height)
+//   InRound   ──sendDecided─────────────────────> Started   (height h+1)
+//   InRound   ──sendProcessSyncedValue──────────> Syncing
+//   Syncing   ──sendProcessSyncedValue──────────> Syncing
+//   Syncing   ──sendDecided─────────────────────> Started   (height h+1)
+//   *         ──nodeCrash──────────────────────────> Unstarted  (all state lost)
+//   *         ──nodeRestart────────────────────────> Unstarted  (disk preserved)
 
 module channel_api_generator {
   import basicSpells.* from "spells/basicSpells"
@@ -202,23 +213,25 @@ module channel_api_generator {
   action sendConsensusReady(node: Node, replyStartHeight: Height): bool = {
     val ns = nodeStates.get(node)
     all {
-      // [IMPL] phase progression: must be Unstarted before ConsensusReady
-      ns.mem.phase == Unstarted,
       // [CONTRACT] heightsPositive + consensusReadyResponse: all request heights >= 1
       replyStartHeight >= 1,
+      // [IMPL] phase progression: must be Unstarted before ConsensusReady
+      ns.mem.phase == Unstarted,
       val req = ReqConsensusReady({ respStartHeight: replyStartHeight })
       all {
+        // state update
         nodeStates' = nodeStates.set(node, {
           ...ns,
           mem: { ...ns.mem, phase: Started, height: replyStartHeight, round: 0 },
         }),
+        proposals' = proposals,
+        decisions' = decisions,
+        proposalSupport' = proposalSupport,
+        // bookkeeping
         lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
         requestHistory' = requestHistory.set(node,
           requestHistory.get(node).append(req)
         ),
-        proposals' = proposals,
-        decisions' = decisions,
-        proposalSupport' = proposalSupport,
       }
     }
   }
@@ -252,17 +265,19 @@ module channel_api_generator {
         proposer: proposer,
       })
       all {
+        // state update
         nodeStates' = nodeStates.set(node, {
           ...ns,
           mem: { ...ns.mem, phase: InRound },
         }),
+        proposals' = proposals,
+        decisions' = decisions,
+        proposalSupport' = updatedSupport,
+        // bookkeeping
         lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
         requestHistory' = requestHistory.set(node,
           requestHistory.get(node).append(req)
         ),
-        proposals' = proposals,
-        decisions' = decisions,
-        proposalSupport' = updatedSupport,
       }
     }
   }
@@ -278,10 +293,6 @@ module channel_api_generator {
   action sendGetValue(node: Node, replyProposal: Proposal): bool = {
     val ns = nodeStates.get(node)
     all {
-      // [IMPL] phase progression: must be InRound (after StartedRound)
-      ns.mem.phase == InRound,
-      // [CONTRACT] getValueAfterStartedRound: only the proposer receives GetValue
-      node == proposer_for(ns.mem.height, ns.mem.round),
       // [CONTRACT] getValueUnique: at most once per (height, round)
       not(ns.mem.getValueSent.contains((ns.mem.height, ns.mem.round))),
       // [ASSUMPTION] application guarantee #3: reply matches current (height, round, proposer).
@@ -289,6 +300,11 @@ module channel_api_generator {
       replyProposal.height == ns.mem.height,
       replyProposal.round == ns.mem.round,
       replyProposal.proposer == node,
+      // [IMPL] phase progression: must be InRound (after StartedRound)
+      ns.mem.phase == InRound,
+      // [CONTRACT] getValueAfterStartedRound: only the proposer receives GetValue
+      // Note: placed after [IMPL] phase check to avoid calling proposer_for at height 0
+      node == proposer_for(ns.mem.height, ns.mem.round),
       val req = ReqGetValue({
         height: ns.mem.height,
         round: ns.mem.round,
@@ -296,6 +312,7 @@ module channel_api_generator {
       // [CONTRACT] quorumDecision: proposer supports their own proposal
       val existing = if (proposalSupport.has(replyProposal)) proposalSupport.get(replyProposal) else Set()
       all {
+        // state update
         proposals' = proposals.union(Set(replyProposal)),
         nodeStates' = nodeStates.set(node, {
           ...ns,
@@ -305,13 +322,14 @@ module channel_api_generator {
             deliveredProposals: ns.mem.deliveredProposals.union(Set(replyProposal)),
           },
         }),
+        decisions' = decisions,
+        // Proposer supports their specific proposal
+        proposalSupport' = proposalSupport.put(replyProposal, existing.union(Set(node))),
+        // bookkeeping
         lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
         requestHistory' = requestHistory.set(node,
           requestHistory.get(node).append(req)
         ),
-        decisions' = decisions,
-        // Proposer supports their specific proposal
-        proposalSupport' = proposalSupport.put(replyProposal, existing.union(Set(node))),
       }
     }
   }
@@ -326,12 +344,12 @@ module channel_api_generator {
   action sendReceivedProposal(node: Node, proposal: Proposal): bool = {
     val ns = nodeStates.get(node)
     all {
-      // [IMPL] phase progression: must have started (after ConsensusReady)
-      ns.mem.phase != Unstarted,
       // [CONTRACT] receivedProposalExists: proposal was created via GetValue
       proposal.in(proposals),
       // [CONTRACT] receivedProposalNotToProposer: nodes don't receive their own proposals
       proposal.proposer != node,
+      // [IMPL] phase progression: must have started (after ConsensusReady)
+      ns.mem.phase != Unstarted,
       // [OPT] stale proposal filtering: real network can deliver stale proposals
       // (Emerald drops them). Not enforced by the contract.
       proposal.height >= ns.mem.height,
@@ -341,6 +359,7 @@ module channel_api_generator {
       val atCurrentHeight = proposal.height == ns.mem.height
       val existing = if (proposalSupport.has(proposal)) proposalSupport.get(proposal) else Set()
       all {
+        // state update
         nodeStates' = nodeStates.set(node, {
           ...ns,
           mem: {
@@ -348,16 +367,17 @@ module channel_api_generator {
             deliveredProposals: ns.mem.deliveredProposals.union(Set(proposal)),
           },
         }),
-        lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
-        requestHistory' = requestHistory.set(node,
-          requestHistory.get(node).append(req)
-        ),
         proposals' = proposals,
         decisions' = decisions,
         proposalSupport' = if (atCurrentHeight)
           proposalSupport.put(proposal, existing.union(Set(node)))
         else
           proposalSupport,
+        // bookkeeping
+        lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
+        requestHistory' = requestHistory.set(node,
+          requestHistory.get(node).append(req)
+        ),
       }
     }
   }
@@ -374,41 +394,44 @@ module channel_api_generator {
   action sendDecided(node: Node, proposal: Proposal): bool = {
     val ns = nodeStates.get(node)
     all {
-      // [IMPL] phase progression: must be InRound or Syncing
-      or { ns.mem.phase == InRound, ns.mem.phase == Syncing },
-      // [IMPL] height match: decision must be for the current height
-      proposal.height == ns.mem.height,
       // [CONTRACT] validity: decided proposal must exist (was created via GetValue)
       proposal.in(proposals),
       // [CONTRACT] decidedRequiresDeliveredProposal: Malachite delivered the proposal
       ns.mem.deliveredProposals.contains(proposal),
-      // [OPT] future round filtering: restricts generator to avoid decisions
-      // referencing a future round (contract's roundsConsecutiveWithinHeight
-      // already constrains this in the normal path)
-      proposal.round <= ns.mem.round,
       // [CONTRACT] agreement: if already decided for this height, must be the same
       not(decisions.has(ns.mem.height)) or decisions.get(ns.mem.height) == proposal,
-      // [IMPL] prevent duplicate: not already decided at this node for this height
-      ns.disk.maxDecided < ns.mem.height,
       // [CONTRACT] quorumDecision: strictly more than 2/3 of nodes must have
       // received this specific proposal before any node can decide on it
       proposalSupport.has(proposal),
       proposalSupport.get(proposal).size() * 3 > NODES.length() * 2,
+      // [IMPL] phase progression: must be InRound or Syncing
+      or { ns.mem.phase == InRound, ns.mem.phase == Syncing },
+      // [IMPL] height match: decision must be for the current height
+      proposal.height == ns.mem.height,
+      // [IMPL] prevent duplicate: not already decided at this node for this height
+      ns.disk.maxDecided < ns.mem.height,
+      // [OPT] future round filtering: restricts generator to avoid decisions
+      // referencing a future round (contract's roundsConsecutiveWithinHeight
+      // already constrains this in the normal path)
+      proposal.round <= ns.mem.round,
+      // state update
       // Record the decision
       decisions' = decisions.put(ns.mem.height, proposal),
       // Move to next height
       val req = ReqDecided({ proposal: proposal })
       all {
+        // state update
         nodeStates' = nodeStates.set(node, {
           disk: { ...ns.disk, maxDecided: ns.mem.height },
           mem: { ...ns.mem, phase: Started, height: ns.mem.height + 1, round: 0 },
         }),
+        proposals' = proposals,
+        proposalSupport' = proposalSupport,
+        // bookkeeping
         lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
         requestHistory' = requestHistory.set(node,
           requestHistory.get(node).append(req)
         ),
-        proposals' = proposals,
-        proposalSupport' = proposalSupport,
       }
     }
   }
@@ -434,17 +457,19 @@ module channel_api_generator {
         proposer: proposer,
       })
       all {
+        // state update
         nodeStates' = nodeStates.set(node, {
           ...ns,
           mem: { ...ns.mem, phase: InRound, round: newRound },
         }),
+        proposals' = proposals,
+        decisions' = decisions,
+        proposalSupport' = proposalSupport,
+        // bookkeeping
         lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
         requestHistory' = requestHistory.set(node,
           requestHistory.get(node).append(req)
         ),
-        proposals' = proposals,
-        decisions' = decisions,
-        proposalSupport' = proposalSupport,
       }
     }
   }
@@ -457,15 +482,16 @@ module channel_api_generator {
   action sendProcessSyncedValue(node: Node): bool = {
     val ns = nodeStates.get(node)
     all {
-      // [IMPL] phase progression: must be InRound or Syncing
-      or { ns.mem.phase == InRound, ns.mem.phase == Syncing },
       // [CONTRACT] syncedValueIsDecided: synced value must have been decided
       decisions.has(ns.mem.height),
+      // [IMPL] phase progression: must be InRound or Syncing
+      or { ns.mem.phase == InRound, ns.mem.phase == Syncing },
       // [IMPL] prevent duplicate: not already decided at this node for this height
       ns.disk.maxDecided < ns.mem.height,
       val proposal = decisions.get(ns.mem.height)
       val req = ReqProcessSyncedValue({ proposal: proposal })
       all {
+        // state update
         nodeStates' = nodeStates.set(node, {
           ...ns,
           mem: {
@@ -474,14 +500,15 @@ module channel_api_generator {
             deliveredProposals: ns.mem.deliveredProposals.union(Set(proposal)),
           },
         }),
-        lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
-        requestHistory' = requestHistory.set(node,
-          requestHistory.get(node).append(req)
-        ),
         proposals' = proposals,
         decisions' = decisions,
         // No support update — proposal is already decided, quorum was already met.
         proposalSupport' = proposalSupport,
+        // bookkeeping
+        lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
+        requestHistory' = requestHistory.set(node,
+          requestHistory.get(node).append(req)
+        ),
       }
     }
   }
@@ -499,14 +526,16 @@ module channel_api_generator {
       height < ns.mem.height,
       val req = ReqGetDecidedValue({ height: height })
       all {
-        lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
-        requestHistory' = requestHistory.set(node,
-          requestHistory.get(node).append(req)
-        ),
+        // state update
         nodeStates' = nodeStates,
         proposals' = proposals,
         decisions' = decisions,
         proposalSupport' = proposalSupport,
+        // bookkeeping
+        lastEntry' = Some({ node: node, entry: ChannelMsg(req) }),
+        requestHistory' = requestHistory.set(node,
+          requestHistory.get(node).append(req)
+        ),
       }
     }
   }
@@ -526,13 +555,15 @@ module channel_api_generator {
     all {
       // [IMPL] must be running: can't crash a node that hasn't started
       ns.mem.phase != Unstarted,
+      // state update
       nodeStates' = nodeStates.set(node, initGenNode),
-      requestHistory' = requestHistory.set(node, []),
-      lastEntry' = Some({ node: node, entry: FaultMsg(Crash) }),
       proposals' = proposals,
       decisions' = decisions,
       // Disk state — votes already cast don't un-happen
       proposalSupport' = proposalSupport,
+      // bookkeeping
+      requestHistory' = requestHistory.set(node, []),
+      lastEntry' = Some({ node: node, entry: FaultMsg(Crash) }),
     }
   }
 
@@ -545,13 +576,15 @@ module channel_api_generator {
     all {
       // [IMPL] must be running: can't restart a node that hasn't started
       ns.mem.phase != Unstarted,
+      // state update
       nodeStates' = nodeStates.set(node, { disk: ns.disk, mem: initGenMem }),
-      requestHistory' = requestHistory.set(node, []),
-      lastEntry' = Some({ node: node, entry: FaultMsg(Restart) }),
       proposals' = proposals,
       decisions' = decisions,
       // Disk state — votes already cast don't un-happen
       proposalSupport' = proposalSupport,
+      // bookkeeping
+      requestHistory' = requestHistory.set(node, []),
+      lastEntry' = Some({ node: node, entry: FaultMsg(Restart) }),
     }
   }
 
